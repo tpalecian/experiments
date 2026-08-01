@@ -1,14 +1,14 @@
 :root {
-  --bg-deep: #0c1f2e;
-  --bg-mid: #16384f;
-  --panel: rgba(12, 24, 34, 0.82);
-  --panel-border: rgba(232, 214, 180, 0.22);
-  --ink: #f4efe6;
-  --muted: #b7c2cc;
-  --accent: #e2b14a;
-  --accent-ink: #1c1408;
-  --danger: #e05a4f;
-  --ok: #5fbf8a;
+  --bg-deep: #2a6f8f;
+  --bg-mid: #5eb0c8;
+  --panel: rgba(255, 244, 220, 0.92);
+  --panel-border: rgba(92, 61, 46, 0.35);
+  --ink: #3a2a18;
+  --muted: #7a6548;
+  --accent: #e8a838;
+  --accent-ink: #3a2a18;
+  --danger: #e04a3a;
+  --ok: #3f9a55;
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'DM Sans', system-ui, sans-serif;
 }
@@ -23,9 +23,9 @@ body {
   height: 100%;
   overflow: hidden;
   background:
-    radial-gradient(ellipse 90% 70% at 20% 10%, #2a5a74 0%, transparent 55%),
-    radial-gradient(ellipse 80% 60% at 90% 80%, #1a3d2e 0%, transparent 50%),
-    linear-gradient(165deg, var(--bg-deep), var(--bg-mid) 55%, #0a1822);
+    radial-gradient(ellipse 90% 70% at 30% 20%, #ffe0b0 0%, transparent 55%),
+    radial-gradient(ellipse 80% 60% at 80% 80%, #7ec8a0 0%, transparent 50%),
+    linear-gradient(165deg, #6eb8d8, #a8d8e8 45%, #f0d8a8);
   color: var(--ink);
   font-family: var(--font-body);
 }
@@ -55,8 +55,8 @@ body {
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(ellipse 70% 50% at 50% 40%, rgba(30, 70, 90, 0.55), transparent 70%),
-    linear-gradient(180deg, rgba(8, 18, 28, 0.35), rgba(8, 18, 28, 0.72));
+    radial-gradient(ellipse 70% 50% at 50% 40%, rgba(255, 220, 160, 0.35), transparent 70%),
+    linear-gradient(180deg, rgba(80, 150, 180, 0.25), rgba(40, 90, 110, 0.45));
 }
 
 #lobby.hidden {
@@ -67,9 +67,10 @@ body {
   pointer-events: auto;
   width: min(480px, calc(100vw - 2rem));
   padding: 2.25rem 2rem 2rem;
-  border: 1px solid var(--panel-border);
+  border: 3px solid var(--panel-border);
   background: var(--panel);
-  backdrop-filter: blur(12px);
+  box-shadow: 0 12px 0 rgba(92, 61, 46, 0.18);
+  border-radius: 18px;
   text-align: center;
 }
 
@@ -164,17 +165,19 @@ button:disabled {
   padding: 0.65rem 1rem;
   background: var(--accent);
   color: var(--accent-ink);
-  border-radius: 4px;
+  border-radius: 12px;
+  border: 2px solid rgba(92, 61, 46, 0.25);
+  box-shadow: 0 3px 0 rgba(92, 61, 46, 0.2);
 }
 
 .btn.secondary {
-  background: transparent;
+  background: #fff8e8;
   color: var(--ink);
   border-color: var(--panel-border);
 }
 
 .btn.active {
-  outline: 2px solid #fff3c4;
+  outline: 3px solid #ffe08a;
   outline-offset: 2px;
 }
 
@@ -199,10 +202,10 @@ button:disabled {
 .panel {
   pointer-events: auto;
   background: var(--panel);
-  border: 1px solid var(--panel-border);
-  backdrop-filter: blur(10px);
+  border: 2px solid var(--panel-border);
   padding: 0.85rem 1rem;
-  border-radius: 6px;
+  border-radius: 14px;
+  box-shadow: 0 6px 0 rgba(92, 61, 46, 0.12);
   max-width: min(420px, 100%);
 }
 
@@ -275,9 +278,9 @@ button:disabled {
   align-items: center;
   gap: 0.35rem;
   padding: 0.35rem 0.55rem;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  background: #fff8e8;
+  border: 2px solid var(--panel-border);
+  border-radius: 10px;
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
 }
@@ -301,7 +304,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(6, 12, 18, 0.55);
+  background: rgba(60, 90, 110, 0.45);
   pointer-events: auto;
 }
 
@@ -313,8 +316,9 @@ button:disabled {
   width: min(420px, calc(100vw - 2rem));
   padding: 1.25rem;
   background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
+  border: 3px solid var(--panel-border);
+  border-radius: 16px;
+  box-shadow: 0 10px 0 rgba(92, 61, 46, 0.15);
 }
 
 .modal-card h3 {
@@ -343,9 +347,9 @@ button:disabled {
 .discard-grid input {
   width: 100%;
   padding: 0.4rem;
-  border-radius: 4px;
-  border: 1px solid var(--panel-border);
-  background: #0f1c28;
+  border-radius: 8px;
+  border: 2px solid var(--panel-border);
+  background: #fff8e8;
   color: var(--ink);
 }
 

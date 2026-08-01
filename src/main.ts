@@ -6,6 +6,7 @@ import { GameEngine } from './game/engine';
 import { Picker } from './input/picker';
 import { BoardView } from './render/BoardView';
 import { SkyDome } from './render/sky';
+import { STYLE } from './render/style';
 import { Hud } from './ui/hud';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas')!;
@@ -23,11 +24,11 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.15;
 
 const scene = new THREE.Scene();
 scene.background = null;
-scene.fog = new THREE.Fog(0xb8cfdc, 28, 70);
+scene.fog = new THREE.Fog(STYLE.fog, 28, 70);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 400);
 camera.position.set(0, 14, 14);
@@ -40,10 +41,10 @@ controls.minDistance = 8;
 controls.maxDistance = 24;
 controls.update();
 
-const hemi = new THREE.HemisphereLight(0xc8dff0, 0x4a5a3a, 0.9);
+const hemi = new THREE.HemisphereLight(STYLE.ambientSky, STYLE.ambientGround, 0.95);
 scene.add(hemi);
 
-const sun = new THREE.DirectionalLight(0xfff0d6, 1.35);
+const sun = new THREE.DirectionalLight(STYLE.sun, 1.45);
 sun.position.set(8, 16, 6);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -53,9 +54,10 @@ sun.shadow.camera.left = -12;
 sun.shadow.camera.right = 12;
 sun.shadow.camera.top = 12;
 sun.shadow.camera.bottom = -12;
+sun.shadow.bias = -0.0008;
 scene.add(sun);
 
-const fill = new THREE.DirectionalLight(0x7eb6d9, 0.25);
+const fill = new THREE.DirectionalLight(STYLE.fill, 0.35);
 fill.position.set(-6, 4, -8);
 scene.add(fill);
 
@@ -79,7 +81,7 @@ function frameCamera(rings: number): void {
   controls.target.set(0, 0, 0);
   controls.update();
 
-  scene.fog = new THREE.Fog(0xb8cfdc, dist * 1.6, dist * 5.5);
+  scene.fog = new THREE.Fog(STYLE.fog, dist * 1.8, dist * 5.8);
   sky.resize(r);
 
   const shadowSpan = r + 4;
@@ -141,8 +143,8 @@ function animate(): void {
   boardView.update(t);
   sky.update(t);
   const base = Math.max(8, boardRadiusWorld(engine.board.rings) * 1.1);
-  sun.position.x = Math.cos(t * 0.05) * base;
-  sun.position.z = Math.sin(t * 0.05) * base * 0.75 + 2;
+  sun.position.x = Math.cos(t * 0.04) * base;
+  sun.position.z = Math.sin(t * 0.04) * base * 0.75 + 2;
   sky.setSunDirection(sun.position.clone().normalize());
   renderer.render(scene, camera);
 }

@@ -50,12 +50,14 @@ varying float vTint;
 varying float vHeight;
 
 void main() {
-  vec3 root = vec3(0.18, 0.38, 0.12);
-  vec3 mid = vec3(0.42, 0.68, 0.22);
-  vec3 tip = vec3(0.62, 0.82, 0.32);
+  vec3 root = vec3(0.22, 0.52, 0.18);
+  vec3 mid = vec3(0.45, 0.78, 0.28);
+  vec3 tip = vec3(0.7, 0.92, 0.4);
   vec3 base = mix(root, mid, smoothstep(0.0, 0.55, vHeight));
   base = mix(base, tip, smoothstep(0.45, 1.0, vHeight));
-  base *= mix(0.82, 1.12, vTint);
+  base *= mix(0.85, 1.15, vTint);
+  // Soft posterize for stylized look
+  base = floor(base * 5.0 + 0.5) / 5.0;
   gl_FragColor = vec4(base, 1.0);
 }
 `;

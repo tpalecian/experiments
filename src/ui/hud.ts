@@ -5,11 +5,11 @@ import { tradeRate } from '../game/rules';
 import { MAP_SIZE_ORDER, MAP_SIZES, type MapSizeId } from '../game/board';
 
 const RES_COLORS: Record<Resource, string> = {
-  wood: '#2d6a4f',
-  brick: '#b85c38',
-  sheep: '#8fbf5f',
-  wheat: '#d4a017',
-  ore: '#6b7280',
+  wood: '#3f8f4a',
+  brick: '#d4784a',
+  sheep: '#7bc95a',
+  wheat: '#f0c84a',
+  ore: '#8a92a6',
 };
 
 export class Hud {
@@ -36,7 +36,7 @@ export class Hud {
     this.lobby.innerHTML = `
       <div class="lobby-card">
         <h1>Catan</h1>
-        <p>Local hotseat on a Three.js island. Pick a map size, then players.</p>
+        <p>Cozy low-poly fantasy island. Pick a map size, then players.</p>
         <div class="lobby-section">
           <div class="lobby-label">Map size</div>
           <div class="lobby-actions map-sizes">

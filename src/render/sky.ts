@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { STYLE } from './style';
 
 const skyVertexShader = /* glsl */ `
 varying vec3 vDir;
@@ -6,7 +7,6 @@ varying vec3 vDir;
 void main() {
   vec4 world = modelMatrix * vec4(position, 1.0);
   vDir = normalize(world.xyz - cameraPosition);
-  // Keep sky fixed on camera in clip space via large sphere — normal MVP is fine
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
@@ -21,7 +21,6 @@ uniform float uCloudCover;
 
 varying vec3 vDir;
 
-// Simplex-ish value noise
 float hash(vec3 p) {
   p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
   p *= 17.0;
@@ -44,9 +43,9 @@ float noise(vec3 p) {
 float fbm(vec3 p) {
   float v = 0.0;
   float a = 0.5;
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 4; i++) {
     v += a * noise(p);
-    p = p * 2.05 + vec3(0.1, 0.3, 0.2);
+    p = p * 2.0 + 0.15;
     a *= 0.5;
   }
   return v;
@@ -54,24 +53,26 @@ float fbm(vec3 p) {
 
 void main() {
   vec3 dir = normalize(vDir);
-  float h = dir.y * 0.5 + 0.5; // -1..1 -> 0..1
-  vec3 sky = mix(uHorizon, uZenith, smoothstep(0.0, 0.85, h));
+  float h = dir.y * 0.5 + 0.5;
+  // Warm cozy horizon wash into playful blue zenith
+  vec3 sky = mix(uHorizon, uZenith, smoothstep(0.05, 0.75, h));
+  sky = floor(sky * 6.0 + 0.5) / 6.0;
 
-  // Soft sun disc glow
   float sunDot = max(dot(dir, normalize(uSunDir)), 0.0);
-  sky += uSunColor * pow(sunDot, 48.0) * 0.9;
-  sky += uSunColor * pow(sunDot, 6.0) * 0.15;
+  sky += uSunColor * pow(sunDot, 32.0) * 1.1;
+  sky += uSunColor * pow(sunDot, 4.0) * 0.18;
 
-  // Drifting clouds on the upper hemisphere
-  if (dir.y > -0.05) {
-    vec3 cloudP = dir * 2.4;
-    cloudP.x += uTime * 0.018;
-    cloudP.z += uTime * 0.012;
+  if (dir.y > -0.02) {
+    vec3 cloudP = dir * 2.0;
+    cloudP.x += uTime * 0.015;
+    cloudP.z += uTime * 0.01;
     float n = fbm(cloudP);
-    float clouds = smoothstep(1.0 - uCloudCover, 1.0 - uCloudCover + 0.35, n);
-    clouds *= smoothstep(-0.02, 0.25, dir.y);
-    vec3 cloudCol = mix(vec3(0.92, 0.94, 0.96), vec3(1.0, 0.98, 0.94), sunDot);
-    sky = mix(sky, cloudCol, clouds * 0.85);
+    // Chunkier, more illustrative clouds
+    float clouds = smoothstep(1.0 - uCloudCover, 1.0 - uCloudCover + 0.22, n);
+    clouds = floor(clouds * 3.0 + 0.5) / 3.0;
+    clouds *= smoothstep(-0.01, 0.28, dir.y);
+    vec3 cloudCol = mix(vec3(0.95, 0.9, 0.88), vec3(1.0, 0.98, 0.94), sunDot);
+    sky = mix(sky, cloudCol, clouds * 0.9);
   }
 
   gl_FragColor = vec4(sky, 1.0);
@@ -88,17 +89,17 @@ export class SkyDome {
       fragmentShader: skyFragmentShader,
       uniforms: {
         uTime: { value: 0 },
-        uZenith: { value: new THREE.Color(0x4a90c8) },
-        uHorizon: { value: new THREE.Color(0xc8dce8) },
-        uSunColor: { value: new THREE.Color(0xfff0c8) },
-        uSunDir: { value: new THREE.Vector3(0.4, 0.7, 0.35).normalize() },
-        uCloudCover: { value: 0.55 },
+        uZenith: { value: new THREE.Color(STYLE.skyZenith) },
+        uHorizon: { value: new THREE.Color(STYLE.skyHorizon) },
+        uSunColor: { value: new THREE.Color(STYLE.sunDisc) },
+        uSunDir: { value: new THREE.Vector3(0.45, 0.75, 0.3).normalize() },
+        uCloudCover: { value: 0.58 },
       },
       side: THREE.BackSide,
       depthWrite: false,
     });
 
-    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(120, 48, 32), this.material);
+    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(120, 32, 24), this.material);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -2;
   }
@@ -110,7 +111,7 @@ export class SkyDome {
   resize(radius: number): void {
     const r = Math.max(80, radius * 10);
     const old = this.mesh.geometry;
-    this.mesh.geometry = new THREE.SphereGeometry(r, 48, 32);
+    this.mesh.geometry = new THREE.SphereGeometry(r, 32, 24);
     old.dispose();
   }
 
