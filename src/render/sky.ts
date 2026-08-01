@@ -24,9 +24,40 @@ void main() {
   float h = dir.y * 0.5 + 0.5;
   vec3 sky = mix(uHorizon, uZenith, smoothstep(0.0, 0.72, h));
   float sunDot = max(dot(dir, normalize(uSunDir)), 0.0);
-  sky += uSunColor * pow(sunDot, 40.0) * 0.55;
-  sky += uSunColor * pow(sunDot, 5.0) * 0.08;
+  sky += uSunColor * pow(sunDot, 40.0) * 0.45;
   gl_FragColor = vec4(sky, 1.0);
+}
+`;
+
+/** Unlit foam: always soft white + lavender, independent of scene lights. */
+const foamVertexShader = /* glsl */ `
+varying vec3 vNormalW;
+varying vec3 vWorldPos;
+
+void main() {
+  vec4 world = modelMatrix * vec4(position, 1.0);
+  vWorldPos = world.xyz;
+  // Use object-space normal transformed — baked flat face normals stay flat
+  vNormalW = normalize(mat3(modelMatrix) * normal);
+  gl_Position = projectionMatrix * viewMatrix * world;
+}
+`;
+
+const foamFragmentShader = /* glsl */ `
+uniform vec3 uLit;
+uniform vec3 uShade;
+uniform vec3 uSunDir;
+
+varying vec3 vNormalW;
+
+void main() {
+  vec3 n = normalize(vNormalW);
+  // Soft two-tone from a fixed “studio” light + upward bias (foam tops stay bright)
+  float litAmt = clamp(dot(n, normalize(uSunDir)) * 0.5 + n.y * 0.55 + 0.35, 0.0, 1.0);
+  // Posterize slightly so facets read
+  litAmt = floor(litAmt * 3.0 + 0.5) / 3.0;
+  vec3 col = mix(uShade, uLit, litAmt);
+  gl_FragColor = vec4(col, 1.0);
 }
 `;
 
@@ -38,7 +69,6 @@ function seededRand(seed: number): () => number {
   };
 }
 
-/** Chunky icosahedron with baked per-face normals (true flat foam facets). */
 function createFoamPuffGeometry(): THREE.BufferGeometry {
   const base = new THREE.IcosahedronGeometry(1, 0).toNonIndexed();
   const pos = base.attributes.position;
@@ -66,44 +96,42 @@ function createFoamPuffGeometry(): THREE.BufferGeometry {
   return base;
 }
 
-function makeFoamCloud(
-  rand: () => number,
-  geom: THREE.BufferGeometry,
-  lit: THREE.Material,
-  shade: THREE.Material,
-): THREE.Group {
+/**
+ * Wide, flat foam bank — overlapping puffs like cotton / bath foam.
+ */
+function makeFoamCloud(rand: () => number, geom: THREE.BufferGeometry, mat: THREE.Material): THREE.Group {
   const g = new THREE.Group();
 
+  // Horizontal foam loaf layout (x wide, y short)
   const spots: [number, number, number, number][] = [
-    [0, 0, 0, 1.4],
-    [-1.5, 0.15, 0.25, 1.2],
-    [1.5, 0.1, -0.2, 1.25],
-    [-0.65, 0.95, 0.15, 1.1],
-    [0.75, 1.0, -0.1, 1.15],
-    [0.05, 1.55, 0.05, 1.0],
-    [-1.15, 0.4, -0.95, 1.0],
-    [1.05, 0.35, 1.0, 0.95],
-    [-0.15, 0.25, 1.2, 0.9],
-    [0.2, 0.2, -1.25, 0.92],
-    [-1.9, 0.0, 0.4, 0.85],
-    [1.95, 0.05, -0.3, 0.88],
-    [-0.4, 1.2, -0.7, 0.8],
-    [0.5, 1.15, 0.75, 0.82],
+    [0.0, 0.0, 0.0, 1.25],
+    [-1.3, 0.05, 0.15, 1.15],
+    [1.3, 0.05, -0.1, 1.15],
+    [-2.3, -0.05, 0.0, 0.95],
+    [2.3, -0.05, 0.05, 0.95],
+    [-0.6, 0.75, 0.1, 1.0],
+    [0.7, 0.8, -0.05, 1.05],
+    [0.05, 1.2, 0.0, 0.9],
+    [-1.5, 0.55, -0.7, 0.85],
+    [1.4, 0.5, 0.75, 0.85],
+    [-0.2, 0.15, 0.95, 0.9],
+    [0.25, 0.1, -1.0, 0.9],
+    [-2.0, 0.35, 0.55, 0.75],
+    [2.05, 0.3, -0.5, 0.75],
   ];
 
   for (const [x, y, z, s] of spots) {
-    if (rand() < 0.06) continue;
-    const mat = y < 0.4 && rand() > 0.4 ? shade : lit;
+    if (rand() < 0.05) continue;
     const mesh = new THREE.Mesh(geom, mat);
     mesh.position.set(
       x + (rand() - 0.5) * 0.2,
-      y + (rand() - 0.5) * 0.12,
+      y + (rand() - 0.5) * 0.1,
       z + (rand() - 0.5) * 0.2,
     );
-    mesh.scale.setScalar(s * (0.94 + rand() * 0.16));
-    mesh.rotation.set(rand() * Math.PI, rand() * Math.PI, rand() * Math.PI);
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
+    // Slight squash → foam pillow, not rock spike
+    const sc = s * (0.95 + rand() * 0.12);
+    mesh.scale.set(sc * 1.05, sc * 0.82, sc * 1.05);
+    mesh.rotation.set(rand() * 0.5, rand() * Math.PI, rand() * 0.5);
     g.add(mesh);
   }
 
@@ -114,8 +142,7 @@ export class SkyDome {
   readonly group = new THREE.Group();
   readonly mesh: THREE.Mesh;
   private material: THREE.ShaderMaterial;
-  private litMat: THREE.MeshStandardMaterial;
-  private shadeMat: THREE.MeshStandardMaterial;
+  private foamMat: THREE.ShaderMaterial;
   private puffGeom: THREE.BufferGeometry;
   private clouds = new THREE.Group();
   private cloudDrift: {
@@ -135,31 +162,22 @@ export class SkyDome {
         uZenith: { value: new THREE.Color(0x4aa8e0) },
         uHorizon: { value: new THREE.Color(0xd8eef8) },
         uSunColor: { value: new THREE.Color(STYLE.sunDisc) },
-        uSunDir: { value: new THREE.Vector3(0.55, 0.8, 0.25).normalize() },
+        uSunDir: { value: new THREE.Vector3(0.55, 0.85, 0.2).normalize() },
       },
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
     });
 
-    // Fog off — otherwise facets wash out into soft blobs
-    this.litMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 0.88,
-      metalness: 0,
-      flatShading: true,
+    this.foamMat = new THREE.ShaderMaterial({
+      vertexShader: foamVertexShader,
+      fragmentShader: foamFragmentShader,
+      uniforms: {
+        uLit: { value: new THREE.Color(0xfffcff) },
+        uShade: { value: new THREE.Color(0xc8bdd8) },
+        uSunDir: { value: new THREE.Vector3(0.55, 0.85, 0.2).normalize() },
+      },
       fog: false,
-      emissive: 0xffffff,
-      emissiveIntensity: 0.08,
-    });
-    this.shadeMat = new THREE.MeshStandardMaterial({
-      color: 0xb0a0c4,
-      roughness: 0.95,
-      metalness: 0,
-      flatShading: true,
-      fog: false,
-      emissive: 0x9a88b0,
-      emissiveIntensity: 0.04,
     });
 
     this.puffGeom = createFoamPuffGeometry();
@@ -182,23 +200,24 @@ export class SkyDome {
 
   private spawnClouds(radius: number): void {
     this.clearClouds();
-    const rand = seededRand(103);
+    const rand = seededRand(120);
     const count = 8;
 
     for (let i = 0; i < count; i++) {
-      const cloud = makeFoamCloud(rand, this.puffGeom, this.litMat, this.shadeMat);
-      const scale = 3.6 + rand() * 2.8;
+      const cloud = makeFoamCloud(rand, this.puffGeom, this.foamMat);
+      const scale = 3.8 + rand() * 2.4;
       cloud.scale.setScalar(scale);
 
       const angle = (i / count) * Math.PI * 2 + rand() * 0.2;
-      const orbitR = radius * (0.16 + rand() * 0.14);
-      const height = radius * (0.11 + rand() * 0.12);
+      // Ring around the island, high enough to read as sky foam (not hanging rocks)
+      const orbitR = radius * (0.2 + rand() * 0.18);
+      const height = radius * (0.22 + rand() * 0.16);
       cloud.position.set(Math.cos(angle) * orbitR, height, Math.sin(angle) * orbitR);
 
       this.clouds.add(cloud);
       this.cloudDrift.push({
         obj: cloud,
-        speed: 0.004 + rand() * 0.007,
+        speed: 0.004 + rand() * 0.006,
         radius: orbitR,
         height,
         phase: angle,
@@ -207,7 +226,9 @@ export class SkyDome {
   }
 
   setSunDirection(dir: THREE.Vector3): void {
-    this.material.uniforms.uSunDir.value.copy(dir).normalize();
+    const d = dir.clone().normalize();
+    this.material.uniforms.uSunDir.value.copy(d);
+    this.foamMat.uniforms.uSunDir.value.copy(d);
   }
 
   resize(landRadius: number): void {
@@ -224,8 +245,8 @@ export class SkyDome {
       const a = c.phase + time * c.speed;
       c.obj.position.x = Math.cos(a) * c.radius;
       c.obj.position.z = Math.sin(a) * c.radius;
-      c.obj.position.y = c.height + Math.sin(time * 0.18 + c.phase) * 0.3;
-      c.obj.rotation.y = a * 0.08;
+      c.obj.position.y = c.height + Math.sin(time * 0.15 + c.phase) * 0.25;
+      c.obj.rotation.y = a * 0.06;
     }
   }
 
@@ -233,8 +254,7 @@ export class SkyDome {
     this.clearClouds();
     this.mesh.geometry.dispose();
     this.material.dispose();
-    this.litMat.dispose();
-    this.shadeMat.dispose();
+    this.foamMat.dispose();
     this.puffGeom.dispose();
   }
 }
