@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
     "three": "^0.172.0"

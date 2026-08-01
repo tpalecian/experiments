@@ -2,6 +2,7 @@ import type { EngineSnapshot, GameEngine } from '../game/engine';
 import type { PlayerId, Resource, ResourceBank } from '../game/types';
 import { RESOURCES, bankTotal, emptyBank } from '../game/types';
 import { tradeRate } from '../game/rules';
+import { MAP_SIZE_ORDER, MAP_SIZES, type MapSizeId } from '../game/board';
 
 const RES_COLORS: Record<Resource, string> = {
   wood: '#2d6a4f',
@@ -16,6 +17,7 @@ export class Hud {
   private lobby: HTMLElement;
   private tradeOpen = false;
   private discardDraft: ResourceBank = emptyBank();
+  private selectedMap: MapSizeId = 'standard';
 
   constructor(
     hudEl: HTMLElement,
@@ -30,21 +32,44 @@ export class Hud {
 
   private renderLobby(): void {
     this.lobby.classList.remove('hidden');
+    this.selectedMap = this.selectedMap ?? 'standard';
     this.lobby.innerHTML = `
       <div class="lobby-card">
         <h1>Catan</h1>
-        <p>Local hotseat on a Three.js island. Place settlements, roll dice, build your way to 10 VP.</p>
-        <div class="lobby-actions">
-          <button class="btn" data-players="2">2 Players</button>
-          <button class="btn" data-players="3">3 Players</button>
-          <button class="btn" data-players="4">4 Players</button>
+        <p>Local hotseat on a Three.js island. Pick a map size, then players.</p>
+        <div class="lobby-section">
+          <div class="lobby-label">Map size</div>
+          <div class="lobby-actions map-sizes">
+            ${MAP_SIZE_ORDER.map((id) => {
+              const m = MAP_SIZES[id];
+              const active = this.selectedMap === id ? 'active' : '';
+              return `<button class="btn secondary ${active}" data-map="${id}" type="button">
+                <span class="map-title">${m.label}</span>
+                <span class="map-blurb">${m.blurb} · ${m.winVp} VP</span>
+              </button>`;
+            }).join('')}
+          </div>
+        </div>
+        <div class="lobby-section">
+          <div class="lobby-label">Players</div>
+          <div class="lobby-actions">
+            <button class="btn" data-players="2">2 Players</button>
+            <button class="btn" data-players="3">3 Players</button>
+            <button class="btn" data-players="4">4 Players</button>
+          </div>
         </div>
       </div>
     `;
+    this.lobby.querySelectorAll<HTMLButtonElement>('[data-map]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.selectedMap = btn.dataset.map as MapSizeId;
+        this.renderLobby();
+      });
+    });
     this.lobby.querySelectorAll<HTMLButtonElement>('[data-players]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const n = Number(btn.dataset.players);
-        this.engine.startGame(n);
+        this.engine.startGame(n, this.selectedMap);
         this.lobby.classList.add('hidden');
       });
     });
@@ -66,7 +91,7 @@ export class Hud {
       <div class="top-bar">
         <div class="panel">
           <h2>${escapeHtml(s.message)}</h2>
-          <p class="msg">Dice: ${roll} · Phase: ${s.phase}${s.longestRoadOwner !== null ? ` · Longest Road: ${s.players[s.longestRoadOwner].name}` : ''}</p>
+          <p class="msg">Dice: ${roll} · ${MAP_SIZES[s.mapSize].label} · Win at ${s.winVp} VP · Phase: ${s.phase}${s.longestRoadOwner !== null ? ` · Longest Road: ${s.players[s.longestRoadOwner].name}` : ''}</p>
           ${s.productionLog ? `<p class="log">${escapeHtml(s.productionLog)}</p>` : ''}
         </div>
         <div class="panel players">

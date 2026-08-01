@@ -1,4 +1,4 @@
-import { verticesDistanceOk } from './board';
+import { MAP_SIZES, verticesDistanceOk } from './board';
 import type {
   BoardState,
   BuildMode,
@@ -7,7 +7,11 @@ import type {
   Resource,
   ResourceBank,
 } from './types';
-import { BUILD_COSTS, MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, RESOURCES, emptyBank } from './types';
+import { BUILD_COSTS, RESOURCES, emptyBank } from './types';
+
+export function pieceLimits(board: BoardState) {
+  return MAP_SIZES[board.mapSize];
+}
 
 export function canAfford(player: PlayerState, cost: Partial<ResourceBank>): boolean {
   for (const r of RESOURCES) {
@@ -97,19 +101,20 @@ export function legalRoads(board: BoardState, playerId: PlayerId): string[] {
 }
 
 export function legalTargets(board: BoardState, player: PlayerState, mode: BuildMode): string[] {
+  const limits = pieceLimits(board);
   switch (mode) {
     case 'none':
       return [];
     case 'road':
-      if (player.roads >= MAX_ROADS) return [];
+      if (player.roads >= limits.maxRoads) return [];
       if (!canAfford(player, BUILD_COSTS.road)) return [];
       return legalRoads(board, player.id);
     case 'settlement':
-      if (player.settlements >= MAX_SETTLEMENTS) return [];
+      if (player.settlements >= limits.maxSettlements) return [];
       if (!canAfford(player, BUILD_COSTS.settlement)) return [];
       return legalSettlements(board, player.id);
     case 'city':
-      if (player.cities >= MAX_CITIES) return [];
+      if (player.cities >= limits.maxCities) return [];
       if (!canAfford(player, BUILD_COSTS.city)) return [];
       return legalCities(board, player.id);
     default: {

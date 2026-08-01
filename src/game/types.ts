@@ -80,6 +80,8 @@ export interface PlayerState {
   victoryPoints: number;
 }
 
+export type MapSizeId = 'standard' | 'large' | 'huge';
+
 export interface BoardState {
   hexes: Map<string, HexTile>;
   vertices: Map<string, Vertex>;
@@ -88,6 +90,8 @@ export interface BoardState {
   roads: Map<string, Road>;
   robberHexId: string;
   harbors: Harbor[];
+  mapSize: MapSizeId;
+  rings: number;
 }
 
 export const RESOURCES: Resource[] = ['wood', 'brick', 'sheep', 'wheat', 'ore'];

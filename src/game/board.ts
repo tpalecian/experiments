@@ -1,73 +1,188 @@
-import type { Axial, BoardState, Edge, Harbor, HexTile, Resource, Terrain, Vertex } from './types';
-import { hexId, resourceFromTerrain } from './types';
+import type { Axial, BoardState, Edge, Harbor, HexTile, MapSizeId, Resource, Terrain, Vertex } from './types';
+import { RESOURCES, hexId, resourceFromTerrain } from './types';
 
 const HEX_SIZE = 1;
 const SQRT3 = Math.sqrt(3);
 
-/** Standard Catan land hex axial coordinates (pointy-top). */
-export const LAND_COORDS: Axial[] = [
-  { q: 0, r: 0 },
+export type { MapSizeId };
+
+export interface MapSizeConfig {
+  id: MapSizeId;
+  label: string;
+  /** Hex rings from center (2 → 19, 3 → 37, 4 → 61). */
+  rings: number;
+  blurb: string;
+  winVp: number;
+  maxSettlements: number;
+  maxCities: number;
+  maxRoads: number;
+}
+
+export const MAP_SIZES: Record<MapSizeId, MapSizeConfig> = {
+  standard: {
+    id: 'standard',
+    label: 'Standard',
+    rings: 2,
+    blurb: '19 hexes — classic island',
+    winVp: 10,
+    maxSettlements: 5,
+    maxCities: 4,
+    maxRoads: 15,
+  },
+  large: {
+    id: 'large',
+    label: 'Large',
+    rings: 3,
+    blurb: '37 hexes — room to expand',
+    winVp: 12,
+    maxSettlements: 7,
+    maxCities: 5,
+    maxRoads: 22,
+  },
+  huge: {
+    id: 'huge',
+    label: 'Huge',
+    rings: 4,
+    blurb: '61 hexes — epic voyages',
+    winVp: 15,
+    maxSettlements: 9,
+    maxCities: 6,
+    maxRoads: 30,
+  },
+};
+
+export const MAP_SIZE_ORDER: MapSizeId[] = ['standard', 'large', 'huge'];
+
+const HEX_DIRS: Axial[] = [
   { q: 1, r: 0 },
   { q: 0, r: 1 },
   { q: -1, r: 1 },
   { q: -1, r: 0 },
   { q: 0, r: -1 },
   { q: 1, r: -1 },
-  { q: 2, r: 0 },
-  { q: 1, r: 1 },
-  { q: 0, r: 2 },
-  { q: -1, r: 2 },
-  { q: -2, r: 2 },
-  { q: -2, r: 1 },
-  { q: -2, r: 0 },
-  { q: -1, r: -1 },
-  { q: 0, r: -2 },
-  { q: 1, r: -2 },
-  { q: 2, r: -2 },
-  { q: 2, r: -1 },
 ];
 
-const TERRAIN_BAG: Terrain[] = [
-  'wood',
-  'wood',
-  'wood',
-  'wood',
-  'brick',
-  'brick',
-  'brick',
-  'sheep',
-  'sheep',
-  'sheep',
-  'sheep',
-  'wheat',
-  'wheat',
-  'wheat',
-  'wheat',
-  'ore',
-  'ore',
-  'ore',
-  'desert',
-];
+/** Classic Catan number frequency weights (no 7). */
+const NUMBER_WEIGHTS: Record<number, number> = {
+  2: 1,
+  3: 2,
+  4: 2,
+  5: 2,
+  6: 2,
+  8: 2,
+  9: 2,
+  10: 2,
+  11: 2,
+  12: 1,
+};
 
-const NUMBER_BAG = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12];
+export function hexCountForRings(rings: number): number {
+  return 1 + 3 * rings * (rings + 1);
+}
 
-/** Coastal harbor edge midpoints expressed as preferred axial pairs (hex, direction index). */
-const HARBOR_SPECS: { q: number; r: number; dir: number; type: Harbor['type'] }[] = [
-  { q: 0, r: -2, dir: 5, type: 'generic' },
-  { q: 1, r: -2, dir: 0, type: 'sheep' },
-  { q: 2, r: -1, dir: 0, type: 'generic' },
-  { q: 2, r: 0, dir: 1, type: 'ore' },
-  { q: 1, r: 1, dir: 1, type: 'generic' },
-  { q: 0, r: 2, dir: 2, type: 'wheat' },
-  { q: -1, r: 2, dir: 2, type: 'generic' },
-  { q: -2, r: 1, dir: 3, type: 'brick' },
-  { q: -2, r: 0, dir: 4, type: 'wood' },
-];
+export function generateRingCoords(rings: number): Axial[] {
+  const coords: Axial[] = [{ q: 0, r: 0 }];
+  for (let ring = 1; ring <= rings; ring++) {
+    // Start at south neighbor of center, then walk the six sides
+    let q = 0;
+    let r = -ring;
+    for (let dir = 0; dir < 6; dir++) {
+      for (let step = 0; step < ring; step++) {
+        coords.push({ q, r });
+        q += HEX_DIRS[dir].q;
+        r += HEX_DIRS[dir].r;
+      }
+    }
+  }
+  return coords;
+}
+
+/** Approximate classic ratios: wood/sheep/wheat heavy, fewer brick/ore, ~1 desert per 19. */
+export function buildTerrainBag(landCount: number, rng: SeededRandom): Terrain[] {
+  const desertCount = Math.max(1, Math.round(landCount / 19));
+  const productive = landCount - desertCount;
+
+  // Target shares of productive tiles (sum ≈ 1)
+  const shares: Record<Resource, number> = {
+    wood: 4 / 18,
+    brick: 3 / 18,
+    sheep: 4 / 18,
+    wheat: 4 / 18,
+    ore: 3 / 18,
+  };
+
+  const counts: Record<Resource, number> = {
+    wood: 0,
+    brick: 0,
+    sheep: 0,
+    wheat: 0,
+    ore: 0,
+  };
+
+  let assigned = 0;
+  for (const r of RESOURCES) {
+    counts[r] = Math.floor(productive * shares[r]);
+    assigned += counts[r];
+  }
+  // Distribute remainder by largest fractional part
+  const frac = RESOURCES.map((r) => ({
+    r,
+    f: productive * shares[r] - Math.floor(productive * shares[r]),
+  })).sort((a, b) => b.f - a.f);
+  let rem = productive - assigned;
+  for (let i = 0; rem > 0; i++, rem--) {
+    counts[frac[i % RESOURCES.length].r] += 1;
+  }
+
+  const bag: Terrain[] = [];
+  for (let i = 0; i < desertCount; i++) bag.push('desert');
+  for (const r of RESOURCES) {
+    for (let i = 0; i < counts[r]; i++) bag.push(r);
+  }
+  while (bag.length < landCount) bag.push(RESOURCES[bag.length % RESOURCES.length]);
+  return rng.shuffle(bag).slice(0, landCount);
+}
+
+export function buildNumberBag(productiveCount: number, rng: SeededRandom): number[] {
+  const bag: number[] = [];
+  const numbers = Object.keys(NUMBER_WEIGHTS).map(Number);
+  const weightSum = numbers.reduce((s, n) => s + NUMBER_WEIGHTS[n], 0);
+  let assigned = 0;
+  const counts = new Map<number, number>();
+  for (const n of numbers) {
+    const c = Math.floor((productiveCount * NUMBER_WEIGHTS[n]) / weightSum);
+    counts.set(n, c);
+    assigned += c;
+  }
+  const frac = numbers
+    .map((n) => ({
+      n,
+      f: (productiveCount * NUMBER_WEIGHTS[n]) / weightSum - (counts.get(n) ?? 0),
+    }))
+    .sort((a, b) => b.f - a.f);
+  let rem = productiveCount - assigned;
+  for (let i = 0; rem > 0; i++, rem--) {
+    const n = frac[i % frac.length].n;
+    counts.set(n, (counts.get(n) ?? 0) + 1);
+  }
+  for (const n of numbers) {
+    for (let i = 0; i < (counts.get(n) ?? 0); i++) bag.push(n);
+  }
+  while (bag.length < productiveCount) {
+    bag.push(numbers[bag.length % numbers.length]);
+  }
+  return rng.shuffle(bag).slice(0, productiveCount);
+}
 
 export function axialToWorld(q: number, r: number, size = HEX_SIZE): { x: number; z: number } {
   const x = size * (SQRT3 * q + (SQRT3 / 2) * r);
   const z = size * ((3 / 2) * r);
   return { x, z };
+}
+
+export function boardRadiusWorld(rings: number, size = HEX_SIZE): number {
+  // Distance from center to outer hex center + hex size
+  return size * (SQRT3 * rings) + size;
 }
 
 function hexCorner(cx: number, cz: number, i: number, size = HEX_SIZE): { x: number; z: number } {
@@ -104,87 +219,162 @@ export class SeededRandom {
   }
 }
 
-function neighborsOk(hexes: HexTile[], numbers: Map<string, number | null>): boolean {
-  const dirs = [
-    [1, 0],
-    [0, 1],
-    [-1, 1],
-    [-1, 0],
-    [0, -1],
-    [1, -1],
-  ];
-  for (const h of hexes) {
-    const n = numbers.get(h.id);
+function neighborsOk(coords: Axial[], numbers: Map<string, number | null>): boolean {
+  for (const c of coords) {
+    const id = hexId(c.q, c.r);
+    const n = numbers.get(id);
     if (n !== 6 && n !== 8) continue;
-    for (const [dq, dr] of dirs) {
-      const nid = hexId(h.q + dq, h.r + dr);
-      const other = numbers.get(nid);
+    for (const d of HEX_DIRS) {
+      const other = numbers.get(hexId(c.q + d.q, c.r + d.r));
       if (other === 6 || other === 8) return false;
     }
   }
   return true;
 }
 
-export function createBoard(seed = Date.now()): BoardState {
+function axialDistance(a: Axial, b: Axial): number {
+  return (Math.abs(a.q - b.q) + Math.abs(a.q + a.r - b.q - b.r) + Math.abs(a.r - b.r)) / 2;
+}
+
+/** Outward-facing edge index for a coastal hex (edge with no land neighbor). */
+function coastalEdgeDirs(hex: HexTile, hexIds: Set<string>): number[] {
+  const dirs: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    const nq = hex.q + HEX_DIRS[i].q;
+    const nr = hex.r + HEX_DIRS[i].r;
+    if (!hexIds.has(hexId(nq, nr))) dirs.push(i);
+  }
+  return dirs;
+}
+
+function placeHarbors(
+  hexes: Map<string, HexTile>,
+  edges: Map<string, Edge>,
+  vertices: Map<string, Vertex>,
+  rings: number,
+  rng: SeededRandom,
+): Harbor[] {
+  const hexIds = new Set(hexes.keys());
+  // Collect candidate coastal edges (unique)
+  const candidates: { edgeId: string; angle: number }[] = [];
+  const seen = new Set<string>();
+
+  for (const hex of hexes.values()) {
+    if (axialDistance(hex, { q: 0, r: 0 }) < rings - 0.1 && rings > 0) {
+      // Prefer outer ring for harbors; still allow any coastal for ring 1
+    }
+    const isOuter = axialDistance(hex, { q: 0, r: 0 }) >= rings - 0.01;
+    if (!isOuter && rings >= 2) continue;
+
+    for (const dir of coastalEdgeDirs(hex, hexIds)) {
+      const edgeId = hex.edgeIds[dir];
+      if (seen.has(edgeId)) continue;
+      seen.add(edgeId);
+      const e = edges.get(edgeId)!;
+      const angle = Math.atan2(e.midZ, e.midX);
+      candidates.push({ edgeId, angle });
+    }
+  }
+
+  candidates.sort((a, b) => a.angle - b.angle);
+
+  // Harbor count: ~9 on standard (19), scale with circumference ≈ 6*rings
+  const harborCount = Math.max(5, Math.round(9 * (rings / 2)));
+  if (candidates.length === 0) return [];
+
+  const step = candidates.length / harborCount;
+  const picked: string[] = [];
+  for (let i = 0; i < harborCount; i++) {
+    const idx = Math.floor(i * step) % candidates.length;
+    const id = candidates[idx].edgeId;
+    if (!picked.includes(id)) picked.push(id);
+  }
+
+  // Types: mix of generics and one of each resource, extras alternate
+  const typeBag: Harbor['type'][] = [
+    'generic',
+    'wood',
+    'generic',
+    'brick',
+    'generic',
+    'sheep',
+    'generic',
+    'wheat',
+    'ore',
+  ];
+  while (typeBag.length < picked.length) {
+    typeBag.push(typeBag.length % 2 === 0 ? 'generic' : RESOURCES[typeBag.length % RESOURCES.length]);
+  }
+  const types = rng.shuffle(typeBag).slice(0, picked.length);
+
+  const harbors: Harbor[] = [];
+  for (let i = 0; i < picked.length; i++) {
+    const edgeId = picked[i];
+    const type = types[i];
+    const harbor: Harbor = {
+      type,
+      ratio: type === 'generic' ? 3 : 2,
+      edgeId,
+    };
+    harbors.push(harbor);
+    const edge = edges.get(edgeId);
+    if (edge) {
+      for (const vid of edge.vertexIds) {
+        const v = vertices.get(vid);
+        if (v && !v.harbor) v.harbor = harbor;
+      }
+    }
+  }
+  return harbors;
+}
+
+export function createBoard(seed = Date.now(), mapSize: MapSizeId = 'standard'): BoardState {
+  const config = MAP_SIZES[mapSize];
+  const rings = config.rings;
+  const landCoords = generateRingCoords(rings);
   const rng = new SeededRandom(seed);
-  let terrains = rng.shuffle(TERRAIN_BAG);
+
+  let terrains = buildTerrainBag(landCoords.length, rng);
   let numbers: Map<string, number | null> = new Map();
   let attempts = 0;
 
-  const placeNumbers = (): Map<string, number | null> => {
-    const bag = rng.shuffle(NUMBER_BAG);
+  const placeNumbers = (terrainList: Terrain[]): Map<string, number | null> => {
+    const productive = terrainList.filter((t) => t !== 'desert').length;
+    const bag = buildNumberBag(productive, rng);
     const map = new Map<string, number | null>();
     let ni = 0;
-    for (let i = 0; i < LAND_COORDS.length; i++) {
-      const id = hexId(LAND_COORDS[i].q, LAND_COORDS[i].r);
-      if (terrains[i] === 'desert') {
-        map.set(id, null);
-      } else {
-        map.set(id, bag[ni++]);
-      }
+    for (let i = 0; i < landCoords.length; i++) {
+      const id = hexId(landCoords[i].q, landCoords[i].r);
+      if (terrainList[i] === 'desert') map.set(id, null);
+      else map.set(id, bag[ni++]);
     }
     return map;
   };
 
-  const tempHexes: HexTile[] = LAND_COORDS.map((c, i) => ({
-    id: hexId(c.q, c.r),
-    q: c.q,
-    r: c.r,
-    terrain: terrains[i],
-    number: null,
-    vertexIds: [],
-    edgeIds: [],
-  }));
-
   do {
-    if (attempts > 0) {
-      terrains = rng.shuffle(TERRAIN_BAG);
-      for (let i = 0; i < tempHexes.length; i++) tempHexes[i].terrain = terrains[i];
-    }
-    numbers = placeNumbers();
+    if (attempts > 0) terrains = buildTerrainBag(landCoords.length, rng);
+    numbers = placeNumbers(terrains);
     attempts++;
-  } while (!neighborsOk(tempHexes, numbers) && attempts < 80);
+  } while (!neighborsOk(landCoords, numbers) && attempts < 120);
 
   const vertices = new Map<string, Vertex>();
   const edges = new Map<string, Edge>();
   const hexes = new Map<string, HexTile>();
   let desertId = '';
 
-  for (let i = 0; i < LAND_COORDS.length; i++) {
-    const c = LAND_COORDS[i];
+  for (let i = 0; i < landCoords.length; i++) {
+    const c = landCoords[i];
     const id = hexId(c.q, c.r);
     const { x: cx, z: cz } = axialToWorld(c.q, c.r);
     const terrain = terrains[i];
     const number = numbers.get(id) ?? null;
-    if (terrain === 'desert') desertId = id;
+    if (terrain === 'desert' && !desertId) desertId = id;
 
     const cornerKeys: string[] = [];
-    const corners: { x: number; z: number }[] = [];
     for (let k = 0; k < 6; k++) {
       const p = hexCorner(cx, cz, k);
       const key = roundKey(p.x, p.z);
       cornerKeys.push(key);
-      corners.push(p);
       let v = vertices.get(key);
       if (!v) {
         v = {
@@ -239,26 +429,17 @@ export function createBoard(seed = Date.now()): BoardState {
     });
   }
 
-  const harbors: Harbor[] = [];
-  for (const spec of HARBOR_SPECS) {
-    const hid = hexId(spec.q, spec.r);
-    const hex = hexes.get(hid);
-    if (!hex) continue;
-    const edgeId = hex.edgeIds[spec.dir];
-    const harbor: Harbor = {
-      type: spec.type,
-      ratio: spec.type === 'generic' ? 3 : 2,
-      edgeId,
-    };
-    harbors.push(harbor);
-    const edge = edges.get(edgeId);
-    if (edge) {
-      for (const vid of edge.vertexIds) {
-        const v = vertices.get(vid);
-        if (v && !v.harbor) v.harbor = harbor;
+  // Prefer desert nearest center for robber start; else first desert
+  if (!desertId) {
+    for (const h of hexes.values()) {
+      if (h.terrain === 'desert') {
+        desertId = h.id;
+        break;
       }
     }
   }
+
+  const harbors = placeHarbors(hexes, edges, vertices, rings, rng);
 
   return {
     hexes,
@@ -268,6 +449,8 @@ export function createBoard(seed = Date.now()): BoardState {
     roads: new Map(),
     robberHexId: desertId || [...hexes.keys()][0],
     harbors,
+    mapSize,
+    rings,
   };
 }
 
@@ -304,5 +487,8 @@ export function verticesDistanceOk(
 export function resourceProduced(hex: HexTile): Resource | null {
   return resourceFromTerrain(hex.terrain);
 }
+
+/** @deprecated Use generateRingCoords(2) — kept for any callers expecting classic layout. */
+export const LAND_COORDS: Axial[] = generateRingCoords(2);
 
 export { HEX_SIZE };

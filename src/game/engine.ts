@@ -1,4 +1,5 @@
-import { createBoard } from './board';
+import { MAP_SIZES, createBoard } from './board';
+import type { MapSizeId } from './board';
 import {
   addResources,
   canAfford,
@@ -11,6 +12,7 @@ import {
   legalSetupRoads,
   legalSetupSettlements,
   payCost,
+  pieceLimits,
   playersAdjacentToHex,
   tradeRate,
   updateLongestRoad,
@@ -26,13 +28,9 @@ import type {
 } from './types';
 import {
   BUILD_COSTS,
-  MAX_CITIES,
-  MAX_ROADS,
-  MAX_SETTLEMENTS,
   PLAYER_COLORS,
   PLAYER_NAMES,
   RESOURCES,
-  WIN_VP,
   bankTotal,
   emptyBank,
 } from './types';
@@ -45,6 +43,7 @@ export interface EngineSnapshot {
   players: PlayerState[];
   currentPlayer: PlayerId;
   playerCount: number;
+  mapSize: MapSizeId;
   buildMode: BuildMode;
   lastRoll: [number, number] | null;
   setupIndex: number;
@@ -59,14 +58,16 @@ export interface EngineSnapshot {
   legalVertices: string[];
   legalEdges: string[];
   productionLog: string;
+  winVp: number;
 }
 
 export class GameEngine {
   phase: Phase = 'lobby';
-  board: BoardState = createBoard(1);
+  board: BoardState = createBoard(1, 'standard');
   players: PlayerState[] = [];
   currentPlayer: PlayerId = 0;
   playerCount = 0;
+  mapSize: MapSizeId = 'standard';
   buildMode: BuildMode = 'none';
   lastRoll: [number, number] | null = null;
   setupIndex = 0;
@@ -76,7 +77,7 @@ export class GameEngine {
   stealTargets: PlayerId[] = [];
   longestRoadOwner: PlayerId | null = null;
   winner: PlayerId | null = null;
-  message = 'Choose number of players to start.';
+  message = 'Choose map size and players to start.';
   productionLog = '';
   seed: number;
 
@@ -102,6 +103,7 @@ export class GameEngine {
       players: this.players,
       currentPlayer: this.currentPlayer,
       playerCount: this.playerCount,
+      mapSize: this.mapSize,
       buildMode: this.buildMode,
       lastRoll: this.lastRoll,
       setupIndex: this.setupIndex,
@@ -116,13 +118,15 @@ export class GameEngine {
       legalVertices: this.computeLegalVertices(),
       legalEdges: this.computeLegalEdges(),
       productionLog: this.productionLog,
+      winVp: MAP_SIZES[this.mapSize].winVp,
     };
   }
 
-  startGame(playerCount: number, seed = this.seed): void {
+  startGame(playerCount: number, mapSize: MapSizeId = this.mapSize, seed = this.seed): void {
     if (playerCount < 2 || playerCount > 4) return;
     this.seed = seed;
-    this.board = createBoard(seed);
+    this.mapSize = mapSize;
+    this.board = createBoard(seed, mapSize);
     this.playerCount = playerCount;
     this.players = Array.from({ length: playerCount }, (_, i) => ({
       id: i as PlayerId,
@@ -146,7 +150,8 @@ export class GameEngine {
     this.winner = null;
     this.productionLog = '';
     this.phase = 'setupSettlement';
-    this.message = `${this.player().name}: place your first settlement.`;
+    const sizeLabel = MAP_SIZES[mapSize].label;
+    this.message = `${sizeLabel} map · ${this.player().name}: place your first settlement.`;
     this.emit();
   }
 
@@ -154,7 +159,7 @@ export class GameEngine {
     this.phase = 'lobby';
     this.winner = null;
     this.buildMode = 'none';
-    this.message = 'Choose number of players to start.';
+    this.message = 'Choose map size and players to start.';
     this.emit();
   }
 
@@ -211,7 +216,8 @@ export class GameEngine {
 
     if (this.phase === 'main' && this.buildMode === 'settlement') {
       const p = this.player();
-      if (p.settlements >= MAX_SETTLEMENTS) return false;
+      const limits = pieceLimits(this.board);
+      if (p.settlements >= limits.maxSettlements) return false;
       if (!canAfford(p, BUILD_COSTS.settlement)) return false;
       if (!legalSettlements(this.board, p.id).includes(vertexId)) return false;
       payCost(p, BUILD_COSTS.settlement);
@@ -245,7 +251,8 @@ export class GameEngine {
 
     if (this.phase === 'main' && this.buildMode === 'road') {
       const p = this.player();
-      if (p.roads >= MAX_ROADS) return false;
+      const limits = pieceLimits(this.board);
+      if (p.roads >= limits.maxRoads) return false;
       if (!canAfford(p, BUILD_COSTS.road)) return false;
       if (!legalRoads(this.board, p.id).includes(edgeId)) return false;
       payCost(p, BUILD_COSTS.road);
@@ -265,7 +272,8 @@ export class GameEngine {
   placeCity(vertexId: string): boolean {
     if (this.phase !== 'main' || this.buildMode !== 'city') return false;
     const p = this.player();
-    if (p.cities >= MAX_CITIES) return false;
+    const limits = pieceLimits(this.board);
+    if (p.cities >= limits.maxCities) return false;
     if (!canAfford(p, BUILD_COSTS.city)) return false;
     if (!legalCities(this.board, p.id).includes(vertexId)) return false;
     payCost(p, BUILD_COSTS.city);
@@ -483,8 +491,9 @@ export class GameEngine {
 
   private checkWin(): void {
     this.refreshVp();
+    const winVp = MAP_SIZES[this.mapSize].winVp;
     for (const p of this.players) {
-      if (p.victoryPoints >= WIN_VP) {
+      if (p.victoryPoints >= winVp) {
         this.winner = p.id;
         this.phase = 'gameOver';
         this.message = `${p.name} wins with ${p.victoryPoints} victory points!`;

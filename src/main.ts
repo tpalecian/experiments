@@ -1,6 +1,7 @@
 import './ui/styles.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { boardRadiusWorld } from './game/board';
 import { GameEngine } from './game/engine';
 import { Picker } from './input/picker';
 import { BoardView } from './render/BoardView';
@@ -26,7 +27,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0c1f2e);
 scene.fog = new THREE.Fog(0x0c1f2e, 18, 36);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
 camera.position.set(0, 14, 14);
 
 const controls = new OrbitControls(camera, canvas);
@@ -63,6 +64,30 @@ new Hud(hudEl, lobbyEl, engine);
 
 let boardBuilt = false;
 
+function frameCamera(rings: number): void {
+  const r = boardRadiusWorld(rings);
+  const dist = Math.max(12, r * 2.35);
+  const height = Math.max(10, r * 1.85);
+  camera.position.set(0, height, dist);
+  camera.far = Math.max(100, dist * 6);
+  camera.updateProjectionMatrix();
+  controls.minDistance = Math.max(6, r * 0.9);
+  controls.maxDistance = Math.max(24, r * 4.2);
+  controls.target.set(0, 0, 0);
+  controls.update();
+
+  scene.fog = new THREE.Fog(0x0c1f2e, dist * 1.2, dist * 3.2);
+
+  const shadowSpan = r + 4;
+  sun.position.set(r * 1.2, r * 2.2, r * 0.9);
+  sun.shadow.camera.far = shadowSpan * 4;
+  sun.shadow.camera.left = -shadowSpan;
+  sun.shadow.camera.right = shadowSpan;
+  sun.shadow.camera.top = shadowSpan;
+  sun.shadow.camera.bottom = -shadowSpan;
+  sun.shadow.camera.updateProjectionMatrix();
+}
+
 function syncView(): void {
   const snap = engine.snapshot();
   if (snap.phase === 'lobby') {
@@ -71,6 +96,7 @@ function syncView(): void {
   }
   if (!boardBuilt) {
     boardView.build(snap.board);
+    frameCamera(snap.board.rings);
     boardBuilt = true;
   } else {
     boardView.syncPieces(snap.board);
@@ -107,8 +133,9 @@ function animate(): void {
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
   controls.update();
-  sun.position.x = Math.cos(t * 0.05) * 8;
-  sun.position.z = Math.sin(t * 0.05) * 6 + 2;
+  const base = Math.max(8, boardRadiusWorld(engine.board.rings) * 1.1);
+  sun.position.x = Math.cos(t * 0.05) * base;
+  sun.position.z = Math.sin(t * 0.05) * base * 0.75 + 2;
   renderer.render(scene, camera);
 }
 animate();

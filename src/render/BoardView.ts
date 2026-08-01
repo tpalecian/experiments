@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { HEX_SIZE, axialToWorld } from '../game/board';
+import { HEX_SIZE, axialToWorld, boardRadiusWorld } from '../game/board';
 import type { BoardState, PlayerId, Terrain } from '../game/types';
 import { PLAYER_COLORS, TERRAIN_COLORS } from '../game/types';
 
@@ -66,8 +66,10 @@ export class BoardView {
     this.clearDynamic();
     this.pickables = [];
 
+    const landR = boardRadiusWorld(board.rings);
+    const seaR = landR + 2.8;
     const sea = new THREE.Mesh(
-      new THREE.CircleGeometry(8.5, 64),
+      new THREE.CircleGeometry(seaR, 64),
       new THREE.MeshStandardMaterial({
         color: 0x1a4a6e,
         roughness: 0.55,
