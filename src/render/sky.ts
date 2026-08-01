@@ -119,8 +119,8 @@ export class SkyDome {
       fog: false,
     });
 
-    this.litMat = new THREE.MeshBasicMaterial({ color: 0xfffcff, fog: false });
-    this.shadeMat = new THREE.MeshBasicMaterial({ color: 0xc4b6d8, fog: false });
+    this.litMat = new THREE.MeshBasicMaterial({ color: 0xfff5ff, fog: false });
+    this.shadeMat = new THREE.MeshBasicMaterial({ color: 0xd4c2ec, fog: false });
     this.puffGeom = createFoamPuffGeometry();
 
     this.mesh = new THREE.Mesh(new THREE.SphereGeometry(this.skyRadius, 32, 24), this.material);
@@ -143,27 +143,31 @@ export class SkyDome {
   private spawnClouds(radius: number): void {
     this.clearClouds();
     const rand = seededRand(120);
-    const count = 10;
+    const count = 8;
 
     for (let i = 0; i < count; i++) {
       const cloud = makeFoamCloud(rand, this.puffGeom, this.litMat, this.shadeMat);
-      const scale = 2.8 + rand() * 2.2;
+      // Large enough to read clearly around the board skyline
+      const scale = 5.5 + rand() * 3.5;
       cloud.scale.setScalar(scale);
 
-      const angle = (i / count) * Math.PI * 2 + rand() * 0.25;
-      const orbitR = Math.min(radius * 0.28, 36) * (0.85 + rand() * 0.35);
-      const height = 9 + rand() * 10;
+      const angle = (i / count) * Math.PI * 2 + rand() * 0.2;
+      // Close ring just outside the island
+      const orbitR = 14 + rand() * 10;
+      const height = 6 + rand() * 7;
       cloud.position.set(Math.cos(angle) * orbitR, height, Math.sin(angle) * orbitR);
 
       this.clouds.add(cloud);
       this.cloudDrift.push({
         obj: cloud,
-        speed: 0.004 + rand() * 0.006,
+        speed: 0.003 + rand() * 0.005,
         radius: orbitR,
         height,
         phase: angle,
       });
     }
+
+    void radius;
   }
 
   setSunDirection(dir: THREE.Vector3): void {
