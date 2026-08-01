@@ -29,38 +29,6 @@ void main() {
 }
 `;
 
-/** Unlit foam: always soft white + lavender, independent of scene lights. */
-const foamVertexShader = /* glsl */ `
-varying vec3 vNormalW;
-varying vec3 vWorldPos;
-
-void main() {
-  vec4 world = modelMatrix * vec4(position, 1.0);
-  vWorldPos = world.xyz;
-  // Use object-space normal transformed — baked flat face normals stay flat
-  vNormalW = normalize(mat3(modelMatrix) * normal);
-  gl_Position = projectionMatrix * viewMatrix * world;
-}
-`;
-
-const foamFragmentShader = /* glsl */ `
-uniform vec3 uLit;
-uniform vec3 uShade;
-uniform vec3 uSunDir;
-
-varying vec3 vNormalW;
-
-void main() {
-  vec3 n = normalize(vNormalW);
-  // Soft two-tone from a fixed “studio” light + upward bias (foam tops stay bright)
-  float litAmt = clamp(dot(n, normalize(uSunDir)) * 0.5 + n.y * 0.55 + 0.35, 0.0, 1.0);
-  // Posterize slightly so facets read
-  litAmt = floor(litAmt * 3.0 + 0.5) / 3.0;
-  vec3 col = mix(uShade, uLit, litAmt);
-  gl_FragColor = vec4(col, 1.0);
-}
-`;
-
 function seededRand(seed: number): () => number {
   let s = seed >>> 0;
   return () => {
@@ -70,39 +38,18 @@ function seededRand(seed: number): () => number {
 }
 
 function createFoamPuffGeometry(): THREE.BufferGeometry {
-  const base = new THREE.IcosahedronGeometry(1, 0).toNonIndexed();
-  const pos = base.attributes.position;
-  const normals = new Float32Array(pos.count * 3);
-  const a = new THREE.Vector3();
-  const b = new THREE.Vector3();
-  const c = new THREE.Vector3();
-  const cb = new THREE.Vector3();
-  const ab = new THREE.Vector3();
-
-  for (let i = 0; i < pos.count; i += 3) {
-    a.fromBufferAttribute(pos, i);
-    b.fromBufferAttribute(pos, i + 1);
-    c.fromBufferAttribute(pos, i + 2);
-    cb.subVectors(c, b);
-    ab.subVectors(a, b);
-    cb.cross(ab).normalize();
-    for (let j = 0; j < 3; j++) {
-      normals[(i + j) * 3] = cb.x;
-      normals[(i + j) * 3 + 1] = cb.y;
-      normals[(i + j) * 3 + 2] = cb.z;
-    }
-  }
-  base.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-  return base;
+  return new THREE.IcosahedronGeometry(1, 0);
 }
 
-/**
- * Wide, flat foam bank — overlapping puffs like cotton / bath foam.
- */
-function makeFoamCloud(rand: () => number, geom: THREE.BufferGeometry, mat: THREE.Material): THREE.Group {
+/** Wide foam bank from overlapping low-poly puffs (white + lavender). */
+function makeFoamCloud(
+  rand: () => number,
+  geom: THREE.BufferGeometry,
+  lit: THREE.Material,
+  shade: THREE.Material,
+): THREE.Group {
   const g = new THREE.Group();
 
-  // Horizontal foam loaf layout (x wide, y short)
   const spots: [number, number, number, number][] = [
     [0.0, 0.0, 0.0, 1.25],
     [-1.3, 0.05, 0.15, 1.15],
@@ -122,19 +69,21 @@ function makeFoamCloud(rand: () => number, geom: THREE.BufferGeometry, mat: THRE
 
   for (const [x, y, z, s] of spots) {
     if (rand() < 0.05) continue;
+    const mat = y < 0.35 && rand() > 0.5 ? shade : lit;
     const mesh = new THREE.Mesh(geom, mat);
     mesh.position.set(
       x + (rand() - 0.5) * 0.2,
       y + (rand() - 0.5) * 0.1,
       z + (rand() - 0.5) * 0.2,
     );
-    // Slight squash → foam pillow, not rock spike
     const sc = s * (0.95 + rand() * 0.12);
     mesh.scale.set(sc * 1.05, sc * 0.82, sc * 1.05);
     mesh.rotation.set(rand() * 0.5, rand() * Math.PI, rand() * 0.5);
+    mesh.frustumCulled = false;
     g.add(mesh);
   }
 
+  g.frustumCulled = false;
   return g;
 }
 
@@ -142,7 +91,8 @@ export class SkyDome {
   readonly group = new THREE.Group();
   readonly mesh: THREE.Mesh;
   private material: THREE.ShaderMaterial;
-  private foamMat: THREE.ShaderMaterial;
+  private litMat: THREE.MeshBasicMaterial;
+  private shadeMat: THREE.MeshBasicMaterial;
   private puffGeom: THREE.BufferGeometry;
   private clouds = new THREE.Group();
   private cloudDrift: {
@@ -169,17 +119,8 @@ export class SkyDome {
       fog: false,
     });
 
-    this.foamMat = new THREE.ShaderMaterial({
-      vertexShader: foamVertexShader,
-      fragmentShader: foamFragmentShader,
-      uniforms: {
-        uLit: { value: new THREE.Color(0xfffcff) },
-        uShade: { value: new THREE.Color(0xc8bdd8) },
-        uSunDir: { value: new THREE.Vector3(0.55, 0.85, 0.2).normalize() },
-      },
-      fog: false,
-    });
-
+    this.litMat = new THREE.MeshBasicMaterial({ color: 0xfffcff, fog: false });
+    this.shadeMat = new THREE.MeshBasicMaterial({ color: 0xc4b6d8, fog: false });
     this.puffGeom = createFoamPuffGeometry();
 
     this.mesh = new THREE.Mesh(new THREE.SphereGeometry(this.skyRadius, 32, 24), this.material);
@@ -188,6 +129,7 @@ export class SkyDome {
 
     this.group.add(this.mesh);
     this.group.add(this.clouds);
+    this.clouds.frustumCulled = false;
     this.spawnClouds(this.skyRadius);
   }
 
@@ -204,13 +146,11 @@ export class SkyDome {
     const count = 10;
 
     for (let i = 0; i < count; i++) {
-      const cloud = makeFoamCloud(rand, this.puffGeom, this.foamMat);
-      // Big foam banks that read in the default board camera
+      const cloud = makeFoamCloud(rand, this.puffGeom, this.litMat, this.shadeMat);
       const scale = 2.8 + rand() * 2.2;
       cloud.scale.setScalar(scale);
 
       const angle = (i / count) * Math.PI * 2 + rand() * 0.25;
-      // Just beyond the island, mid-height — visible while looking at the board
       const orbitR = Math.min(radius * 0.28, 36) * (0.85 + rand() * 0.35);
       const height = 9 + rand() * 10;
       cloud.position.set(Math.cos(angle) * orbitR, height, Math.sin(angle) * orbitR);
@@ -227,9 +167,7 @@ export class SkyDome {
   }
 
   setSunDirection(dir: THREE.Vector3): void {
-    const d = dir.clone().normalize();
-    this.material.uniforms.uSunDir.value.copy(d);
-    this.foamMat.uniforms.uSunDir.value.copy(d);
+    this.material.uniforms.uSunDir.value.copy(dir).normalize();
   }
 
   resize(landRadius: number): void {
@@ -255,7 +193,8 @@ export class SkyDome {
     this.clearClouds();
     this.mesh.geometry.dispose();
     this.material.dispose();
-    this.foamMat.dispose();
+    this.litMat.dispose();
+    this.shadeMat.dispose();
     this.puffGeom.dispose();
   }
 }
