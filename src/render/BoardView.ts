@@ -3,6 +3,7 @@ import { HEX_SIZE, axialToWorld, boardRadiusWorld } from '../game/board';
 import type { BoardState, PlayerId, Terrain } from '../game/types';
 import { PLAYER_COLORS, TERRAIN_COLORS } from '../game/types';
 import { GrassField } from './grass';
+import { WaterSurface } from './water';
 
 const TILE_HEIGHT = 0.22;
 
@@ -53,9 +54,11 @@ export class BoardView {
   private harborGroup = new THREE.Group();
   private pickables: THREE.Object3D[] = [];
   private grass = new GrassField();
+  private water = new WaterSurface();
 
   constructor() {
     this.robber = this.makeRobber();
+    this.root.add(this.water.mesh);
     this.root.add(this.harborGroup);
     this.root.add(this.robber);
     this.root.add(this.grass.group);
@@ -67,6 +70,7 @@ export class BoardView {
 
   update(time: number): void {
     this.grass.update(time);
+    this.water.update(time);
   }
 
   build(board: BoardState): void {
@@ -74,19 +78,8 @@ export class BoardView {
     this.pickables = [];
 
     const landR = boardRadiusWorld(board.rings);
-    const seaR = landR + 2.8;
-    const sea = new THREE.Mesh(
-      new THREE.CircleGeometry(seaR, 64),
-      new THREE.MeshStandardMaterial({
-        color: 0x1a4a6e,
-        roughness: 0.55,
-        metalness: 0.05,
-      }),
-    );
-    sea.rotation.x = -Math.PI / 2;
-    sea.position.y = -0.05;
-    sea.receiveShadow = true;
-    this.root.add(sea);
+    this.water.resize(landR);
+    this.root.add(this.water.mesh);
 
     const geom = new THREE.ExtrudeGeometry(hexShape(HEX_SIZE * 0.95), {
       depth: TILE_HEIGHT,
@@ -340,6 +333,7 @@ export class BoardView {
     this.roadMeshes.clear();
     this.harborGroup = new THREE.Group();
     this.robber = this.makeRobber();
+    this.root.add(this.water.mesh);
     this.root.add(this.harborGroup);
     this.root.add(this.robber);
     this.root.add(this.grass.group);

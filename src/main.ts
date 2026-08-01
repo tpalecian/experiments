@@ -5,6 +5,7 @@ import { boardRadiusWorld } from './game/board';
 import { GameEngine } from './game/engine';
 import { Picker } from './input/picker';
 import { BoardView } from './render/BoardView';
+import { SkyDome } from './render/sky';
 import { Hud } from './ui/hud';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas')!;
@@ -13,6 +14,7 @@ const lobbyEl = document.querySelector<HTMLElement>('#lobby')!;
 
 const engine = new GameEngine();
 const boardView = new BoardView();
+const sky = new SkyDome();
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -24,21 +26,21 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0c1f2e);
-scene.fog = new THREE.Fog(0x0c1f2e, 18, 36);
+scene.background = null;
+scene.fog = new THREE.Fog(0xb8cfdc, 28, 70);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 400);
 camera.position.set(0, 14, 14);
 
 const controls = new OrbitControls(camera, canvas);
 controls.target.set(0, 0, 0);
 controls.enableDamping = true;
-controls.maxPolarAngle = Math.PI * 0.46;
+controls.maxPolarAngle = Math.PI * 0.48;
 controls.minDistance = 8;
 controls.maxDistance = 24;
 controls.update();
 
-const hemi = new THREE.HemisphereLight(0xb8d4e8, 0x3d4a32, 0.85);
+const hemi = new THREE.HemisphereLight(0xc8dff0, 0x4a5a3a, 0.9);
 scene.add(hemi);
 
 const sun = new THREE.DirectionalLight(0xfff0d6, 1.35);
@@ -57,6 +59,7 @@ const fill = new THREE.DirectionalLight(0x7eb6d9, 0.25);
 fill.position.set(-6, 4, -8);
 scene.add(fill);
 
+scene.add(sky.mesh);
 scene.add(boardView.root);
 
 const picker = new Picker(camera, canvas);
@@ -69,14 +72,15 @@ function frameCamera(rings: number): void {
   const dist = Math.max(12, r * 2.35);
   const height = Math.max(10, r * 1.85);
   camera.position.set(0, height, dist);
-  camera.far = Math.max(100, dist * 6);
+  camera.far = Math.max(200, dist * 12);
   camera.updateProjectionMatrix();
   controls.minDistance = Math.max(6, r * 0.9);
   controls.maxDistance = Math.max(24, r * 4.2);
   controls.target.set(0, 0, 0);
   controls.update();
 
-  scene.fog = new THREE.Fog(0x0c1f2e, dist * 1.2, dist * 3.2);
+  scene.fog = new THREE.Fog(0xb8cfdc, dist * 1.6, dist * 5.5);
+  sky.resize(r);
 
   const shadowSpan = r + 4;
   sun.position.set(r * 1.2, r * 2.2, r * 0.9);
@@ -86,6 +90,7 @@ function frameCamera(rings: number): void {
   sun.shadow.camera.top = shadowSpan;
   sun.shadow.camera.bottom = -shadowSpan;
   sun.shadow.camera.updateProjectionMatrix();
+  sky.setSunDirection(sun.position.clone().normalize());
 }
 
 function syncView(): void {
@@ -134,9 +139,11 @@ function animate(): void {
   const t = clock.getElapsedTime();
   controls.update();
   boardView.update(t);
+  sky.update(t);
   const base = Math.max(8, boardRadiusWorld(engine.board.rings) * 1.1);
   sun.position.x = Math.cos(t * 0.05) * base;
   sun.position.z = Math.sin(t * 0.05) * base * 0.75 + 2;
+  sky.setSunDirection(sun.position.clone().normalize());
   renderer.render(scene, camera);
 }
 animate();
