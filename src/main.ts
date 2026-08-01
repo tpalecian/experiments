@@ -61,7 +61,7 @@ const fill = new THREE.DirectionalLight(STYLE.fill, 0.35);
 fill.position.set(-6, 4, -8);
 scene.add(fill);
 
-scene.add(sky.mesh);
+scene.add(sky.group);
 scene.add(boardView.root);
 
 const picker = new Picker(camera, canvas);

@@ -1,26 +1,14 @@
 import * as THREE from 'three';
-import { STYLE } from './style';
 
+/**
+ * Wind Waker–inspired flat water:
+ * solid toon blue + scrolling white cell/foam edges (no vertex waves).
+ */
 const waterVertexShader = /* glsl */ `
-uniform float uTime;
-uniform float uWaveHeight;
-uniform float uWaveFreq;
-
 varying vec3 vWorldPos;
-varying float vWave;
-
-float wave(vec2 p, float t) {
-  float w = sin(p.x * uWaveFreq + t * 1.1) * cos(p.y * uWaveFreq * 0.8 - t * 0.9);
-  w += 0.5 * sin((p.x * 0.7 + p.y) * uWaveFreq * 1.4 - t * 1.4);
-  return w;
-}
 
 void main() {
-  vec3 pos = position;
-  float w = wave(pos.xz, uTime);
-  pos.y += w * uWaveHeight;
-  vWave = w;
-  vec4 world = modelMatrix * vec4(pos, 1.0);
+  vec4 world = modelMatrix * vec4(position, 1.0);
   vWorldPos = world.xyz;
   gl_Position = projectionMatrix * viewMatrix * world;
 }
@@ -28,39 +16,72 @@ void main() {
 
 const waterFragmentShader = /* glsl */ `
 uniform float uTime;
+uniform vec3 uWaterColor;
 uniform vec3 uDeepColor;
-uniform vec3 uMidColor;
-uniform vec3 uShallowColor;
 uniform vec3 uFoamColor;
 uniform float uLandRadius;
+uniform float uPatternScale;
+uniform float uScrollSpeed;
 
 varying vec3 vWorldPos;
-varying float vWave;
+
+vec2 hash2(vec2 p) {
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+  return fract(sin(p) * 43758.5453);
+}
+
+/** F2 - F1 Voronoi edges → crisp cell foam lines. */
+float voronoiEdge(vec2 x) {
+  vec2 n = floor(x);
+  vec2 f = fract(x);
+  float md = 8.0;
+  float md2 = 8.0;
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      vec2 g = vec2(float(i), float(j));
+      vec2 o = hash2(n + g);
+      vec2 r = g + o - f;
+      float d = dot(r, r);
+      if (d < md) {
+        md2 = md;
+        md = d;
+      } else if (d < md2) {
+        md2 = d;
+      }
+    }
+  }
+  return md2 - md;
+}
 
 void main() {
   float dist = length(vWorldPos.xz);
-  float shore = smoothstep(uLandRadius - 0.2, uLandRadius + 3.5, dist);
 
-  // Stylized banded water (Nintendo / toon fantasy)
-  vec3 col = mix(uShallowColor, uMidColor, smoothstep(0.15, 0.55, shore));
-  col = mix(col, uDeepColor, smoothstep(0.55, 1.0, shore));
+  // Mostly flat mid blue; slightly deeper far from island
+  float deep = smoothstep(uLandRadius + 1.0, uLandRadius + 10.0, dist);
+  vec3 col = mix(uWaterColor, uDeepColor, deep * 0.55);
 
-  // Posterize into soft bands
-  col = floor(col * 5.0 + 0.5) / 5.0;
+  // Two scrolling foam layers (classic WW look)
+  vec2 uv = vWorldPos.xz * uPatternScale;
+  uv += vec2(uTime * uScrollSpeed * 0.12, -uTime * uScrollSpeed * 0.08);
 
-  // Chunky foam crests
-  float crest = step(0.55, vWave);
-  col = mix(col, uFoamColor, crest * 0.55);
+  float edge = voronoiEdge(uv);
+  float foam = 1.0 - smoothstep(0.0, 0.045, edge);
+  foam = pow(foam, 1.6);
 
-  // Shore foam ring
-  float foamRing = 1.0 - smoothstep(uLandRadius + 0.1, uLandRadius + 1.1, dist);
-  foamRing *= smoothstep(uLandRadius - 0.5, uLandRadius + 0.2, dist);
-  float foamPulse = 0.65 + 0.35 * sin(uTime * 2.0 + dist * 3.0);
-  col = mix(col, uFoamColor, foamRing * foamPulse * 0.7);
+  vec2 uv2 = vWorldPos.xz * (uPatternScale * 0.55) + 12.0;
+  uv2 += vec2(-uTime * uScrollSpeed * 0.07, uTime * uScrollSpeed * 0.05);
+  float edge2 = voronoiEdge(uv2);
+  float foam2 = 1.0 - smoothstep(0.0, 0.055, edge2);
+  foam2 = pow(foam2, 1.8) * 0.55;
 
-  // Slow stylized sparkle tiles
-  float sparkle = step(0.92, fract(sin(dot(floor(vWorldPos.xz * 2.5), vec2(12.9898, 78.233)) + uTime) * 43758.5453));
-  col = mix(col, uFoamColor, sparkle * 0.35);
+  float foamAmt = clamp(foam + foam2, 0.0, 1.0);
+  col = mix(col, uFoamColor, foamAmt);
+
+  // Bright shore foam ring
+  float ring = 1.0 - smoothstep(uLandRadius + 0.0, uLandRadius + 1.15, dist);
+  ring *= smoothstep(uLandRadius - 0.4, uLandRadius + 0.1, dist);
+  float pulse = 0.8 + 0.2 * sin(uTime * 1.8 + dist * 2.2);
+  col = mix(col, uFoamColor, ring * pulse);
 
   gl_FragColor = vec4(col, 1.0);
 }
@@ -76,34 +97,34 @@ export class WaterSurface {
       fragmentShader: waterFragmentShader,
       uniforms: {
         uTime: { value: 0 },
-        uWaveHeight: { value: 0.07 },
-        uWaveFreq: { value: 0.45 },
-        uDeepColor: { value: new THREE.Color(STYLE.waterDeep) },
-        uMidColor: { value: new THREE.Color(STYLE.waterMid) },
-        uShallowColor: { value: new THREE.Color(STYLE.waterShallow) },
-        uFoamColor: { value: new THREE.Color(STYLE.waterFoam) },
+        uWaterColor: { value: new THREE.Color(0x3a9fd4) },
+        uDeepColor: { value: new THREE.Color(0x2a7eb8) },
+        uFoamColor: { value: new THREE.Color(0xffffff) },
         uLandRadius: { value: 5 },
+        uPatternScale: { value: 0.7 },
+        uScrollSpeed: { value: 1.15 },
       },
       side: THREE.DoubleSide,
     });
 
-    const geom = new THREE.PlaneGeometry(80, 80, 96, 96);
+    const geom = new THREE.PlaneGeometry(80, 80, 1, 1);
     geom.rotateX(-Math.PI / 2);
     this.mesh = new THREE.Mesh(geom, this.material);
-    this.mesh.position.y = -0.1;
+    this.mesh.position.y = -0.08;
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -1;
+    this.mesh.receiveShadow = true;
   }
 
   resize(landRadius: number): void {
-    const size = Math.max(40, landRadius * 8);
-    const segs = size > 60 ? 128 : 96;
+    const size = Math.max(48, landRadius * 9);
     const old = this.mesh.geometry;
-    const geom = new THREE.PlaneGeometry(size, size, segs, segs);
+    const geom = new THREE.PlaneGeometry(size, size, 1, 1);
     geom.rotateX(-Math.PI / 2);
     this.mesh.geometry = geom;
     old.dispose();
     this.material.uniforms.uLandRadius.value = landRadius;
+    this.material.uniforms.uPatternScale.value = Math.max(0.45, 0.85 - landRadius * 0.035);
   }
 
   update(time: number): void {
