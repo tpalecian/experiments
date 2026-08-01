@@ -38,7 +38,8 @@ function seededRand(seed: number): () => number {
 }
 
 function createFoamPuffGeometry(): THREE.BufferGeometry {
-  return new THREE.IcosahedronGeometry(1, 0);
+  // Chunky rounded foam bubble (still clearly low-poly)
+  return new THREE.SphereGeometry(1, 7, 5);
 }
 
 /** Wide foam bank from overlapping low-poly puffs (white + lavender). */
