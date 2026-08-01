@@ -201,17 +201,18 @@ export class SkyDome {
   private spawnClouds(radius: number): void {
     this.clearClouds();
     const rand = seededRand(120);
-    const count = 8;
+    const count = 10;
 
     for (let i = 0; i < count; i++) {
       const cloud = makeFoamCloud(rand, this.puffGeom, this.foamMat);
-      const scale = 3.8 + rand() * 2.4;
+      // Big foam banks that read in the default board camera
+      const scale = 2.8 + rand() * 2.2;
       cloud.scale.setScalar(scale);
 
-      const angle = (i / count) * Math.PI * 2 + rand() * 0.2;
-      // Ring around the island, high enough to read as sky foam (not hanging rocks)
-      const orbitR = radius * (0.2 + rand() * 0.18);
-      const height = radius * (0.22 + rand() * 0.16);
+      const angle = (i / count) * Math.PI * 2 + rand() * 0.25;
+      // Just beyond the island, mid-height — visible while looking at the board
+      const orbitR = Math.min(radius * 0.28, 36) * (0.85 + rand() * 0.35);
+      const height = 9 + rand() * 10;
       cloud.position.set(Math.cos(angle) * orbitR, height, Math.sin(angle) * orbitR);
 
       this.clouds.add(cloud);
