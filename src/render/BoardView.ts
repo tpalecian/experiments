@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { HEX_SIZE, axialToWorld, boardRadiusWorld } from '../game/board';
 import type { BoardState, PlayerId, Terrain } from '../game/types';
 import { PLAYER_COLORS, TERRAIN_COLORS } from '../game/types';
+import { GrassField } from './grass';
 
 const TILE_HEIGHT = 0.22;
 
@@ -51,15 +52,21 @@ export class BoardView {
   private robber: THREE.Object3D;
   private harborGroup = new THREE.Group();
   private pickables: THREE.Object3D[] = [];
+  private grass = new GrassField();
 
   constructor() {
     this.robber = this.makeRobber();
     this.root.add(this.harborGroup);
     this.root.add(this.robber);
+    this.root.add(this.grass.group);
   }
 
   getPickables(): THREE.Object3D[] {
     return this.pickables;
+  }
+
+  update(time: number): void {
+    this.grass.update(time);
   }
 
   build(board: BoardState): void {
@@ -90,10 +97,13 @@ export class BoardView {
     });
     geom.rotateX(-Math.PI / 2);
 
+    const grassPatches: { x: number; z: number; y: number }[] = [];
+
     for (const hex of board.hexes.values()) {
       const { x, z } = axialToWorld(hex.q, hex.r);
+      const isPasture = hex.terrain === 'sheep';
       const mat = new THREE.MeshStandardMaterial({
-        color: TERRAIN_COLORS[hex.terrain as Terrain],
+        color: isPasture ? 0x3d6b2e : TERRAIN_COLORS[hex.terrain as Terrain],
         roughness: 0.85,
         metalness: 0.02,
       });
@@ -106,18 +116,26 @@ export class BoardView {
       this.root.add(mesh);
       this.pickables.push(mesh);
 
+      if (isPasture) {
+        grassPatches.push({ x, z, y: TILE_HEIGHT + 0.005 });
+      }
+
       if (hex.number !== null) {
         const disc = new THREE.Mesh(
           new THREE.CircleGeometry(0.28, 32),
           new THREE.MeshBasicMaterial({ map: numberTexture(hex.number), transparent: true }),
         );
         disc.rotation.x = -Math.PI / 2;
-        disc.position.set(x, TILE_HEIGHT + 0.03, z);
+        disc.position.set(x, TILE_HEIGHT + (isPasture ? 0.12 : 0.03), z);
         disc.userData = { kind: 'hex', id: hex.id };
         this.root.add(disc);
         this.pickables.push(disc);
       }
     }
+
+    // Density scales down a bit on huge maps so wind stays smooth
+    const bladesPerHex = board.rings <= 2 ? 520 : board.rings === 3 ? 380 : 260;
+    this.grass.build(grassPatches, bladesPerHex);
 
     for (const v of board.vertices.values()) {
       const m = new THREE.Mesh(
@@ -313,6 +331,7 @@ export class BoardView {
   }
 
   private clearDynamic(): void {
+    this.grass.dispose();
     while (this.root.children.length) this.root.remove(this.root.children[0]);
     this.hexMeshes.clear();
     this.vertexMarkers.clear();
@@ -323,6 +342,7 @@ export class BoardView {
     this.robber = this.makeRobber();
     this.root.add(this.harborGroup);
     this.root.add(this.robber);
+    this.root.add(this.grass.group);
   }
 }
 

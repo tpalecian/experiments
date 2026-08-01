@@ -133,6 +133,7 @@ function animate(): void {
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
   controls.update();
+  boardView.update(t);
   const base = Math.max(8, boardRadiusWorld(engine.board.rings) * 1.1);
   sun.position.x = Math.cos(t * 0.05) * base;
   sun.position.z = Math.sin(t * 0.05) * base * 0.75 + 2;
