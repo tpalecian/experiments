@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { STYLE } from './style';
+import type { StyleConfig } from './styleConfig';
+import { DEFAULT_STYLE_CONFIG } from './styleConfig';
 
 const skyVertexShader = /* glsl */ `
 varying vec3 vDir;
@@ -37,12 +39,15 @@ function seededRand(seed: number): () => number {
   };
 }
 
-function createFoamPuffGeometry(): THREE.BufferGeometry {
-  // Chunky rounded foam bubble (still clearly low-poly)
-  return new THREE.SphereGeometry(1, 7, 5);
+function createFoamPuffGeometry(config: StyleConfig): THREE.BufferGeometry {
+  const seg = Math.max(4, Math.round(config.cloudPuffSegments));
+  if (config.cloudPuffShape === 'icosahedron') {
+    const detail = seg >= 9 ? 1 : 0;
+    return new THREE.IcosahedronGeometry(1, detail);
+  }
+  return new THREE.SphereGeometry(1, seg, Math.max(4, Math.round(seg * 0.7)));
 }
 
-/** Wide foam bank from overlapping low-poly puffs (white + lavender). */
 function makeFoamCloud(
   rand: () => number,
   geom: THREE.BufferGeometry,
@@ -50,7 +55,6 @@ function makeFoamCloud(
   shade: THREE.Material,
 ): THREE.Group {
   const g = new THREE.Group();
-
   const spots: [number, number, number, number][] = [
     [0.0, 0.0, 0.0, 1.25],
     [-1.3, 0.05, 0.15, 1.15],
@@ -104,14 +108,17 @@ export class SkyDome {
     phase: number;
   }[] = [];
   private skyRadius = 120;
+  private config: StyleConfig = { ...DEFAULT_STYLE_CONFIG };
 
-  constructor() {
+  constructor(config?: StyleConfig) {
+    if (config) this.config = { ...config };
+
     this.material = new THREE.ShaderMaterial({
       vertexShader: skyVertexShader,
       fragmentShader: skyFragmentShader,
       uniforms: {
-        uZenith: { value: new THREE.Color(0x4aa8e0) },
-        uHorizon: { value: new THREE.Color(0xd8eef8) },
+        uZenith: { value: new THREE.Color(this.config.skyZenith) },
+        uHorizon: { value: new THREE.Color(this.config.skyHorizon) },
         uSunColor: { value: new THREE.Color(STYLE.sunDisc) },
         uSunDir: { value: new THREE.Vector3(0.55, 0.85, 0.2).normalize() },
       },
@@ -120,9 +127,9 @@ export class SkyDome {
       fog: false,
     });
 
-    this.litMat = new THREE.MeshBasicMaterial({ color: 0xfff5ff, fog: false });
-    this.shadeMat = new THREE.MeshBasicMaterial({ color: 0xd4c2ec, fog: false });
-    this.puffGeom = createFoamPuffGeometry();
+    this.litMat = new THREE.MeshBasicMaterial({ color: this.config.cloudLit, fog: false });
+    this.shadeMat = new THREE.MeshBasicMaterial({ color: this.config.cloudShade, fog: false });
+    this.puffGeom = createFoamPuffGeometry(this.config);
 
     this.mesh = new THREE.Mesh(new THREE.SphereGeometry(this.skyRadius, 32, 24), this.material);
     this.mesh.frustumCulled = false;
@@ -131,7 +138,25 @@ export class SkyDome {
     this.group.add(this.mesh);
     this.group.add(this.clouds);
     this.clouds.frustumCulled = false;
-    this.spawnClouds(this.skyRadius);
+    this.spawnClouds();
+  }
+
+  applyConfig(config: StyleConfig): void {
+    const shapeChanged =
+      config.cloudPuffShape !== this.config.cloudPuffShape ||
+      config.cloudPuffSegments !== this.config.cloudPuffSegments;
+    this.config = { ...config };
+
+    this.material.uniforms.uZenith.value.set(config.skyZenith);
+    this.material.uniforms.uHorizon.value.set(config.skyHorizon);
+    this.litMat.color.set(config.cloudLit);
+    this.shadeMat.color.set(config.cloudShade);
+
+    if (shapeChanged) {
+      this.puffGeom.dispose();
+      this.puffGeom = createFoamPuffGeometry(config);
+    }
+    this.spawnClouds();
   }
 
   private clearClouds(): void {
@@ -141,34 +166,36 @@ export class SkyDome {
     this.cloudDrift = [];
   }
 
-  private spawnClouds(radius: number): void {
+  private spawnClouds(): void {
     this.clearClouds();
     const rand = seededRand(120);
-    const count = 8;
+    const count = Math.max(1, Math.round(this.config.cloudCount));
+    const scaleBase = this.config.cloudScale;
+    const orbitMin = this.config.cloudOrbitMin;
+    const orbitMax = Math.max(orbitMin, this.config.cloudOrbitMax);
+    const heightMin = this.config.cloudHeightMin;
+    const heightMax = Math.max(heightMin, this.config.cloudHeightMax);
+    const drift = this.config.cloudDriftSpeed;
 
     for (let i = 0; i < count; i++) {
       const cloud = makeFoamCloud(rand, this.puffGeom, this.litMat, this.shadeMat);
-      // Large enough to read clearly around the board skyline
-      const scale = 5.5 + rand() * 3.5;
+      const scale = scaleBase * (0.85 + rand() * 0.35);
       cloud.scale.setScalar(scale);
 
       const angle = (i / count) * Math.PI * 2 + rand() * 0.2;
-      // Close ring just outside the island
-      const orbitR = 14 + rand() * 10;
-      const height = 6 + rand() * 7;
+      const orbitR = orbitMin + rand() * (orbitMax - orbitMin);
+      const height = heightMin + rand() * (heightMax - heightMin);
       cloud.position.set(Math.cos(angle) * orbitR, height, Math.sin(angle) * orbitR);
 
       this.clouds.add(cloud);
       this.cloudDrift.push({
         obj: cloud,
-        speed: 0.003 + rand() * 0.005,
+        speed: drift * (0.7 + rand() * 0.6),
         radius: orbitR,
         height,
         phase: angle,
       });
     }
-
-    void radius;
   }
 
   setSunDirection(dir: THREE.Vector3): void {
@@ -181,7 +208,7 @@ export class SkyDome {
     const old = this.mesh.geometry;
     this.mesh.geometry = new THREE.SphereGeometry(r, 32, 24);
     old.dispose();
-    this.spawnClouds(r);
+    this.spawnClouds();
   }
 
   update(time: number): void {

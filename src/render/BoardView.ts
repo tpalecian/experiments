@@ -10,6 +10,7 @@ import {
   getToonGradient,
   toonMat,
 } from './style';
+import type { StyleConfig } from './styleConfig';
 import { WaterSurface } from './water';
 
 const TILE_HEIGHT = 0.28;
@@ -92,6 +93,10 @@ export class BoardView {
   update(time: number): void {
     this.grass.update(time);
     this.water.update(time);
+  }
+
+  applyStyleConfig(config: StyleConfig): void {
+    this.water.applyConfig(config);
   }
 
   build(board: BoardState): void {

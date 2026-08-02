@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import type { StyleConfig } from './styleConfig';
+import { DEFAULT_STYLE_CONFIG } from './styleConfig';
 
 /**
  * Wind Waker–inspired flat water:
@@ -22,6 +24,8 @@ uniform vec3 uFoamColor;
 uniform float uLandRadius;
 uniform float uPatternScale;
 uniform float uScrollSpeed;
+uniform float uFoamSharpness;
+uniform float uShoreFoam;
 
 varying vec3 vWorldPos;
 
@@ -30,7 +34,6 @@ vec2 hash2(vec2 p) {
   return fract(sin(p) * 43758.5453);
 }
 
-/** F2 - F1 Voronoi edges → crisp cell foam lines. */
 float voronoiEdge(vec2 x) {
   vec2 n = floor(x);
   vec2 f = fract(x);
@@ -56,32 +59,29 @@ float voronoiEdge(vec2 x) {
 void main() {
   float dist = length(vWorldPos.xz);
 
-  // Mostly flat mid blue; slightly deeper far from island
   float deep = smoothstep(uLandRadius + 1.0, uLandRadius + 10.0, dist);
   vec3 col = mix(uWaterColor, uDeepColor, deep * 0.55);
 
-  // Two scrolling foam layers (classic WW look)
   vec2 uv = vWorldPos.xz * uPatternScale;
   uv += vec2(uTime * uScrollSpeed * 0.12, -uTime * uScrollSpeed * 0.08);
 
   float edge = voronoiEdge(uv);
-  float foam = 1.0 - smoothstep(0.0, 0.045, edge);
+  float foam = 1.0 - smoothstep(0.0, uFoamSharpness, edge);
   foam = pow(foam, 1.6);
 
   vec2 uv2 = vWorldPos.xz * (uPatternScale * 0.55) + 12.0;
   uv2 += vec2(-uTime * uScrollSpeed * 0.07, uTime * uScrollSpeed * 0.05);
   float edge2 = voronoiEdge(uv2);
-  float foam2 = 1.0 - smoothstep(0.0, 0.055, edge2);
+  float foam2 = 1.0 - smoothstep(0.0, uFoamSharpness * 1.2, edge2);
   foam2 = pow(foam2, 1.8) * 0.55;
 
   float foamAmt = clamp(foam + foam2, 0.0, 1.0);
   col = mix(col, uFoamColor, foamAmt);
 
-  // Bright shore foam ring
   float ring = 1.0 - smoothstep(uLandRadius + 0.0, uLandRadius + 1.15, dist);
   ring *= smoothstep(uLandRadius - 0.4, uLandRadius + 0.1, dist);
   float pulse = 0.8 + 0.2 * sin(uTime * 1.8 + dist * 2.2);
-  col = mix(col, uFoamColor, ring * pulse);
+  col = mix(col, uFoamColor, ring * pulse * uShoreFoam);
 
   gl_FragColor = vec4(col, 1.0);
 }
@@ -90,19 +90,23 @@ void main() {
 export class WaterSurface {
   readonly mesh: THREE.Mesh;
   private material: THREE.ShaderMaterial;
+  private config: StyleConfig = { ...DEFAULT_STYLE_CONFIG };
 
-  constructor() {
+  constructor(config?: StyleConfig) {
+    if (config) this.config = { ...config };
     this.material = new THREE.ShaderMaterial({
       vertexShader: waterVertexShader,
       fragmentShader: waterFragmentShader,
       uniforms: {
         uTime: { value: 0 },
-        uWaterColor: { value: new THREE.Color(0x3a9fd4) },
-        uDeepColor: { value: new THREE.Color(0x2a7eb8) },
-        uFoamColor: { value: new THREE.Color(0xffffff) },
+        uWaterColor: { value: new THREE.Color(this.config.waterColor) },
+        uDeepColor: { value: new THREE.Color(this.config.waterDeep) },
+        uFoamColor: { value: new THREE.Color(this.config.waterFoam) },
         uLandRadius: { value: 5 },
-        uPatternScale: { value: 0.7 },
-        uScrollSpeed: { value: 1.15 },
+        uPatternScale: { value: this.config.waterPatternScale },
+        uScrollSpeed: { value: this.config.waterScrollSpeed },
+        uFoamSharpness: { value: this.config.waterFoamSharpness },
+        uShoreFoam: { value: this.config.waterShoreFoam },
       },
       side: THREE.DoubleSide,
     });
@@ -116,6 +120,17 @@ export class WaterSurface {
     this.mesh.receiveShadow = true;
   }
 
+  applyConfig(config: StyleConfig): void {
+    this.config = { ...config };
+    this.material.uniforms.uWaterColor.value.set(config.waterColor);
+    this.material.uniforms.uDeepColor.value.set(config.waterDeep);
+    this.material.uniforms.uFoamColor.value.set(config.waterFoam);
+    this.material.uniforms.uPatternScale.value = config.waterPatternScale;
+    this.material.uniforms.uScrollSpeed.value = config.waterScrollSpeed;
+    this.material.uniforms.uFoamSharpness.value = config.waterFoamSharpness;
+    this.material.uniforms.uShoreFoam.value = config.waterShoreFoam;
+  }
+
   resize(landRadius: number): void {
     const size = Math.max(48, landRadius * 9);
     const old = this.mesh.geometry;
@@ -124,7 +139,6 @@ export class WaterSurface {
     this.mesh.geometry = geom;
     old.dispose();
     this.material.uniforms.uLandRadius.value = landRadius;
-    this.material.uniforms.uPatternScale.value = Math.max(0.45, 0.85 - landRadius * 0.035);
   }
 
   update(time: number): void {

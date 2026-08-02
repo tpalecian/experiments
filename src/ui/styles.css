@@ -378,3 +378,128 @@ button:disabled {
     flex: 1;
   }
 }
+
+/* —— Style configurator —— */
+.style-config {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.style-config-toggle {
+  pointer-events: auto;
+  padding: 0.55rem 0.9rem;
+  border-radius: 12px;
+  border: 2px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: 0 4px 0 rgba(92, 61, 46, 0.12);
+}
+
+.style-config-panel {
+  pointer-events: auto;
+  margin-top: 0.55rem;
+  width: min(320px, calc(100vw - 2rem));
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  padding: 0.9rem 1rem 1rem;
+  background: var(--panel);
+  border: 2px solid var(--panel-border);
+  border-radius: 14px;
+  box-shadow: 0 8px 0 rgba(92, 61, 46, 0.12);
+}
+
+.style-config-panel.hidden {
+  display: none;
+}
+
+.style-config-header h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+}
+
+.style-config-header p {
+  margin: 0.25rem 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.style-section {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid rgba(92, 61, 46, 0.12);
+}
+
+.style-section-title {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+
+.style-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem 0.6rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+  font-size: 0.82rem;
+}
+
+.style-field span {
+  grid-column: 1 / -1;
+}
+
+.style-field em {
+  font-style: normal;
+  color: var(--muted);
+  margin-left: 0.35rem;
+}
+
+.style-field input[type='range'] {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.style-field input[type='color'] {
+  width: 2.2rem;
+  height: 1.6rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: transparent;
+  padding: 0;
+  justify-self: end;
+}
+
+.style-field select {
+  grid-column: 1 / -1;
+  width: 100%;
+  padding: 0.35rem 0.45rem;
+  border-radius: 8px;
+  border: 2px solid var(--panel-border);
+  background: #fff8e8;
+  color: var(--ink);
+}
+
+.style-config-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 720px) {
+  .style-config {
+    top: auto;
+    bottom: 5.5rem;
+    right: 0.75rem;
+  }
+
+  .style-config-panel {
+    max-height: 45vh;
+  }
+}

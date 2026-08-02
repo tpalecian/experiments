@@ -7,15 +7,22 @@ import { Picker } from './input/picker';
 import { BoardView } from './render/BoardView';
 import { SkyDome } from './render/sky';
 import { STYLE } from './render/style';
+import type { StyleConfig } from './render/styleConfig';
+import { StyleConfigurator } from './ui/configurator';
 import { Hud } from './ui/hud';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas')!;
 const hudEl = document.querySelector<HTMLElement>('#hud')!;
 const lobbyEl = document.querySelector<HTMLElement>('#lobby')!;
+const configRoot = document.querySelector<HTMLElement>('#style-config-root')!;
 
 const engine = new GameEngine();
+const configurator = new StyleConfigurator(configRoot);
+const initialConfig = configurator.getConfig();
+
 const boardView = new BoardView();
-const sky = new SkyDome();
+boardView.applyStyleConfig(initialConfig);
+const sky = new SkyDome(initialConfig);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -24,7 +31,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = initialConfig.exposure;
 
 const scene = new THREE.Scene();
 scene.background = null;
@@ -41,10 +48,10 @@ controls.minDistance = 8;
 controls.maxDistance = 24;
 controls.update();
 
-const hemi = new THREE.HemisphereLight(STYLE.ambientSky, STYLE.ambientGround, 0.95);
+const hemi = new THREE.HemisphereLight(STYLE.ambientSky, STYLE.ambientGround, initialConfig.hemiIntensity);
 scene.add(hemi);
 
-const sun = new THREE.DirectionalLight(STYLE.sun, 1.45);
+const sun = new THREE.DirectionalLight(STYLE.sun, initialConfig.sunIntensity);
 sun.position.set(8, 16, 6);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -68,6 +75,21 @@ const picker = new Picker(camera, canvas);
 new Hud(hudEl, lobbyEl, engine);
 
 let boardBuilt = false;
+
+function applyStyle(config: StyleConfig): void {
+  sky.applyConfig(config);
+  boardView.applyStyleConfig(config);
+  renderer.toneMappingExposure = config.exposure;
+  sun.intensity = config.sunIntensity;
+  hemi.intensity = config.hemiIntensity;
+}
+
+let styleApplyTimer = 0;
+function queueStyleApply(config: StyleConfig): void {
+  window.clearTimeout(styleApplyTimer);
+  styleApplyTimer = window.setTimeout(() => applyStyle(config), 40);
+}
+configurator.subscribe(queueStyleApply);
 
 function frameCamera(rings: number): void {
   const r = boardRadiusWorld(rings);
@@ -103,6 +125,7 @@ function syncView(): void {
   }
   if (!boardBuilt) {
     boardView.build(snap.board);
+    boardView.applyStyleConfig(configurator.getConfig());
     frameCamera(snap.board.rings);
     boardBuilt = true;
   } else {
@@ -115,6 +138,8 @@ engine.subscribe(syncView);
 
 canvas.addEventListener('pointerdown', (ev) => {
   if (ev.button !== 0) return;
+  // Don't place pieces while dragging style panel controls
+  if ((ev.target as HTMLElement).closest?.('#style-config-root')) return;
   const snap = engine.snapshot();
   if (snap.phase === 'lobby' || snap.phase === 'gameOver') return;
 
