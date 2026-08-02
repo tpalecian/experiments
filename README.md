@@ -23,3 +23,4 @@ npm run dev
 - Development cards are not in this MVP
 - Longest Road (2 VP at length ≥ 5) is included
 - Larger maps scale terrain, numbers, harbors, piece limits, and camera framing
+- Tropical low-poly water shader with live **Style** configurator (depth gradient, swells, bands, foam, caustics)
