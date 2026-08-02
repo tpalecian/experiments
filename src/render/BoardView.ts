@@ -130,7 +130,8 @@ export class BoardView {
     this.water.resize(landR);
     this.root.add(this.water.mesh);
 
-    const tileRadius = HEX_SIZE * 0.96;
+    // Full HEX_SIZE so neighbors meet edge-to-edge (matches axialToWorld / hexCorner spacing).
+    const tileRadius = HEX_SIZE;
     const geom = new THREE.ExtrudeGeometry(hexShape(tileRadius), {
       depth: TILE_HEIGHT,
       bevelEnabled: false,
@@ -138,7 +139,7 @@ export class BoardView {
     geom.rotateX(-Math.PI / 2);
     // Soften normals for chunkier toon look on sides
     geom.computeVertexNormals();
-    const rimGeom = hexRimGeometry(tileRadius * 0.9, tileRadius * 0.995);
+    const rimGeom = hexRimGeometry(tileRadius * 0.9, tileRadius * 0.985);
 
     const grassPatches: { x: number; z: number; y: number }[] = [];
 
@@ -157,9 +158,10 @@ export class BoardView {
       this.root.add(mesh);
       this.pickables.push(mesh);
 
-      // Dirt skirt ring for cozy tabletop feel
+      // Dirt skirt under the tile only (top ≤ tile radius) so it doesn't show as gaps between hexes.
+      // Slightly wider bottom peeks at the coastline for a tabletop edge.
       const skirt = new THREE.Mesh(
-        new THREE.CylinderGeometry(HEX_SIZE * 0.98, HEX_SIZE * 1.02, 0.08, 6),
+        new THREE.CylinderGeometry(HEX_SIZE * 0.92, HEX_SIZE * 1.04, 0.08, 6),
         toonMat(STYLE.dirt),
       );
       skirt.position.set(x, -0.02, z);
