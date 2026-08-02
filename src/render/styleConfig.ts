@@ -91,19 +91,19 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterWaveSpeed: 1.0,
   waterSegments: 64,
 
-  waterBandIntensity: 0.045,
-  waterBandScale: 0.55,
-  waterBandSpeed: 0.18,
+  waterBandIntensity: 0.055,
+  waterBandScale: 0.5,
+  waterBandSpeed: 0.16,
 
   waterFresnelStrength: 0.12,
   waterFresnelPower: 3.5,
-  waterSpecularIntensity: 0.22,
-  waterSpecularPower: 18,
+  waterSpecularIntensity: 0.28,
+  waterSpecularPower: 14,
 
-  waterShoreFoam: 0.75,
-  waterFoamWidth: 0.85,
+  waterShoreFoam: 0.55,
+  waterFoamWidth: 0.55,
 
-  waterCausticIntensity: 0.07,
+  waterCausticIntensity: 0.08,
   waterCausticScale: 0.55,
   waterCausticSpeed: 0.35,
 
