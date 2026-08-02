@@ -70,12 +70,12 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
   {
     title: 'Water motion',
     fields: [
-      { key: 'waterWaveHeight', label: 'Swell height', kind: 'range', min: 0, max: 0.25, step: 0.005 },
+      { key: 'waterWaveHeight', label: 'Swell height', kind: 'range', min: 0, max: 0.4, step: 0.01 },
       { key: 'waterWaveSpeed', label: 'Swell speed', kind: 'range', min: 0, max: 2.5, step: 0.05 },
       { key: 'waterSegments', label: 'Mesh detail', kind: 'range', min: 16, max: 128, step: 8 },
-      { key: 'waterBandIntensity', label: 'Band brightness', kind: 'range', min: 0, max: 0.15, step: 0.005 },
-      { key: 'waterBandScale', label: 'Band spacing', kind: 'range', min: 0.15, max: 1.5, step: 0.05 },
-      { key: 'waterBandSpeed', label: 'Band speed', kind: 'range', min: 0, max: 0.8, step: 0.02 },
+      { key: 'waterBandIntensity', label: 'Band brightness', kind: 'range', min: 0, max: 0.25, step: 0.005 },
+      { key: 'waterBandScale', label: 'Band spacing', kind: 'range', min: 0.1, max: 1.5, step: 0.05 },
+      { key: 'waterBandSpeed', label: 'Band speed', kind: 'range', min: 0, max: 1.2, step: 0.02 },
     ],
   },
   {

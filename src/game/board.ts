@@ -185,6 +185,12 @@ export function boardRadiusWorld(rings: number, size = HEX_SIZE): number {
   return size * (SQRT3 * rings) + size;
 }
 
+/** Pointy-top island apothem (center → flat) for the outer hex shoreline. */
+export function islandHexApothem(rings: number, size = HEX_SIZE): number {
+  // Outer hex center along +q, plus one tile apothem (√3/2 * size)
+  return size * SQRT3 * (rings + 0.5);
+}
+
 function hexCorner(cx: number, cz: number, i: number, size = HEX_SIZE): { x: number; z: number } {
   const angle = (Math.PI / 180) * (60 * i - 30);
   return {
