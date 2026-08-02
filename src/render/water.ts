@@ -25,35 +25,30 @@ float swell(vec2 p, float t) {
   return w * (1.0 / 3.0);
 }
 
-void swellDeriv(vec2 p, float t, out float dx, out float dy) {
-  dx =
+vec2 swellDeriv(vec2 p, float t) {
+  float dx =
     0.30 * cos(p.x * 0.30 + t * 0.15) +
     0.15 * cos((p.x + p.y) * 0.15 + t * 0.08);
-  dy =
+  float dy =
     0.20 * cos(p.y * 0.20 + t * 0.10) +
     0.15 * cos((p.x + p.y) * 0.15 + t * 0.08);
-  dx *= 1.0 / 3.0;
-  dy *= 1.0 / 3.0;
+  return vec2(dx, dy) * (1.0 / 3.0);
 }
 
 void main() {
   vec4 world = modelMatrix * vec4(position, 1.0);
   float t = uTime * uWaveSpeed;
   float w = swell(world.xz, t);
-  float dx;
-  float dy;
-  swellDeriv(world.xz, t, dx, dy);
+  vec2 d = swellDeriv(world.xz, t);
 
   world.y += w * uWaveHeight;
   vWave = w;
 
   // Extremely smooth normals — tiny swell tilt only
-  vec3 n = normalize(vec3(-dx * uWaveHeight, 1.0, -dy * uWaveHeight));
+  vec3 n = normalize(vec3(-d.x * uWaveHeight, 1.0, -d.y * uWaveHeight));
   vNormalW = normalize(mat3(modelMatrix) * n);
   vWorldPos = world.xyz;
-
-  vec3 cam = cameraPosition;
-  vViewDir = normalize(cam - world.xyz);
+  vViewDir = normalize(cameraPosition - world.xyz);
 
   gl_Position = projectionMatrix * viewMatrix * world;
 }
@@ -185,10 +180,9 @@ void main() {
   col = mix(col, uFoamColor, clamp(foam, 0.0, 0.85));
 
   // Mask out interior land disc so island tiles stay crisp
-  float landMask = smoothstep(uLandRadius - 0.35, uLandRadius + 0.05, dist);
-  if (landMask < 0.001) discard;
+  if (dist < uLandRadius - 0.25) discard;
 
-  gl_FragColor = vec4(col, landMask);
+  gl_FragColor = vec4(col, 1.0);
 }
 `;
 
@@ -232,8 +226,8 @@ export class WaterSurface {
         uSunDir: { value: this.sunDir.clone() },
         uSunColor: { value: new THREE.Color('#fff6e8') },
       },
-      transparent: true,
-      depthWrite: false,
+      transparent: false,
+      depthWrite: true,
       side: THREE.DoubleSide,
     });
 
