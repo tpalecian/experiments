@@ -50,15 +50,51 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
     ],
   },
   {
-    title: 'Water',
+    title: 'Water colors',
     fields: [
-      { key: 'waterColor', label: 'Color', kind: 'color' },
-      { key: 'waterDeep', label: 'Deep', kind: 'color' },
+      { key: 'waterDeepOcean', label: 'Deep ocean', kind: 'color' },
+      { key: 'waterOcean', label: 'Ocean', kind: 'color' },
+      { key: 'waterLagoon', label: 'Lagoon', kind: 'color' },
+      { key: 'waterShallow', label: 'Shallow', kind: 'color' },
+      { key: 'waterBeachEdge', label: 'Beach edge', kind: 'color' },
       { key: 'waterFoam', label: 'Foam', kind: 'color' },
-      { key: 'waterPatternScale', label: 'Pattern scale', kind: 'range', min: 0.2, max: 1.8, step: 0.05 },
-      { key: 'waterScrollSpeed', label: 'Scroll speed', kind: 'range', min: 0, max: 3, step: 0.05 },
-      { key: 'waterFoamSharpness', label: 'Foam edge', kind: 'range', min: 0.01, max: 0.12, step: 0.005 },
-      { key: 'waterShoreFoam', label: 'Shore foam', kind: 'range', min: 0, max: 1.5, step: 0.05 },
+    ],
+  },
+  {
+    title: 'Water depth',
+    fields: [
+      { key: 'waterShoreWidth', label: 'Shore width', kind: 'range', min: 2, max: 22, step: 0.5 },
+      { key: 'waterDeepFade', label: 'Deep fade', kind: 'range', min: 4, max: 30, step: 0.5 },
+    ],
+  },
+  {
+    title: 'Water motion',
+    fields: [
+      { key: 'waterWaveHeight', label: 'Swell height', kind: 'range', min: 0, max: 0.25, step: 0.005 },
+      { key: 'waterWaveSpeed', label: 'Swell speed', kind: 'range', min: 0, max: 2.5, step: 0.05 },
+      { key: 'waterSegments', label: 'Mesh detail', kind: 'range', min: 16, max: 128, step: 8 },
+      { key: 'waterBandIntensity', label: 'Band brightness', kind: 'range', min: 0, max: 0.15, step: 0.005 },
+      { key: 'waterBandScale', label: 'Band spacing', kind: 'range', min: 0.15, max: 1.5, step: 0.05 },
+      { key: 'waterBandSpeed', label: 'Band speed', kind: 'range', min: 0, max: 0.8, step: 0.02 },
+    ],
+  },
+  {
+    title: 'Water light',
+    fields: [
+      { key: 'waterFresnelStrength', label: 'Fresnel', kind: 'range', min: 0, max: 0.45, step: 0.01 },
+      { key: 'waterFresnelPower', label: 'Fresnel power', kind: 'range', min: 1, max: 8, step: 0.25 },
+      { key: 'waterSpecularIntensity', label: 'Specular', kind: 'range', min: 0, max: 0.7, step: 0.02 },
+      { key: 'waterSpecularPower', label: 'Specular softness', kind: 'range', min: 4, max: 64, step: 1 },
+    ],
+  },
+  {
+    title: 'Water foam & caustics',
+    fields: [
+      { key: 'waterShoreFoam', label: 'Foam amount', kind: 'range', min: 0, max: 1.5, step: 0.05 },
+      { key: 'waterFoamWidth', label: 'Foam width', kind: 'range', min: 0.2, max: 2.5, step: 0.05 },
+      { key: 'waterCausticIntensity', label: 'Caustics', kind: 'range', min: 0, max: 0.25, step: 0.01 },
+      { key: 'waterCausticScale', label: 'Caustic scale', kind: 'range', min: 0.15, max: 1.5, step: 0.05 },
+      { key: 'waterCausticSpeed', label: 'Caustic speed', kind: 'range', min: 0, max: 1.2, step: 0.05 },
     ],
   },
   {
@@ -133,7 +169,7 @@ export class StyleConfigurator {
       <div class="style-config-panel ${this.open ? '' : 'hidden'}">
         <div class="style-config-header">
           <h3>Style configurator</h3>
-          <p>Tweak clouds, water, sky & light live.</p>
+          <p>Tweak tropical water, clouds, sky & light live.</p>
         </div>
         ${SECTIONS.map(
           (section) => `
@@ -184,7 +220,7 @@ export class StyleConfigurator {
       return `
         <label class="style-field">
           <span>${f.label}</span>
-          <input type="color" data-key="${f.key}" value="${String(val)}" />
+          <input type="color" data-key="${f.key}" value="${normalizeHex(String(val))}" />
         </label>`;
     }
     if (f.kind === 'select') {
@@ -212,6 +248,12 @@ export class StyleConfigurator {
 function formatNum(n: number): string {
   if (Math.abs(n) >= 10 || Number.isInteger(n)) return String(Math.round(n * 100) / 100);
   return n.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+/** HTML color inputs require #rrggbb lowercase. */
+function normalizeHex(hex: string): string {
+  if (/^#[0-9A-Fa-f]{6}$/.test(hex)) return hex.toLowerCase();
+  return hex;
 }
 
 export { DEFAULT_STYLE_CONFIG } from '../render/styleConfig';

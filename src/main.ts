@@ -170,7 +170,9 @@ function animate(): void {
   const base = Math.max(8, boardRadiusWorld(engine.board.rings) * 1.1);
   sun.position.x = Math.cos(t * 0.04) * base;
   sun.position.z = Math.sin(t * 0.04) * base * 0.75 + 2;
-  sky.setSunDirection(sun.position.clone().normalize());
+  const sunDir = sun.position.clone().normalize();
+  sky.setSunDirection(sunDir);
+  boardView.setSunDirection(sunDir);
   renderer.render(scene, camera);
 }
 animate();

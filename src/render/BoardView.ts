@@ -118,6 +118,10 @@ export class BoardView {
     this.water.update(time);
   }
 
+  setSunDirection(dir: THREE.Vector3): void {
+    this.water.setSunDirection(dir);
+  }
+
   applyStyleConfig(config: StyleConfig): void {
     this.water.applyConfig(config);
   }

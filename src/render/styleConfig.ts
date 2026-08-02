@@ -18,14 +18,42 @@ export interface StyleConfig {
   skyZenith: string;
   skyHorizon: string;
 
-  // Water
-  waterColor: string;
-  waterDeep: string;
+  // Water — colors
+  waterDeepOcean: string;
+  waterOcean: string;
+  waterLagoon: string;
+  waterShallow: string;
+  waterBeachEdge: string;
   waterFoam: string;
-  waterPatternScale: number;
-  waterScrollSpeed: number;
-  waterFoamSharpness: number;
+
+  // Water — depth / shoreline
+  waterShoreWidth: number;
+  waterDeepFade: number;
+
+  // Water — sine swell motion
+  waterWaveHeight: number;
+  waterWaveSpeed: number;
+  waterSegments: number;
+
+  // Water — soft wave bands
+  waterBandIntensity: number;
+  waterBandScale: number;
+  waterBandSpeed: number;
+
+  // Water — Fresnel / specular
+  waterFresnelStrength: number;
+  waterFresnelPower: number;
+  waterSpecularIntensity: number;
+  waterSpecularPower: number;
+
+  // Water — foam
   waterShoreFoam: number;
+  waterFoamWidth: number;
+
+  // Water — caustics
+  waterCausticIntensity: number;
+  waterCausticScale: number;
+  waterCausticSpeed: number;
 
   // Lighting
   exposure: number;
@@ -49,20 +77,42 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   skyZenith: '#4aa8e0',
   skyHorizon: '#d8eef8',
 
-  waterColor: '#3a9fd4',
-  waterDeep: '#2a7eb8',
-  waterFoam: '#ffffff',
-  waterPatternScale: 0.7,
-  waterScrollSpeed: 1.15,
-  waterFoamSharpness: 0.045,
-  waterShoreFoam: 1.0,
+  waterDeepOcean: '#1FAFD4',
+  waterOcean: '#37C9D9',
+  waterLagoon: '#62E7E0',
+  waterShallow: '#8CF7EC',
+  waterBeachEdge: '#DDFCF8',
+  waterFoam: '#FFFFFF',
+
+  waterShoreWidth: 9.5,
+  waterDeepFade: 14,
+
+  waterWaveHeight: 0.06,
+  waterWaveSpeed: 1.0,
+  waterSegments: 64,
+
+  waterBandIntensity: 0.045,
+  waterBandScale: 0.55,
+  waterBandSpeed: 0.18,
+
+  waterFresnelStrength: 0.12,
+  waterFresnelPower: 3.5,
+  waterSpecularIntensity: 0.22,
+  waterSpecularPower: 18,
+
+  waterShoreFoam: 0.75,
+  waterFoamWidth: 0.85,
+
+  waterCausticIntensity: 0.07,
+  waterCausticScale: 0.55,
+  waterCausticSpeed: 0.35,
 
   exposure: 1.15,
   sunIntensity: 1.45,
   hemiIntensity: 0.95,
 };
 
-const STORAGE_KEY = 'catan-style-config-v1';
+const STORAGE_KEY = 'catan-style-config-v2';
 
 export function loadStyleConfig(): StyleConfig {
   try {
