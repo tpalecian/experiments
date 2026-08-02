@@ -112,7 +112,7 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   hemiIntensity: 0.95,
 };
 
-const STORAGE_KEY = 'catan-style-config-v2';
+const STORAGE_KEY = 'catan-style-config-v3';
 
 export function loadStyleConfig(): StyleConfig {
   try {
