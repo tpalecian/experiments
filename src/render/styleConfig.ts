@@ -87,13 +87,13 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterShoreWidth: 9.5,
   waterDeepFade: 14,
 
-  waterWaveHeight: 0.06,
-  waterWaveSpeed: 1.0,
-  waterSegments: 64,
+  waterWaveHeight: 0.14,
+  waterWaveSpeed: 1.15,
+  waterSegments: 80,
 
-  waterBandIntensity: 0.055,
-  waterBandScale: 0.5,
-  waterBandSpeed: 0.16,
+  waterBandIntensity: 0.11,
+  waterBandScale: 0.42,
+  waterBandSpeed: 0.28,
 
   waterFresnelStrength: 0.12,
   waterFresnelPower: 3.5,

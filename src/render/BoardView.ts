@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { HEX_SIZE, axialToWorld, boardRadiusWorld } from '../game/board';
+import { HEX_SIZE, axialToWorld } from '../game/board';
 import type { BoardState, PlayerId, Terrain } from '../game/types';
 import { GrassField } from './grass';
 import {
@@ -130,8 +130,7 @@ export class BoardView {
     this.clearDynamic();
     this.pickables = [];
 
-    const landR = boardRadiusWorld(board.rings);
-    this.water.resize(landR);
+    this.water.resize(board.rings);
     this.root.add(this.water.mesh);
 
     // Full HEX_SIZE so neighbors meet edge-to-edge (matches axialToWorld / hexCorner spacing).
