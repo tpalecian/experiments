@@ -15,6 +15,7 @@ import { WaterSurface } from './water';
 
 const TILE_HEIGHT = 0.28;
 
+/** Pointy-top hex in the XY plane (matches board hexCorner angles). */
 function hexShape(size: number): THREE.Shape {
   const shape = new THREE.Shape();
   for (let i = 0; i < 6; i++) {
@@ -26,6 +27,28 @@ function hexShape(size: number): THREE.Shape {
   }
   shape.closePath();
   return shape;
+}
+
+/**
+ * Flat hexagonal ring using the same pointy-top orientation as hex tiles.
+ * RingGeometry(…, 6) defaults to flat-top and will not match ExtrudeGeometry(hexShape).
+ */
+function hexRimGeometry(inner: number, outer: number): THREE.BufferGeometry {
+  const shape = hexShape(outer);
+  // Hole must wind opposite the outer path for ShapeGeometry to triangulate correctly.
+  const hole = new THREE.Path();
+  for (let i = 5; i >= 0; i--) {
+    const angle = (Math.PI / 180) * (60 * i - 30);
+    const x = inner * Math.cos(angle);
+    const y = inner * Math.sin(angle);
+    if (i === 5) hole.moveTo(x, y);
+    else hole.lineTo(x, y);
+  }
+  hole.closePath();
+  shape.holes.push(hole);
+  const geom = new THREE.ShapeGeometry(shape);
+  geom.rotateX(-Math.PI / 2);
+  return geom;
 }
 
 function numberTexture(n: number): THREE.CanvasTexture {
@@ -107,13 +130,15 @@ export class BoardView {
     this.water.resize(landR);
     this.root.add(this.water.mesh);
 
-    const geom = new THREE.ExtrudeGeometry(hexShape(HEX_SIZE * 0.96), {
+    const tileRadius = HEX_SIZE * 0.96;
+    const geom = new THREE.ExtrudeGeometry(hexShape(tileRadius), {
       depth: TILE_HEIGHT,
       bevelEnabled: false,
     });
     geom.rotateX(-Math.PI / 2);
     // Soften normals for chunkier toon look on sides
     geom.computeVertexNormals();
+    const rimGeom = hexRimGeometry(tileRadius * 0.9, tileRadius * 0.995);
 
     const grassPatches: { x: number; z: number; y: number }[] = [];
 
@@ -141,15 +166,14 @@ export class BoardView {
       skirt.receiveShadow = true;
       this.propsGroup.add(skirt);
 
-      // Slightly darker rim on top edge via thin inset ring (side color cue)
+      // Slightly darker rim on top edge (same pointy-top hex as the tile mesh)
       const rim = new THREE.Mesh(
-        new THREE.RingGeometry(HEX_SIZE * 0.88, HEX_SIZE * 0.95, 6),
+        rimGeom,
         new THREE.MeshBasicMaterial({
           color: STYLIZED_TERRAIN_SIDE[terrain],
           side: THREE.DoubleSide,
         }),
       );
-      rim.rotation.x = -Math.PI / 2;
       rim.position.set(x, TILE_HEIGHT + 0.002, z);
       this.propsGroup.add(rim);
 
