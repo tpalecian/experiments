@@ -8,6 +8,7 @@ import {
   STYLIZED_TERRAIN,
   STYLIZED_TERRAIN_SIDE,
   getToonGradient,
+  standardStylized,
   toonMat,
 } from './style';
 import type { AtmosphereSnapshot } from './atmosphere';
@@ -18,7 +19,7 @@ const TILE_HEIGHT = 0.28;
 /** How far coastal hex sides flare outward as they meet the sea. */
 const COAST_FLARE = 0.34;
 /** Bevel subdivisions on coastal sides — more segments = smoother ramp. */
-const COAST_BEVEL_SEGMENTS = 5;
+const COAST_BEVEL_SEGMENTS = 6;
 /** Outer lip sits a hair above the water to avoid z-fighting. */
 const COAST_SEA_Y = SEA_LEVEL + 0.012;
 
@@ -283,7 +284,8 @@ export class BoardView {
       const geom =
         coastDirs.length > 0 ? hexTileGeometry(tileRadius, coastalEdges) : inlandGeom;
 
-      const mat = toonMat(STYLIZED_TERRAIN[terrain]);
+      // Smooth (non-toon) shading so the coastal bevel doesn't get striped by the 4-step toon ramp.
+      const mat = standardStylized(STYLIZED_TERRAIN[terrain], { flat: false, roughness: 0.78 });
       mat.side = THREE.DoubleSide;
       const mesh = new THREE.Mesh(geom, mat);
       mesh.position.set(x, 0, z);
