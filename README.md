@@ -8,18 +8,20 @@ The long-term look is a **handcrafted island**, not a board of tiles.
 
 - Gameplay runs on a **hidden region graph** (resources + adjacency).
 - **Coastline first:** one field `distanceToCoast` drives height, water colour, beaches, wave bands, foam, vegetation, and rocks.
+- **Day-night is render-only:** world data stays static; an Environment State retints lighting, water, sky, and fog.
 - Architecture & milestones: **[docs/VISION.md](docs/VISION.md)**  
-- Terrain algorithm (12 steps): **[docs/TERRAIN.md](docs/TERRAIN.md)**
+- Terrain algorithm (12 steps): **[docs/TERRAIN.md](docs/TERRAIN.md)**  
+- Day-night cycle: **[docs/DAY_NIGHT.md](docs/DAY_NIGHT.md)**
 
-Scaffold modules (stubs, not yet wired into the live view):
+Scaffold modules (stubs / target APIs; live day cycle still uses `src/render/atmosphere.ts`):
 
 ```
-src/terrain/   island · mask · graph · voronoi · sdf · height · beach · biome · coast · pipeline
-src/water/     shader · foam · waves
-src/world/     chunks · vegetation · rocks
-src/gameplay/  regions · roads · settlements
+src/terrain/     island · mask · graph · voronoi · sdf · height · beach · biome · coast · pipeline
+src/water/       shader · foam · waves
+src/atmosphere/  environment (EnvironmentState + palettes)
+src/world/       chunks · vegetation · rocks
+src/gameplay/    regions · roads · settlements
 ```
-
 The current MVP still renders stylized hex tiles with tropical water; the vision modules are the migration target.
 
 ## Run

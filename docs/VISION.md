@@ -4,8 +4,10 @@
 
 1. **The gameplay graph is invisible.** Players never see tiles. Rules run on a hidden region graph; rendering never draws that graph as hexes.
 2. **Coastline first.** Do not generate terrain and then add water. Generate a coastline, then let **everything else** derive from one value: `distanceToCoast`.
+3. **Day-night never regenerates the world.** Terrain, SDF, meshes, and instances stay static; only the **Environment State** (lighting / palettes / atmosphere) changes.
 
-Full terrain algorithm (12 steps, why it works): **[docs/TERRAIN.md](TERRAIN.md)**.
+- Terrain algorithm: **[docs/TERRAIN.md](TERRAIN.md)**
+- Day-night / atmosphere: **[docs/DAY_NIGHT.md](DAY_NIGHT.md)**
 
 ```
 Gameplay Graph (hidden)
@@ -14,11 +16,10 @@ Region Graph  (biomes / resources — does not invent a second coast)
         ↓
 Island Mask → Smooth → SDF (distanceToCoast)
         ↓
-Terrain Height · Water Depth · Beaches · Bands · Foam · Props
+World Data (static height · biomes · meshes · instances)
         ↓
-Rendering
+Renderers  ←  Environment State (time / weather)
 ```
-
 ---
 
 ## Tech Stack
@@ -144,6 +145,8 @@ src/
     shader.ts      # colour from d + material
     foam.ts        # shore foam
     waves.ts       # contour bands + caustics mask
+  atmosphere/
+    environment.ts # EnvironmentState + day/sunset/night palettes
   world/
     chunks.ts
     vegetation.ts
@@ -154,7 +157,7 @@ src/
     settlements.ts
 ```
 
-Existing `src/game/` remains rules authority until the hidden graph replaces hex-facing APIs. Existing `src/render/` drives the current MVP; modules above are the migration target.
+Existing `src/game/` remains rules authority until the hidden graph replaces hex-facing APIs. Existing `src/render/` (including `atmosphere.ts` / `AtmosphereSnapshot`) drives the live day cycle; modules above are the migration target.
 
 ---
 
@@ -173,7 +176,9 @@ Existing `src/game/` remains rules authority until the hidden graph replaces hex
 | 9 | Trees | Slope/height/biome gated |
 | 10 | Rocks | Cliff scatter from slope |
 | 11 | Roads / buildings | Graph → splines / junctions |
-| 12 | Polish | Atmosphere, LODs, craft |
+| 12 | Polish | Environment State sync, LODs, craft |
+
+Day-night itself is already live on the hex MVP (`TimeOfDayController`). For the organic island, keep feeding the same Environment State pattern into terrain/water/veg shaders — never rebuild world data when the clock moves.
 
 ---
 

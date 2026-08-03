@@ -287,6 +287,8 @@ The coastline defines:
 
 Because every effect shares the same data, the island feels cohesive and handcrafted — connected to the water instead of stitched together from independent systems.
 
+Day-night and weather must **not** regenerate this field or the meshes derived from it — only the Environment State changes. See **[DAY_NIGHT.md](DAY_NIGHT.md)**.
+
 ---
 
 ## Module Map
