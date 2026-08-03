@@ -98,6 +98,7 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
     fields: [
       { key: 'waterShoreWidth', label: 'Shore width', kind: 'range', min: 2, max: 22, step: 0.5 },
       { key: 'waterDeepFade', label: 'Deep fade', kind: 'range', min: 4, max: 30, step: 0.5 },
+      { key: 'waterEdgeSoft', label: 'Horizon fade', kind: 'range', min: 20, max: 160, step: 2 },
     ],
   },
   {
