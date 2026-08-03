@@ -4,28 +4,25 @@ Local hotseat Settlers of Catan built with Vite, TypeScript, and Three.js.
 
 ## Vision
 
-The long-term look is a **handcrafted island**, not a board of tiles.
+A **stylized hex-board island** — classic Catan tiles, polished motion, tropical water, and day-night craft.
 
-- Gameplay runs on a **hidden region graph** (resources + adjacency).
-- **Coastline first:** one field `distanceToCoast` drives height, water colour, beaches, wave bands, foam, vegetation, and rocks.
+- **Hex tiles stay.** The board is a readable hex map; organic non-hex terrain is not the direction.
+- Gameplay runs on the hex graph (resources + adjacency).
+- **Smooth motion:** piece spawn / upgrade, robber hop, highlight fades, production pulses, hover lift.
 - **Day-night is render-only:** world data stays static; an Environment State retints lighting, water, sky, and fog.
-- **Deep configurator:** edit everything via a well-categorised, easy-to-use craft panel (search, presets, Generate vs Look).
-- Architecture & milestones: **[docs/VISION.md](docs/VISION.md)**  
-- Terrain algorithm (12 steps): **[docs/TERRAIN.md](docs/TERRAIN.md)**  
+- **Style configurator:** craft water, atmosphere, and lighting (searchable panel over time).
+- Architecture & notes: **[docs/VISION.md](docs/VISION.md)**  
 - Day-night cycle: **[docs/DAY_NIGHT.md](docs/DAY_NIGHT.md)**  
 - Configurator: **[docs/CONFIGURATOR.md](docs/CONFIGURATOR.md)**
 
-Scaffold modules (stubs / target APIs; live day cycle still uses `src/render/atmosphere.ts`):
+Live modules:
 
 ```
-src/terrain/     island · mask · graph · voronoi · sdf · height · beach · biome · coast · pipeline
-src/water/       shader · foam · waves
-src/atmosphere/  environment (EnvironmentState + palettes)
-src/world/       chunks · vegetation · rocks
-src/gameplay/    regions · roads · settlements
-src/ui/          craftSchema (deep configurator taxonomy) · configurator (live Style panel)
+src/game/        rules engine · board graph
+src/render/      BoardView · water · grass · sky · atmosphere · tweens
+src/input/       picker
+src/ui/          HUD · Style configurator
 ```
-The current MVP still renders stylized hex tiles with tropical water; the vision modules are the migration target.
 
 ## Run
 
@@ -49,4 +46,4 @@ npm run dev
 - Longest Road (2 VP at length ≥ 5) is included
 - Larger maps scale terrain, numbers, harbors, piece limits, and camera framing
 - Tropical low-poly water shader with live **Style** configurator (depth gradient, swells, bands, foam, caustics)
-- Long-term: expand that panel into a **deep craft configurator** that can edit every system — see [docs/CONFIGURATOR.md](docs/CONFIGURATOR.md)
+- Piece placement, robber moves, legal highlights, and dice feedback are animated

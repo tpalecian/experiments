@@ -18,6 +18,7 @@ export class Hud {
   private tradeOpen = false;
   private discardDraft: ResourceBank = emptyBank();
   private selectedMap: MapSizeId = 'standard';
+  private lastDiceKey = '';
 
   constructor(
     hudEl: HTMLElement,
@@ -80,19 +81,31 @@ export class Hud {
     if (s.phase === 'lobby') {
       this.root.innerHTML = '';
       this.lobby.classList.remove('hidden');
+      this.lastDiceKey = '';
       return;
     }
 
     const current = s.players[s.currentPlayer];
-    const roll =
-      s.lastRoll !== null ? `${s.lastRoll[0]} + ${s.lastRoll[1]} = ${s.lastRoll[0] + s.lastRoll[1]}` : '—';
+    const diceKey = s.lastRoll !== null ? `${s.lastRoll[0]}:${s.lastRoll[1]}` : '';
+    const diceFresh = diceKey !== '' && diceKey !== this.lastDiceKey;
+    this.lastDiceKey = diceKey;
+    const rollHtml =
+      s.lastRoll !== null
+        ? `<span class="dice-roll${diceFresh ? ' fresh' : ''}" aria-label="Dice ${s.lastRoll[0]} and ${s.lastRoll[1]}">
+            <span class="die">${s.lastRoll[0]}</span>
+            <span class="die-plus">+</span>
+            <span class="die">${s.lastRoll[1]}</span>
+            <span class="die-eq">=</span>
+            <span class="die-total">${s.lastRoll[0] + s.lastRoll[1]}</span>
+          </span>`
+        : `<span class="dice-roll empty">—</span>`;
 
     this.root.innerHTML = `
       <div class="top-bar">
         <div class="panel">
           <h2>${escapeHtml(s.message)}</h2>
-          <p class="msg">Dice: ${roll} · ${MAP_SIZES[s.mapSize].label} · Win at ${s.winVp} VP · Phase: ${s.phase}${s.longestRoadOwner !== null ? ` · Longest Road: ${s.players[s.longestRoadOwner].name}` : ''}</p>
-          ${s.productionLog ? `<p class="log">${escapeHtml(s.productionLog)}</p>` : ''}
+          <p class="msg">${rollHtml} · ${MAP_SIZES[s.mapSize].label} · Win at ${s.winVp} VP · Phase: ${s.phase}${s.longestRoadOwner !== null ? ` · Longest Road: ${s.players[s.longestRoadOwner].name}` : ''}</p>
+          ${s.productionLog ? `<p class="log${diceFresh ? ' log-enter' : ''}">${escapeHtml(s.productionLog)}</p>` : ''}
         </div>
         <div class="panel players">
           ${s.players

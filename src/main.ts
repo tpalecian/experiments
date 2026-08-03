@@ -1,7 +1,7 @@
 import './ui/styles.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { boardRadiusWorld } from './game/board';
+import { axialToWorld, boardRadiusWorld } from './game/board';
 import { GameEngine } from './game/engine';
 import { Picker } from './input/picker';
 import { TimeOfDayController, type TimeOfDayMode } from './render/atmosphere';
@@ -9,6 +9,7 @@ import { BoardView } from './render/BoardView';
 import { SkyDome } from './render/sky';
 import { STYLE } from './render/style';
 import type { StyleConfig } from './render/styleConfig';
+import { TweenPlayer, ease } from './render/tween';
 import { StyleConfigurator } from './ui/configurator';
 import { Hud } from './ui/hud';
 
@@ -27,6 +28,7 @@ const sky = new SkyDome(initialConfig);
 const dayCycle = new TimeOfDayController(initialConfig.timeOfDay as TimeOfDayMode);
 dayCycle.setDayLength(initialConfig.dayLengthSec);
 dayCycle.setTransitionSec(initialConfig.dayTransitionSec);
+const cameraTweens = new TweenPlayer();
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -47,6 +49,7 @@ camera.position.set(0, 14, 14);
 const controls = new OrbitControls(camera, canvas);
 controls.target.set(0, 0, 0);
 controls.enableDamping = true;
+controls.dampingFactor = 0.08;
 controls.maxPolarAngle = Math.PI * 0.49;
 controls.minDistance = 8;
 controls.maxDistance = 24;
@@ -84,6 +87,12 @@ let fogNear = 28;
 let fogFar = 70;
 let lastTimeOfDay = initialConfig.timeOfDay;
 let styleLive = initialConfig;
+let lastRollKey = '';
+let lastRobberHex = '';
+const cameraLook = new THREE.Vector3();
+const cameraLookFrom = new THREE.Vector3();
+const robberWorld = new THREE.Vector3();
+const boardCenter = new THREE.Vector3(0, 0, 0);
 
 function applyStyle(config: StyleConfig): void {
   styleLive = config;
@@ -169,10 +178,28 @@ function frameCamera(rings: number): void {
   applyAtmosphereFrame();
 }
 
+function nudgeCameraToward(world: THREE.Vector3): void {
+  cameraLookFrom.copy(controls.target);
+  cameraLook.copy(world);
+  cameraLook.y = 0;
+  // Blend toward the event without yanking the orbit target fully off the board center.
+  cameraLook.lerp(boardCenter, 0.55);
+  cameraTweens.play(
+    0.55,
+    (u) => {
+      controls.target.lerpVectors(cameraLookFrom, cameraLook, ease.easeOutCubic(u));
+    },
+    { ease: ease.linear },
+  );
+}
+
 function syncView(): void {
   const snap = engine.snapshot();
   if (snap.phase === 'lobby') {
     boardBuilt = false;
+    lastRollKey = '';
+    lastRobberHex = '';
+    boardView.setHoverHex(null);
     return;
   }
   if (!boardBuilt) {
@@ -180,10 +207,29 @@ function syncView(): void {
     boardView.applyStyleConfig(configurator.getConfig());
     frameCamera(snap.board.rings);
     boardBuilt = true;
+    lastRobberHex = snap.board.robberHexId;
   } else {
-    boardView.syncPieces(snap.board);
+    boardView.syncPieces(snap.board, true);
   }
   boardView.syncHighlights(snap.legalVertices, snap.legalEdges, snap.legalHexes);
+
+  const rollKey =
+    snap.lastRoll !== null ? `${snap.lastRoll[0]}:${snap.lastRoll[1]}:${snap.productionLog}` : '';
+  if (rollKey && rollKey !== lastRollKey && snap.lastRoll) {
+    const total = snap.lastRoll[0] + snap.lastRoll[1];
+    boardView.pulseProduction(total);
+  }
+  lastRollKey = rollKey;
+
+  if (snap.board.robberHexId !== lastRobberHex) {
+    const hex = snap.board.hexes.get(snap.board.robberHexId);
+    if (hex) {
+      const { x, z } = axialToWorld(hex.q, hex.r);
+      robberWorld.set(x + 0.35, 0, z + 0.2);
+      nudgeCameraToward(robberWorld);
+    }
+    lastRobberHex = snap.board.robberHexId;
+  }
 }
 
 engine.subscribe(syncView);
@@ -203,6 +249,22 @@ canvas.addEventListener('pointerdown', (ev) => {
   else if (hit.kind === 'hex') engine.clickHex(hit.id);
 });
 
+canvas.addEventListener('pointermove', (ev) => {
+  const snap = engine.snapshot();
+  if (snap.phase === 'lobby' || snap.phase === 'gameOver' || !boardBuilt) {
+    boardView.setHoverHex(null);
+    return;
+  }
+  if ((ev.target as HTMLElement).closest?.('#style-config-root')) {
+    boardView.setHoverHex(null);
+    return;
+  }
+  const hit = picker.pick(ev.clientX, ev.clientY, boardView.getPickables());
+  boardView.setHoverHex(hit?.kind === 'hex' ? hit.id : null);
+});
+
+canvas.addEventListener('pointerleave', () => boardView.setHoverHex(null));
+
 function onResize(): void {
   const w = window.innerWidth;
   const h = window.innerHeight;
@@ -217,10 +279,11 @@ function animate(): void {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
+  cameraTweens.update(dt);
   controls.update();
   dayCycle.update(dt);
   applyAtmosphereFrame();
-  boardView.update(t);
+  boardView.update(t, dt);
   sky.update(t);
   renderer.render(scene, camera);
 }
