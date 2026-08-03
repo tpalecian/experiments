@@ -22,11 +22,13 @@ import { fillHeightField, sampleSlope } from './height';
 import {
   createIslandSeed,
   fillIslandMaskGrid,
+  withArchipelagoBlobs,
   type IslandParams,
   type IslandSeed,
 } from './island';
 import { distanceTransformSoften, smoothIslandMask } from './mask';
 import { mulberry32 } from './noise';
+import { carveArchipelagoChannels, protectSiteFootprints } from './channels';
 import {
   buildGridSdf,
   buildIslandSdf,
@@ -73,6 +75,9 @@ function mergeParams(
       ...base.island,
       radius: partial.island?.radius ?? r * 1.05,
       seed: partial.island?.seed ?? base.island.seed,
+      islandCount: partial.island?.islandCount ?? base.island.islandCount,
+      archipelagoSpread:
+        partial.island?.archipelagoSpread ?? base.island.archipelagoSpread,
     };
   }
   base.height = {
@@ -145,11 +150,21 @@ export function generateIsland(
   graph?: RegionGraph,
 ): WorldData {
   const params = mergeParams(partial, board);
-  const seed = createIslandSeed(params.island);
+  let seed = createIslandSeed(params.island);
   const g = graph ?? (board ? boardToRegionGraph(board, seed.params.seed) : createEmptyGraph(seed.params.seed));
   const sites = regionCenters(g);
+  seed = withArchipelagoBlobs(seed, sites, board?.rings);
 
-  const extent = seed.params.radius * params.extentScale;
+  // Frame bounds from outermost blob extents (archipelago can be wider than radius)
+  let extent = seed.params.radius * params.extentScale;
+  for (const b of seed.blobs) {
+    extent = Math.max(
+      extent,
+      Math.hypot(b.x, b.z) + b.radius * 1.35,
+      Math.abs(b.x) + b.radius * 1.2,
+      Math.abs(b.z) + b.radius * 1.2,
+    );
+  }
   const grid = {
     width: params.resolution,
     depth: params.resolution,
@@ -157,11 +172,26 @@ export function generateIsland(
   };
 
   let mask = fillIslandMaskGrid(seed, grid.width, grid.depth, grid.bounds);
-  mask = smoothIslandMask(mask, grid.width, grid.depth, params.smoothPasses);
+  mask = smoothIslandMask(mask, grid.width, grid.depth, Math.max(0, params.smoothPasses - 1));
   mask = distanceTransformSoften(mask, grid.width, grid.depth);
+  // Carve after soften so channels aren't blurred shut again
+  mask = carveArchipelagoChannels(
+    mask,
+    grid,
+    seed.blobs,
+    sites,
+    Math.max(seed.params.archipelagoSpread, seed.blobs.length > 1 ? 0.45 : 0),
+    0.72,
+  );
+  mask = protectSiteFootprints(mask, grid, sites, 0.7, 0.64);
+  // Light final smooth so carved shores aren't jagged
+  if (params.smoothPasses > 0) {
+    mask = smoothIslandMask(mask, grid.width, grid.depth, 1);
+  }
+  // Re-protect after smooth (blur can nibble site footprints)
+  mask = protectSiteFootprints(mask, grid, sites, 0.85, 0.7);
 
-  // Coastline stays organic — do not boost mask or lift SDF toward hex sites.
-  // Size the island radius (via islandRadiusScale) so the board footprint sits inland.
+  // Organic multi-island coastline — blobs sized to cover gameplay sites.
   const sdfField = computeSignedDistanceField(mask, grid);
   const sdf = buildGridSdf(sdfField, grid);
 

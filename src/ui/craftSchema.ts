@@ -40,11 +40,11 @@ export const CRAFT_CATEGORIES: CraftCategory[] = [
   {
     id: 'world',
     title: 'World / Generation',
-    blurb: 'Seed, mask, SDF, mesh — regenerates terrain. Use Apply.',
+    blurb: 'Seed, archipelago mask, SDF, height, scatter — regenerates terrain. Use Apply.',
     rebuildsWorld: true,
     subsections: [
       { id: 'seed', title: 'Seed' },
-      { id: 'mask', title: 'Island mask' },
+      { id: 'mask', title: 'Island mask / archipelago' },
       { id: 'smooth', title: 'Coast smooth' },
       { id: 'sdfMesh', title: 'SDF & mesh' },
       { id: 'height', title: 'Height curve' },

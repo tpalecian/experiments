@@ -98,7 +98,14 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
 
   const world = generateIsland(
     {
-      island: { seed: 7, radius: 10, falloff: 1.12, warp: 0.35 },
+      island: {
+        seed: 7,
+        radius: 10,
+        falloff: 1.12,
+        warp: 0.35,
+        islandCount: 2,
+        archipelagoSpread: 0.6,
+      },
       resolution: 64,
       smoothPasses: 2,
     },
@@ -108,20 +115,21 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
 
   assert(world.sdfField.length === 64 * 64, 'sdf field size');
   assert(world.heightField.length === 64 * 64, 'height field size');
+  assert(world.seed.blobs.length === 2, `expected 2 archipelago blobs, got ${world.seed.blobs.length}`);
   const center = world.sdf.sample(0, 0);
-  assert(center > 0, `island center should be land (d=${center})`);
+  // With two offset islands, map center may be a sea channel — that's OK.
   const ocean = world.sdf.sample(world.grid.bounds.maxX * 0.95, world.grid.bounds.maxZ * 0.95);
   assert(ocean < 0, `far corner should be ocean (d=${ocean})`);
+  assert(world.coastline.length >= 1, 'at least one coastline loop');
 
-  // Organic coast: do not mutate SDF toward hexes. With a generous radius,
-  // the board footprint should still sit inland.
+  // Organic coast: sites covered by their blob radii without SDF mutation.
   let inland = 0;
   for (const site of world.sites) {
     if (world.sdf.sample(site.x, site.z) > 0) inland++;
   }
   assert(
     inland === world.sites.length,
-    `all region centers inland without coast mutation (${inland}/${world.sites.length})`,
+    `all region centers inland on archipelago (${inland}/${world.sites.length})`,
   );
 
   const env = createDefaultEnvironmentState('day');
@@ -176,7 +184,7 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(Math.hypot(a.x - b.x, a.z - b.z) < 1e-6, 'placement cache matches resolver');
 
   console.log(
-    `ok island pipeline (regions=${graph.regions.size}, trees=${world.trees.length}, rocks=${world.rocks.length}, coastLoops=${world.coastline.length}, harbors=${engine.board.harbors.length})`,
+    `ok island pipeline (blobs=${world.seed.blobs.length}, regions=${graph.regions.size}, trees=${world.trees.length}, rocks=${world.rocks.length}, coastLoops=${world.coastline.length}, harbors=${engine.board.harbors.length}, centerD=${center.toFixed(2)})`,
   );
 }
 

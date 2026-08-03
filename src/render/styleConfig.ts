@@ -76,6 +76,10 @@ export interface StyleConfig {
   islandRadiusScale: number;
   islandFalloff: number;
   islandWarp: number;
+  /** 0 = auto from map size (2–4 landmasses). */
+  islandCount: number;
+  /** Pull nuclei apart for clearer sea channels (0–1). */
+  archipelagoSpread: number;
   islandSmoothPasses: number;
   islandResolution: number;
   islandVerticalScale: number;
@@ -151,6 +155,8 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   islandRadiusScale: 1.28,
   islandFalloff: 1.12,
   islandWarp: 0.42,
+  islandCount: 0,
+  archipelagoSpread: 0.55,
   islandSmoothPasses: 2,
   islandResolution: 128,
   islandVerticalScale: 0.055,
@@ -172,6 +178,8 @@ export const WORLD_REBUILD_KEYS: (keyof StyleConfig)[] = [
   'islandRadiusScale',
   'islandFalloff',
   'islandWarp',
+  'islandCount',
+  'archipelagoSpread',
   'islandSmoothPasses',
   'islandResolution',
   'islandVerticalScale',
@@ -188,7 +196,7 @@ export const TERRAIN_LOOK_KEYS: (keyof StyleConfig)[] = [
   'beachDryEnd',
 ];
 
-const STORAGE_KEY = 'catan-style-config-v6';
+const STORAGE_KEY = 'catan-style-config-v7';
 
 export function loadStyleConfig(): StyleConfig {
   try {
@@ -211,7 +219,14 @@ export function resetStyleConfig(): StyleConfig {
 }
 
 export function styleToWorldPartial(config: StyleConfig): {
-  island: { seed: number; falloff: number; warp: number; radius?: number };
+  island: {
+    seed: number;
+    falloff: number;
+    warp: number;
+    islandCount: number;
+    archipelagoSpread: number;
+    radius?: number;
+  };
   smoothPasses: number;
   resolution: number;
   verticalScale: number;
@@ -228,6 +243,8 @@ export function styleToWorldPartial(config: StyleConfig): {
       seed: config.islandSeed,
       falloff: config.islandFalloff,
       warp: config.islandWarp,
+      islandCount: config.islandCount,
+      archipelagoSpread: config.archipelagoSpread,
     },
     smoothPasses: config.islandSmoothPasses,
     resolution: config.islandResolution,

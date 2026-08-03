@@ -51,6 +51,8 @@ export const DEFAULT_WORLD_GENERATION: WorldGenerationParams = {
     radius: 12,
     falloff: 1.12,
     warp: 0.42,
+    islandCount: 0,
+    archipelagoSpread: 0.55,
   },
   smoothPasses: 2,
   resolution: 128,
