@@ -1,12 +1,12 @@
 /**
  * Environment State — day/night/weather rendering only.
  *
- * World data (height, SDF, biomes, meshes, instances) is static.
+ * Hex board data (tiles, props, pieces, water mesh, grass) is static.
  * Every frame, renderers read this object; nothing regenerates.
  *
  * Live MVP: `AtmosphereSnapshot` in `src/render/atmosphere.ts` already
- * plays this role. This module documents the island-gen target shape and
- * tropical water depth palettes from docs/DAY_NIGHT.md.
+ * plays this role. This module holds palette tables and the target shape
+ * for craft expansion on the hex board — see docs/DAY_NIGHT.md.
  */
 
 import * as THREE from 'three';

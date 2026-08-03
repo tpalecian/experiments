@@ -1,311 +1,118 @@
-# Recreating the Stylized Tropical Island Algorithm
+# Hex Board Presentation — Water, Props & Coast Feel
 
 > **Core Principle**
 >
-> Don't generate terrain first and then add water.
->
-> Generate a **coastline** first, then let **everything else** derive from it.
+> Keep the **readable hex tiles**. Water, skirts, props, and lighting dress the board —
+> they do not replace it with organic non-hex terrain.
 
-Everything is driven by a single value:
-
-```ts
-distanceToCoast // signed: ocean < 0, coast = 0, land > 0
-```
+The live board is built in `BoardView` (`src/render/BoardView.ts`): extruded hex meshes,
+terrain props, number tokens, harbors, tropical water hugging the land hexes.
 
 ---
 
-## The Rendering Pipeline
+## Architecture
 
 ```text
-Island Shape
-      │
-      ▼
-Signed Distance Field (SDF)
-      │
-      ├──────────────┐
-      ▼              ▼
-Terrain Height    Water Depth
-      │              │
-      ▼              ▼
-Beach           Water Colour
-      │              │
-      ▼              ▼
-Grass         Wave Bands
-      │              │
-      ▼              ▼
-Trees          Foam
-      │
-      ▼
-Rocks
+Hex graph (game rules)
+        │
+        ▼
+BoardView tiles + markers + pieces
+        │
+        ├──────────────┐
+        ▼              ▼
+WaterSurface      Grass / props
+(hex land SDF)    (per-tile scatter)
+        │
+        ▼
+Environment State + TweenPlayer
 ```
 
-Every rendering system reads the same field:
-
-```ts
-terrainHeight(d)
-waterColour(d)
-beachColour(d)
-waveBands(d)
-foam(d)
-caustics(d)
-vegetation(d)
-rocks(d)
-```
-
-Nothing works independently. Everything is synchronized.
+Gameplay adjacency and production stay on the hex graph. Presentation never invents a second board.
 
 ---
 
-## Step 1 — Generate the Island Mask
+## Water around hexes
 
-Forget heightmaps first.
+Water is a flat sea plane with a **land mask from hex centers** (not an organic island silhouette).
 
-Start with only the island silhouette. For every sample:
+Live path: `src/render/water.ts` — depth colour, swells, contour bands, foam, caustics, atmosphere tint.
 
-```ts
-island = radialFalloff + simplexNoise + domainWarp
-```
+Craft bases live in `StyleConfig`; day-night multiplies them via Environment State ([DAY_NIGHT.md](DAY_NIGHT.md)).
 
-At this stage the map only knows **land** vs **water**. Nothing else.
-
-**Never use high-frequency noise.** Large sweeping forms only.
-
----
-
-## Step 2 — Smooth the Coastline
-
-Raw procedural noise looks artificial. Soften the mask:
-
-- Gaussian blur
-- Distance transform
-- Marching Squares smoothing
-
-Goal: **large sweeping beaches**, not noisy coastlines.
-
----
-
-## Step 3 — Generate the Signed Distance Field (SDF)
-
-Compute distance from every point to the coastline.
-
-| Sign | Meaning |
+| Effect | Intent |
 | --- | --- |
-| `< 0` | Ocean |
-| `0` | Coastline |
-| `> 0` | Land |
+| Depth colour | Deep → turquoise → mint near shore |
+| Swells | Soft vertex motion |
+| Wave bands | Breathing contour lines near land |
+| Foam | Shore only |
+| Caustics | Shallow water only |
 
-This field is the heart of the renderer. Store it as a texture / sampler every system can query.
+Polish work improves these shaders and Style knobs — **without** removing hex tiles.
 
 ---
 
-## Step 4 — Generate Terrain Height
+## Hex tile stack
 
-Never generate mountains directly from Perlin noise.
+Each land hex (conceptually):
 
-```ts
-height = terrainCurve(distanceToCoast)
-       + largeScaleNoise
-       + smallVariation
+```text
+Dirt skirt (tabletop edge)
+  └─ Extruded hex body (terrain colour)
+       └─ Top rim
+            └─ Props (trees / wheat / rocks / mesa / cactus)
+                 └─ Number token (if any)
+                      └─ Pasture grass blades (sheep only)
 ```
 
-Example curve (distance → layer):
-
-| Distance | Layer |
+| Layer | Notes |
 | --- | --- |
-| −100 | Deep Ocean |
-| −20 | Lagoon |
-| 0 | Beach |
-| 15 | Grass |
-| 40 | Hills |
-| 70 | Mountains |
-
-Subtle noise only — the result should feel sculpted, not random.
+| Body | Toon material per terrain type |
+| Skirt | Slightly wider bottom for a coast edge |
+| Props | Seeded scatter; static meshes (motion comes from grass wind + pieces) |
+| Tokens | Pulse on matching dice production |
+| Markers | Vertex / edge legal highlights (fade + pulse) |
 
 ---
 
-## Step 5 — Water Colour
+## Pieces & motion
 
-Don't colour water from normals. Use the SDF:
+Roads, settlements, cities, and the robber are board pieces on the hex graph.
 
-```text
-Deep Ocean → Blue → Turquoise → Lagoon → Mint → Almost White
-```
+Motion system: `src/render/tween.ts` + `BoardView` sync.
 
-That gradient is the tropical look.
-
----
-
-## Step 6 — Beaches
-
-The beach is another SDF range. No decals. No textures. Smooth interpolation:
-
-| Distance | Surface |
+| Moment | Feel |
 | --- | --- |
-| `< 0` | Water |
-| `0 … 8` | Wet sand |
-| `8 … 18` | Dry sand |
-| `18+` | Grass |
+| Place road / settlement | Scale + soft drop |
+| Upgrade city | Morph / crossfade |
+| Robber | Arc hop + land squash |
+| Highlights | Opacity / emissive fade + pulse |
+| Hover | Slight hex lift |
+
+See [VISION.md](VISION.md) for the full animation priority table.
 
 ---
 
-## Step 7 — Wave Bands
+## What we are not doing
 
-These are **not** water normals. They are **contour lines** (like a topo map):
+- Replacing hexes with a coastline-first organic heightmesh
+- Hidden region graphs that players never see as tiles
+- Regenerating terrain when day-night changes
 
-```ts
-band = fract(distance * frequency)
-// then blur, fade, animate
-```
-
-Contours naturally follow every bay and peninsula.
+Legacy stubs under `src/terrain/`, `src/water/` (CPU helpers), `src/world/`, `src/gameplay/` are **not** the live presentation path. Prefer extending `src/render/*`.
 
 ---
 
-## Step 8 — Animate the Water
-
-Contour lines barely move — **breathing**, not waves:
-
-```ts
-distance += sin(time * 0.2) * 0.5
-```
-
-Almost imperceptible.
-
----
-
-## Step 9 — Foam
-
-Foam only near shore:
-
-```text
-distance ∈ [-2, 2]
-```
-
-Fade quickly. Never in deep water.
-
----
-
-## Step 10 — Underwater Caustics
-
-Subtle animated caustics, shallow water only:
-
-```text
-distance ∈ [-25, 0]
-```
-
-Slow movement. Low contrast.
-
----
-
-## Step 11 — Vegetation
-
-Not random. Gate on slope, height, biome:
-
-```ts
-if (slope < threshold && height > grassLevel) spawnTree()
-```
-
-Flat grasslands become forests. Steep cliffs stay empty.
-
----
-
-## Step 12 — Rocks
-
-Slope detection:
-
-```ts
-if (height > rockHeight && slope > cliffThreshold) spawnRock()
-```
-
-Cliffs emerge from the height field automatically.
-
----
-
-## Terrain Generation Order
-
-```text
-Generate Island Mask
-        │
-        ▼
-Smooth Coastline
-        │
-        ▼
-Compute Signed Distance Field
-        │
-        ▼
-Generate Terrain Height
-        │
-        ▼
-Generate Terrain Mesh
-        │
-        ▼
-Generate Water Mesh
-        │
-        ▼
-Generate Water Depth Colours
-        │
-        ▼
-Generate Beaches
-        │
-        ▼
-Generate Wave Contours
-        │
-        ▼
-Generate Foam
-        │
-        ▼
-Generate Underwater Caustics
-        │
-        ▼
-Generate Vegetation
-        │
-        ▼
-Generate Rocks
-        │
-        ▼
-Lighting & Post Processing
-```
-
----
-
-## Why This Works
-
-Traditional procedural worlds treat terrain, water, beaches, and vegetation as separate systems.
-
-This style treats them as **different visual interpretations of the same signed distance field**.
-
-The coastline defines:
-
-- Terrain height
-- Water depth
-- Beach width
-- Water colour
-- Foam placement
-- Wave contour lines
-- Vegetation limits
-- Rock placement
-
-Because every effect shares the same data, the island feels cohesive and handcrafted — connected to the water instead of stitched together from independent systems.
-
-Day-night and weather must **not** regenerate this field or the meshes derived from it — only the Environment State changes. See **[DAY_NIGHT.md](DAY_NIGHT.md)**.
-
----
-
-## Module Map
+## Module map (live)
 
 | Concern | Module |
 | --- | --- |
-| Mask + silhouette | `src/terrain/island.ts` |
-| Coast smoothing | `src/terrain/mask.ts` |
-| SDF / `distanceToCoast` | `src/terrain/sdf.ts` |
-| Height from curve(d) | `src/terrain/height.ts` |
-| Beach bands | `src/terrain/beach.ts` |
-| Coast polylines | `src/terrain/coast.ts` |
-| Water colour / material | `src/water/shader.ts` |
-| Wave contours | `src/water/waves.ts` |
-| Foam | `src/water/foam.ts` |
-| Trees | `src/world/vegetation.ts` |
-| Rocks | `src/world/rocks.ts` |
-| Pipeline entry | `src/terrain/pipeline.ts` |
+| Hex tiles, pieces, highlights | `src/render/BoardView.ts` |
+| Tweens / easing | `src/render/tween.ts` |
+| Water shader | `src/render/water.ts` |
+| Pasture grass | `src/render/grass.ts` |
+| Sky / clouds | `src/render/sky.ts` |
+| Day-night / atmosphere | `src/render/atmosphere.ts` |
+| Style craft | `src/render/styleConfig.ts`, `src/ui/configurator.ts` |
+| Rules / board graph | `src/game/*` |
 
-Gameplay regions / Voronoi biomes still modulate *which* land looks like forest vs ore; they do not invent a second coastline. Biome masks are applied **on top of** the shared SDF.
+Day-night and weather must **not** rebuild hex meshes — only Environment State changes. See **[DAY_NIGHT.md](DAY_NIGHT.md)**.

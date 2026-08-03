@@ -9,7 +9,7 @@
 
 - Day-night / atmosphere: **[docs/DAY_NIGHT.md](DAY_NIGHT.md)**
 - Configurator UX & taxonomy: **[docs/CONFIGURATOR.md](CONFIGURATOR.md)**
-- Terrain experiments (optional / deferred): **[docs/TERRAIN.md](TERRAIN.md)**
+- Hex board presentation (water, props, pieces): **[docs/TERRAIN.md](TERRAIN.md)**
 
 ```
 Hex Board (visible tiles)
@@ -75,6 +75,10 @@ Legacy island-generation stubs under `src/terrain/`, `src/water/`, `src/world/`,
 | 4 | Production feedback | Pulse matching number tokens |
 | 5 | Hover + camera | Hex lift, soft look-at on robber |
 | 6 | HUD dice | Pop-in dice chips on new rolls |
-| 7 | Deeper craft | Expand Style panel as systems need knobs |
+| 7 | Water craft depth | Richer hex-shore palette / bands / foam knobs in Style |
+| 8 | Deep configurator | Schema-driven panel: search, categories, presets, Motion section |
+| 9 | Weather (later) | Palette / scalar swaps on Environment State only |
 
 Day-night is already live (`TimeOfDayController`). Keep feeding Environment State into water/sky/lights — never rebuild hex geometry when the clock moves.
+
+**Rule:** a visual feature is not done until it is editable in the craft panel under the correct category ([CONFIGURATOR.md](CONFIGURATOR.md)).

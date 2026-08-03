@@ -1,76 +1,68 @@
-# Adding a Day-Night Cycle to a Stylized Procedural Island
+# Day-Night Cycle on the Hex Board
 
 > **Core Principle**
 >
-> The day-night cycle should **never regenerate the world**.
+> The day-night cycle should **never regenerate the board**.
 >
-> The terrain, coastlines, beaches, and vegetation remain static.
+> Hex tiles, props, pieces, water mesh, and vegetation instances remain static.
 >
-> Only the **rendering layer** changes.
+> Only the **rendering layer** (Environment State) changes.
 
 ---
 
 ## Architecture
 
-Separate world generation from rendering.
+Separate board data from look.
 
 ```text
-Terrain Generation (Static)
-        │
-        ▼
-World Data
-(Height, SDF, Biomes)
+Hex Board (Static)
+tiles · props · pieces · water mesh · grass
         │
         ├──────────────────────┐
         ▼                      ▼
-Terrain Renderer         Water Renderer
+BoardView materials       WaterSurface
         │                      │
         └──────────┬───────────┘
                    ▼
         Lighting & Atmosphere
+        (Environment State)
 ```
 
-This separation makes the day-night cycle cheap.
-
-The terrain never changes. The renderer interprets the same world differently through a shared **Environment State**.
+This separation makes the day-night cycle cheap: retint and relight, never rebuild.
 
 ---
 
-## What Changes?
+## What changes?
 
-### Terrain / world — nothing
+### Board / world — nothing
 
 These stay identical across the whole cycle:
 
-- Heightmap
-- Coastline / SDF
-- Beaches (geometry)
-- Trees, rocks, roads, buildings
-- Water **mesh**
-
-Everything generated from `distanceToCoast` stays exactly the same.
+- Hex meshes and terrain colours (base albedos)
+- Dirt skirts, rims, harbors
+- Trees, wheat, rocks, roads, buildings, robber geometry
+- Water **mesh** and land-hex mask
+- Grass blade instances
 
 ### Rendering — everything that reads Environment State
 
 - Sun / moon direction and colour
 - Sky gradient, stars, fog
-- Water depth palette, Fresnel, specular, caustic intensity
+- Water brightness, tint, Fresnel, specular, caustic intensity
 - Wave-band opacity
 - Foam brightness / tint
-- Beach albedo tint
-- Vegetation brightness / saturation
 - Shadow direction, softness, opacity
 - Exposure and post
+- Optional soft tile / prop brightness under night (future)
 
 ---
 
 ## Sun
 
-The sun is a moving directional light. It rotates around the island. Nothing procedural regenerates.
+The sun is a moving directional light over the hex board. Nothing procedural regenerates.
 
 ```ts
-// Conceptual orbit — live code derives direction from altitude + azimuth.
-sun.position.set(Math.cos(time), Math.sin(time), 0)
+// Live code: TimeOfDayController → celestialDirection(altitude, azimuth)
 ```
 
 At night the same light path can represent the **moon** (cool colour, low intensity).
@@ -79,11 +71,11 @@ At night the same light path can represent the **moon** (cool colour, low intens
 
 ## Water
 
-The water shader does **not** recalculate the ocean from scratch.
+The water shader does **not** rebuild the sea.
 
-It still samples `distanceToCoast` for depth / bands / foam placement.
+It still uses the hex land mask for depth / bands / foam placement.
 
-It **interpolates colour palettes** (and related scalars) from Environment State.
+It **interpolates palettes and scalars** from Environment State.
 
 ### Day
 
@@ -135,7 +127,7 @@ Water becomes more reflective at night.
 
 ## Wave Bands
 
-Geometry / SDF contours **stay the same**. Only opacity changes:
+Band placement from the land mask **stays the same**. Only opacity changes:
 
 | Time | Feel |
 | --- | --- |
@@ -147,7 +139,7 @@ Geometry / SDF contours **stay the same**. Only opacity changes:
 
 ## Foam
 
-Foam **placement** never changes (`d ∈ [-2, 2]`). Only brightness / tint:
+Foam **placement** never changes (shore only). Only brightness / tint:
 
 | Time | Look |
 | --- | --- |
@@ -156,24 +148,17 @@ Foam **placement** never changes (`d ∈ [-2, 2]`). Only brightness / tint:
 
 ---
 
-## Beaches
+## Hex tiles & props
 
-Sand **geometry** never changes. Albedo shifts with sunlight:
+Tile **geometry** never changes. Optional future albedo / emissive response:
 
-| Time | Sand |
+| Time | Feel |
 | --- | --- |
-| Day | Warm ivory |
-| Sunset | Golden orange |
-| Night | Cool grey |
+| Day | Full terrain colour |
+| Sunset | Warm fill, longer shadows |
+| Night | Cooler ambient, readable toon sides |
 
----
-
-## Vegetation & Rocks
-
-Do **not** swap textures or respawn instances.
-
-- Trees: adjust brightness, saturation, ambient — they become silhouettes at night.
-- Rocks: longer / softer shadows only.
+Props (trees, wheat, rocks) do **not** respawn — only lighting / saturation.
 
 ---
 
@@ -229,7 +214,7 @@ Adjust only direction, softness, and opacity:
 
 ## Underwater Caustics
 
-Caustics stay active (still gated by shallow `distanceToCoast`). Intensity scales with the cycle:
+Caustics stay active in shallow water near hex shores. Intensity scales with the cycle:
 
 | Time | Intensity |
 | --- | --- |
@@ -239,20 +224,17 @@ Caustics stay active (still gated by shallow `distanceToCoast`). Intensity scale
 
 ---
 
-## The World Never Changes
+## The Board Never Changes
 
 ```text
-Island Shape   ✔ Static
-Coastline      ✔ Static
-Terrain        ✔ Static
-Trees          ✔ Static
-Rocks          ✔ Static
-Roads          ✔ Static
-Buildings      ✔ Static
-Water Mesh     ✔ Static
+Hex tiles       ✔ Static
+Props           ✔ Static
+Pieces          ✔ Static (motion is tween, not rebuild)
+Water mesh      ✔ Static
+Grass instances ✔ Static
 ```
 
-Only rendering changes.
+Only rendering / Environment State changes. Piece tweens are gameplay feedback, not world regeneration.
 
 ---
 
@@ -284,7 +266,6 @@ type EnvironmentState = {
   shadowStrength: number
   causticIntensity: number
   foamBrightness: number
-  beachTint: Color
 }
 ```
 
@@ -302,7 +283,7 @@ Today’s runtime already follows this pattern via `AtmosphereSnapshot` + `TimeO
 | Water response | `waterBrightness`, `waterTint`, `waterFresnelStrength`, `waterCausticIntensity`, … |
 | Stars / moon disc | `starsIntensity`, night celestial as cool “sun” |
 
-Island-generation water will add explicit **depth palette** colours (`waterDeepColor` …) on top of the existing tint/fresnel knobs. See `src/atmosphere/environment.ts` for palette constants and the target `EnvironmentState` shape.
+Palette constants and a target `EnvironmentState` shape also live in `src/atmosphere/environment.ts` for craft expansion — wire them into the live hex water path, not a separate organic island.
 
 ---
 
@@ -316,13 +297,13 @@ Environment State
         │
         ├──────────────┬──────────────┬──────────────┐
         ▼              ▼              ▼
-Sky          Terrain Shader    Water Shader
+Sky          Board materials    Water shader
         │              │              │
         ▼              ▼              ▼
-Fog       Vegetation        Post Processing
+Fog       Grass / props      Post / exposure
 ```
 
-Keeps every visual system synchronized without touching world data.
+Keeps every visual system synchronized without touching board data.
 
 ---
 
@@ -331,22 +312,22 @@ Keeps every visual system synchronized without touching world data.
 Once Environment State exists, weather is a palette / scalar swap:
 
 - Rain, storms, fog banks
-- Snow, wind
+- Wind stronger on grass
 - Seasons
 - Eclipse / magical events
 
-Each modifies Environment State only. **No terrain regeneration.**
+Each modifies Environment State only. **No hex rebuild.**
+
+Piece / camera motion stays on `TweenPlayer` ([VISION.md](VISION.md)) — orthogonal to day-night.
 
 ---
 
 ## Key Design Principle
 
-The procedural world is generated **once** (coastline-first SDF — see [TERRAIN.md](TERRAIN.md)).
+The hex board is built **once** per game (map size / seed) — see [TERRAIN.md](TERRAIN.md).
 
-The day-night cycle does **not** modify the terrain.
+The day-night cycle does **not** modify the board.
 
-Every renderer interprets the same world through a shared Environment State that controls lighting, colours, atmosphere, reflections, shadows, and post-processing.
+Every renderer interprets the same hex world through a shared Environment State that controls lighting, colours, atmosphere, reflections, shadows, and post-processing.
 
-That keeps rendering efficient, consistent, and cohesive while preserving the handcrafted tropical aesthetic.
-
-Atmosphere scalars and palettes should be editable from the deep craft configurator under **Atmosphere**, **Sky & Clouds**, **Lighting**, **Fog**, and **Water** — see [CONFIGURATOR.md](CONFIGURATOR.md).
+Atmosphere scalars and palettes should be editable from the craft configurator under **Atmosphere**, **Sky & Clouds**, **Lighting**, **Fog**, and **Water** — see [CONFIGURATOR.md](CONFIGURATOR.md).

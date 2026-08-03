@@ -3,22 +3,19 @@
  *
  * Live UI still uses `StyleConfigurator` + `StyleConfig`. This module is the
  * target information architecture: well categorised, searchable, easy to use.
+ * Hex tiles stay — craft look/motion on the board, not organic-island generation.
  * See docs/CONFIGURATOR.md.
  */
 
 /** Top-level panel groups (order = display order). */
 export type CraftCategoryId =
-  | 'world'
   | 'atmosphere'
   | 'skyClouds'
   | 'lighting'
   | 'fogPost'
   | 'water'
-  | 'coastBeach'
-  | 'terrainBiome'
-  | 'vegetation'
-  | 'rocks'
-  | 'roadsSettlements'
+  | 'hexBoard'
+  | 'motion'
   | 'camera'
   | 'debug';
 
@@ -38,22 +35,9 @@ export interface CraftCategory {
  */
 export const CRAFT_CATEGORIES: CraftCategory[] = [
   {
-    id: 'world',
-    title: 'World / Generation',
-    blurb: 'Seed, mask, SDF, mesh — regenerates terrain. Use Apply.',
-    rebuildsWorld: true,
-    subsections: [
-      { id: 'seed', title: 'Seed' },
-      { id: 'mask', title: 'Island mask' },
-      { id: 'smooth', title: 'Coast smooth' },
-      { id: 'sdfMesh', title: 'SDF & mesh' },
-      { id: 'chunks', title: 'Chunks' },
-    ],
-  },
-  {
     id: 'atmosphere',
     title: 'Atmosphere',
-    blurb: 'Environment State only — never rebuilds the island.',
+    blurb: 'Environment State only — never rebuilds the hex board.',
     rebuildsWorld: false,
     subsections: [
       { id: 'clock', title: 'Time of day' },
@@ -96,7 +80,7 @@ export const CRAFT_CATEGORIES: CraftCategory[] = [
   {
     id: 'water',
     title: 'Water',
-    blurb: 'Depth palette, swell, contour bands, foam, caustics.',
+    blurb: 'Depth palette, swell, bands, foam, caustics around hex land.',
     rebuildsWorld: false,
     subsections: [
       { id: 'colors', title: 'Depth colours' },
@@ -108,53 +92,27 @@ export const CRAFT_CATEGORIES: CraftCategory[] = [
     ],
   },
   {
-    id: 'coastBeach',
-    title: 'Coast & Beaches',
-    blurb: 'SDF sand bands — geometry static; colours can shift with day.',
+    id: 'hexBoard',
+    title: 'Hex Board & Props',
+    blurb: 'Tile colours, skirts, tokens, scatter props, harbors.',
     rebuildsWorld: false,
     subsections: [
-      { id: 'bands', title: 'Sand bands' },
-      { id: 'colors', title: 'Sand colours' },
+      { id: 'tiles', title: 'Tiles' },
+      { id: 'tokens', title: 'Number tokens' },
+      { id: 'props', title: 'Props' },
+      { id: 'harbors', title: 'Harbors' },
     ],
   },
   {
-    id: 'terrainBiome',
-    title: 'Terrain & Biomes',
-    blurb: 'Height curve and soft resource masks on land.',
+    id: 'motion',
+    title: 'Motion & Feedback',
+    blurb: 'Piece tweens, robber hop, highlights, camera nudge.',
     rebuildsWorld: false,
     subsections: [
-      { id: 'height', title: 'Height curve' },
-      { id: 'biomes', title: 'Biome colours' },
-    ],
-  },
-  {
-    id: 'vegetation',
-    title: 'Vegetation',
-    blurb: 'Instanced trees gated by slope, height, biome.',
-    rebuildsWorld: false,
-    subsections: [
-      { id: 'scatter', title: 'Scatter' },
-      { id: 'look', title: 'Look' },
-    ],
-  },
-  {
-    id: 'rocks',
-    title: 'Rocks & Cliffs',
-    blurb: 'Slope-driven rock scatter.',
-    rebuildsWorld: false,
-    subsections: [
-      { id: 'scatter', title: 'Scatter' },
-      { id: 'look', title: 'Look' },
-    ],
-  },
-  {
-    id: 'roadsSettlements',
-    title: 'Roads & Settlements',
-    blurb: 'Graph paths and junction buildings as world props.',
-    rebuildsWorld: false,
-    subsections: [
-      { id: 'roads', title: 'Roads' },
-      { id: 'buildings', title: 'Buildings' },
+      { id: 'pieces', title: 'Pieces' },
+      { id: 'robber', title: 'Robber' },
+      { id: 'highlights', title: 'Highlights' },
+      { id: 'cameraNudge', title: 'Camera nudge' },
     ],
   },
   {
@@ -167,7 +125,7 @@ export const CRAFT_CATEGORIES: CraftCategory[] = [
   {
     id: 'debug',
     title: 'Debug',
-    blurb: 'Overlays for SDF, coastline, chunks, graph.',
+    blurb: 'Pickables, markers, wireframe, timing overlays.',
     rebuildsWorld: false,
     subsections: [{ id: 'overlays', title: 'Overlays' }],
   },
@@ -186,7 +144,7 @@ export const CRAFT_UX_FEATURES = [
   'modifiedBadges',
   'tooltips',
   'advancedToggle',
-  'generateVsLookSplit',
+  'lookVsMotionSplit',
   'debounceLiveApply',
 ] as const;
 
