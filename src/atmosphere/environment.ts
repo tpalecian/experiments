@@ -2,14 +2,11 @@
  * Environment State — day/night/weather rendering only.
  *
  * World data (height, SDF, biomes, meshes, instances) is static.
- * Every frame, renderers read this object; nothing regenerates.
- *
- * Live MVP: `AtmosphereSnapshot` in `src/render/atmosphere.ts` already
- * plays this role. This module documents the island-gen target shape and
- * tropical water depth palettes from docs/DAY_NIGHT.md.
+ * Live AtmosphereSnapshot maps into this shape every frame.
  */
 
 import * as THREE from 'three';
+import type { AtmosphereSnapshot } from '../render/atmosphere';
 
 /** Authoring schemes for palette tables (maps to live DayScheme). */
 export type EnvironmentScheme = 'day' | 'sunset' | 'night';
@@ -73,26 +70,23 @@ export const WATER_DEPTH_PALETTES: Record<EnvironmentScheme, WaterDepthPalette> 
 
 /** Beach albedo tints (geometry unchanged). */
 export const BEACH_TINTS: Record<EnvironmentScheme, string> = {
-  day: '#F5E6C8', // warm ivory
-  sunset: '#E8A050', // golden orange
-  night: '#8A9AAA', // cool grey
+  day: '#F5E6C8',
+  sunset: '#E8A050',
+  night: '#8A9AAA',
 };
 
-/** Fresnel strength guides (morning/midday ≈ day). */
 export const FRESNEL_STRENGTH: Record<EnvironmentScheme, number> = {
   day: 0.03,
   sunset: 0.1,
   night: 0.2,
 };
 
-/** Wave-band opacity multipliers. */
 export const WAVE_BAND_INTENSITY: Record<EnvironmentScheme, number> = {
   day: 1,
   sunset: 0.65,
   night: 0.35,
 };
 
-/** Caustic intensity multipliers (placement still from SDF). */
 export const CAUSTIC_INTENSITY: Record<EnvironmentScheme, number> = {
   day: 1,
   sunset: 0.7,
@@ -139,4 +133,32 @@ export function createDefaultEnvironmentState(
   };
   applyWaterPalette(state, scheme);
   return state;
+}
+
+/**
+ * Map live AtmosphereSnapshot → EnvironmentState (no world regeneration).
+ */
+export function environmentFromAtmosphere(
+  atm: AtmosphereSnapshot,
+  sunDir: THREE.Vector3,
+  target: EnvironmentState = createDefaultEnvironmentState(),
+): EnvironmentState {
+  target.sunDirection.copy(sunDir).normalize();
+  target.sunColor.copy(atm.sunColor);
+  target.moonDirection.copy(sunDir).multiplyScalar(-1).normalize();
+  target.ambientColor.copy(atm.hemiSky);
+  target.skyTopColor.copy(atm.skyZenith);
+  target.skyHorizonColor.copy(atm.skyHorizon);
+  target.fogColor.copy(atm.fogColor);
+  target.waterDeepColor.copy(atm.waterTint).multiplyScalar(0.55);
+  target.waterOceanColor.copy(atm.waterTint).multiplyScalar(0.75);
+  target.waterLagoonColor.copy(atm.skyFresnelColor);
+  target.waterShelfColor.copy(atm.skyHorizon);
+  target.waveBandIntensity = Math.max(0.2, atm.waterBrightness);
+  target.fresnelStrength = atm.waterFresnelStrength;
+  target.shadowStrength = atm.sunIntensity > 0.4 ? 1 : 0.35;
+  target.causticIntensity = atm.waterCausticIntensity;
+  target.foamBrightness = atm.waterBrightness;
+  target.beachTint.copy(atm.skyHorizon).lerp(atm.sunColor, 0.25);
+  return target;
 }

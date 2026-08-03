@@ -1,32 +1,12 @@
 /**
- * Shore foam — only near the coast. Never in deep water.
- *
- * Active roughly where distanceToCoast ∈ [-2, 2].
+ * Shore foam — only near coast: d ∈ [-2, 2] (world-scaled ≈ [-0.8, 0.8]).
  */
 
-export interface FoamParams {
-  /** Half-width of foam band around the zero contour. */
-  halfWidth: number;
-  intensity: number;
-}
+import type { DistanceToCoast } from '../terrain/sdf';
 
-export const DEFAULT_FOAM: FoamParams = {
-  halfWidth: 2,
-  intensity: 0.85,
-};
-
-/**
- * Foam factor in [0, 1] from signed distanceToCoast.
- * Peaks at the shoreline (d ≈ 0), fades by ±halfWidth.
- */
-export function foamFactor(
-  distanceToCoast: number,
-  params: FoamParams = DEFAULT_FOAM,
-): number {
-  const a = Math.abs(distanceToCoast);
-  if (a >= params.halfWidth) return 0;
-  const t = 1 - a / params.halfWidth;
-  // Smoothstep falloff
-  const s = t * t * (3 - 2 * t);
-  return s * params.intensity;
+export function foamAmount(d: DistanceToCoast, width = 0.8): number {
+  const half = width;
+  if (d < -half || d > half) return 0;
+  const t = 1 - Math.abs(d) / half;
+  return t * t;
 }

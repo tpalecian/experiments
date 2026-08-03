@@ -3,9 +3,15 @@
  * Borders are blurred for visuals; gameplay regions stay crisp.
  */
 
-import type { ResourceKind } from '../gameplay/regions';
+import {
+  RESOURCE_KIND_INDEX,
+  RESOURCE_KINDS,
+  type ResourceKind,
+} from '../gameplay/regions';
 import type { GraphPoint } from './graph';
 import { regionDistanceField } from './sdf';
+import type { WorldGrid } from '../world/types';
+import { worldXZ } from '../world/types';
 
 export type BiomeWeights = Record<ResourceKind, number>;
 
@@ -24,7 +30,6 @@ function emptyWeights(): BiomeWeights {
 
 /**
  * Softmax-ish weights from inverse distance to sites.
- * Stub blur: nearest site dominates with a soft falloff to neighbors.
  */
 export function sampleBiome(
   sites: GraphPoint[],
@@ -66,4 +71,26 @@ export function nearestBiome(sites: GraphPoint[], x: number, z: number): Resourc
   const hit = regionDistanceField(sites, x, z);
   if (!hit) return null;
   return sites.find((s) => s.id === hit.siteId)?.resource ?? null;
+}
+
+export function fillBiomeField(
+  sites: GraphPoint[],
+  grid: WorldGrid,
+  blur: number,
+  out?: Uint8Array,
+): Uint8Array {
+  const field = out ?? new Uint8Array(grid.width * grid.depth);
+  for (let iz = 0; iz < grid.depth; iz++) {
+    for (let ix = 0; ix < grid.width; ix++) {
+      const { x, z } = worldXZ(grid, ix, iz);
+      const w = sampleBiome(sites, x, z, blur);
+      const dom = dominantBiome(w);
+      field[iz * grid.width + ix] = RESOURCE_KIND_INDEX[dom];
+    }
+  }
+  return field;
+}
+
+export function biomeIndexToKind(index: number): ResourceKind {
+  return RESOURCE_KINDS[index] ?? 'desert';
 }

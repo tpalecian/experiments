@@ -1,40 +1,19 @@
 /**
- * World chunking: terrain, water, trees, rocks, props per chunk.
+ * Light world chunking for instance budgets.
  */
-
-import * as THREE from 'three';
-
-export type ChunkLayer = 'terrain' | 'water' | 'trees' | 'rocks' | 'props';
 
 export interface ChunkCoord {
   cx: number;
   cz: number;
 }
 
-export interface Chunk {
+export interface ChunkId {
+  key: string;
   coord: ChunkCoord;
-  root: THREE.Group;
-  layers: Record<ChunkLayer, THREE.Group>;
 }
 
-export interface WorldChunks {
-  chunkSize: number;
-  chunks: Map<string, Chunk>;
-  root: THREE.Group;
-}
-
-function chunkKey(c: ChunkCoord): string {
-  return `${c.cx},${c.cz}`;
-}
-
-const LAYERS: ChunkLayer[] = ['terrain', 'water', 'trees', 'rocks', 'props'];
-
-export function createWorldChunks(chunkSize = 16): WorldChunks {
-  return {
-    chunkSize,
-    chunks: new Map(),
-    root: new THREE.Group(),
-  };
+export function chunkKey(cx: number, cz: number): string {
+  return `${cx},${cz}`;
 }
 
 export function worldToChunk(x: number, z: number, chunkSize: number): ChunkCoord {
@@ -44,29 +23,18 @@ export function worldToChunk(x: number, z: number, chunkSize: number): ChunkCoor
   };
 }
 
-export function ensureChunk(world: WorldChunks, coord: ChunkCoord): Chunk {
-  const key = chunkKey(coord);
-  const existing = world.chunks.get(key);
-  if (existing) return existing;
-
-  const root = new THREE.Group();
-  root.name = `chunk-${key}`;
-  root.position.set(
-    (coord.cx + 0.5) * world.chunkSize,
-    0,
-    (coord.cz + 0.5) * world.chunkSize,
-  );
-
-  const layers = {} as Record<ChunkLayer, THREE.Group>;
-  for (const layer of LAYERS) {
-    const g = new THREE.Group();
-    g.name = layer;
-    root.add(g);
-    layers[layer] = g;
+export function chunksInRadius(
+  origin: ChunkCoord,
+  radius: number,
+): ChunkId[] {
+  const out: ChunkId[] = [];
+  for (let dz = -radius; dz <= radius; dz++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      if (dx * dx + dz * dz > radius * radius) continue;
+      const cx = origin.cx + dx;
+      const cz = origin.cz + dz;
+      out.push({ key: chunkKey(cx, cz), coord: { cx, cz } });
+    }
   }
-
-  world.root.add(root);
-  const chunk: Chunk = { coord, root, layers };
-  world.chunks.set(key, chunk);
-  return chunk;
+  return out;
 }

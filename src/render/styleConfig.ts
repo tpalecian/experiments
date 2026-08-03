@@ -70,6 +70,26 @@ export interface StyleConfig {
   exposure: number;
   sunIntensity: number;
   hemiIntensity: number;
+
+  // World / Generation (rebuilds island — Apply)
+  islandSeed: number;
+  islandRadiusScale: number;
+  islandFalloff: number;
+  islandWarp: number;
+  islandSmoothPasses: number;
+  islandResolution: number;
+  islandVerticalScale: number;
+  islandLargeNoise: number;
+  islandSmallNoise: number;
+  beachWetEnd: number;
+  beachDryEnd: number;
+  biomeBlur: number;
+  treeDensity: number;
+  rockDensity: number;
+
+  // Debug
+  showHexOverlay: boolean;
+  showSdfOverlay: boolean;
 }
 
 export const DEFAULT_STYLE_CONFIG: StyleConfig = {
@@ -77,7 +97,6 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   dayLengthSec: 180,
   dayTransitionSec: 4,
 
-  // Many small low-poly clusters scattered across the sky (landscape-art look)
   cloudCount: 12,
   cloudScale: 1.45,
   cloudOrbitMin: 11,
@@ -127,9 +146,46 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   exposure: 1.15,
   sunIntensity: 1.45,
   hemiIntensity: 0.95,
+
+  islandSeed: 42,
+  islandRadiusScale: 1.05,
+  islandFalloff: 1.12,
+  islandWarp: 0.42,
+  islandSmoothPasses: 2,
+  islandResolution: 128,
+  islandVerticalScale: 0.055,
+  islandLargeNoise: 0.22,
+  islandSmallNoise: 0.06,
+  beachWetEnd: 0.55,
+  beachDryEnd: 1.35,
+  biomeBlur: 1.4,
+  treeDensity: 0.55,
+  rockDensity: 0.4,
+
+  showHexOverlay: false,
+  showSdfOverlay: false,
 };
 
-const STORAGE_KEY = 'catan-style-config-v5';
+/** Keys that require regenerating WorldData. */
+export const WORLD_REBUILD_KEYS: (keyof StyleConfig)[] = [
+  'islandSeed',
+  'islandRadiusScale',
+  'islandFalloff',
+  'islandWarp',
+  'islandSmoothPasses',
+  'islandResolution',
+  'islandVerticalScale',
+  'islandLargeNoise',
+  'islandSmallNoise',
+  'beachWetEnd',
+  'beachDryEnd',
+  'biomeBlur',
+  'treeDensity',
+  'rockDensity',
+  'showSdfOverlay',
+];
+
+const STORAGE_KEY = 'catan-style-config-v6';
 
 export function loadStyleConfig(): StyleConfig {
   try {
@@ -149,4 +205,43 @@ export function saveStyleConfig(config: StyleConfig): void {
 export function resetStyleConfig(): StyleConfig {
   localStorage.removeItem(STORAGE_KEY);
   return { ...DEFAULT_STYLE_CONFIG };
+}
+
+export function styleToWorldPartial(config: StyleConfig): {
+  island: { seed: number; falloff: number; warp: number; radius?: number };
+  smoothPasses: number;
+  resolution: number;
+  verticalScale: number;
+  height: { verticalScale: number; largeNoise: number; smallNoise: number };
+  beach: { wetEnd: number; dryEnd: number };
+  biomeBlur: number;
+  treeDensity: number;
+  rockDensity: number;
+  showHexOverlay: boolean;
+  showSdfOverlay: boolean;
+} {
+  return {
+    island: {
+      seed: config.islandSeed,
+      falloff: config.islandFalloff,
+      warp: config.islandWarp,
+    },
+    smoothPasses: config.islandSmoothPasses,
+    resolution: config.islandResolution,
+    verticalScale: config.islandVerticalScale,
+    height: {
+      verticalScale: config.islandVerticalScale,
+      largeNoise: config.islandLargeNoise,
+      smallNoise: config.islandSmallNoise,
+    },
+    beach: {
+      wetEnd: config.beachWetEnd,
+      dryEnd: config.beachDryEnd,
+    },
+    biomeBlur: config.biomeBlur,
+    treeDensity: config.treeDensity,
+    rockDensity: config.rockDensity,
+    showHexOverlay: config.showHexOverlay,
+    showSdfOverlay: config.showSdfOverlay,
+  };
 }

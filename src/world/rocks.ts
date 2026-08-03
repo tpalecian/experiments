@@ -5,6 +5,7 @@
  */
 
 import * as THREE from 'three';
+import type { ScatterInstance } from './types';
 
 export interface RockGate {
   minHeight: number;
@@ -12,8 +13,8 @@ export interface RockGate {
 }
 
 export const DEFAULT_ROCK_GATE: RockGate = {
-  minHeight: 0.9,
-  minSlope: 0.55,
+  minHeight: 0.15,
+  minSlope: 0.08,
 };
 
 export function canSpawnRock(
@@ -54,4 +55,25 @@ export function createRockInstances(req: RockScatterRequest): THREE.InstancedMes
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   return mesh;
+}
+
+export function createRockScatterGroup(rocks: ScatterInstance[]): THREE.Group {
+  const group = new THREE.Group();
+  if (rocks.length === 0) return group;
+  const geom = new THREE.DodecahedronGeometry(0.14, 0);
+  const mat = new THREE.MeshToonMaterial({ color: 0x8a92a6 });
+  const mesh = createRockInstances({
+    count: rocks.length,
+    positions: rocks.map((r) => ({
+      x: r.x,
+      y: r.y + 0.06 * r.scale,
+      z: r.z,
+      scale: r.scale,
+      yaw: r.yaw,
+    })),
+    geometry: geom,
+    material: mat,
+  });
+  group.add(mesh);
+  return group;
 }

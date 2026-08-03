@@ -17,8 +17,8 @@ export interface BeachParams {
 }
 
 export const DEFAULT_BEACH: BeachParams = {
-  wetEnd: 8,
-  dryEnd: 18,
+  wetEnd: 0.55,
+  dryEnd: 1.35,
 };
 
 export function classifyBeach(

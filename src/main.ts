@@ -5,6 +5,7 @@ import { boardRadiusWorld } from './game/board';
 import { GameEngine } from './game/engine';
 import { Picker } from './input/picker';
 import { TimeOfDayController, type TimeOfDayMode } from './render/atmosphere';
+import { environmentFromAtmosphere, createDefaultEnvironmentState } from './atmosphere/environment';
 import { BoardView } from './render/BoardView';
 import { SkyDome } from './render/sky';
 import { STYLE } from './render/style';
@@ -27,6 +28,7 @@ const sky = new SkyDome(initialConfig);
 const dayCycle = new TimeOfDayController(initialConfig.timeOfDay as TimeOfDayMode);
 dayCycle.setDayLength(initialConfig.dayLengthSec);
 dayCycle.setTransitionSec(initialConfig.dayTransitionSec);
+const environmentState = createDefaultEnvironmentState('day');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -85,7 +87,7 @@ let fogFar = 70;
 let lastTimeOfDay = initialConfig.timeOfDay;
 let styleLive = initialConfig;
 
-function applyStyle(config: StyleConfig): void {
+function applyStyle(config: StyleConfig, meta?: { rebuildWorld?: boolean }): void {
   styleLive = config;
   sky.applyConfig(config);
   boardView.applyStyleConfig(config);
@@ -96,11 +98,20 @@ function applyStyle(config: StyleConfig): void {
     lastTimeOfDay = config.timeOfDay;
     dayCycle.setMode(config.timeOfDay as TimeOfDayMode);
   }
+
+  if (meta?.rebuildWorld && boardBuilt) {
+    const snap = engine.snapshot();
+    if (snap.phase !== 'lobby') {
+      boardView.regenerateIsland(snap.board);
+      boardView.syncHighlights(snap.legalVertices, snap.legalEdges, snap.legalHexes);
+    }
+  }
 }
 
 function applyAtmosphereFrame(): void {
   const atm = dayCycle.getSnapshot();
   const dir = dayCycle.getCelestialDirection();
+  environmentFromAtmosphere(atm, dir, environmentState);
 
   sky.applyAtmosphere(atm);
   sky.setSunDirection(dir);
@@ -135,9 +146,9 @@ function applyAtmosphereFrame(): void {
 }
 
 let styleApplyTimer = 0;
-function queueStyleApply(config: StyleConfig): void {
+function queueStyleApply(config: StyleConfig, meta?: { rebuildWorld?: boolean }): void {
   window.clearTimeout(styleApplyTimer);
-  styleApplyTimer = window.setTimeout(() => applyStyle(config), 40);
+  styleApplyTimer = window.setTimeout(() => applyStyle(config, meta), 40);
 }
 configurator.subscribe(queueStyleApply);
 

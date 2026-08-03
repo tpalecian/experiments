@@ -1,11 +1,15 @@
 /**
- * Headless smoke test for game engine setup + a few turns.
+ * Headless smoke test for game engine + island pipeline.
  * Run: npx tsx scripts/smoke.ts
  */
 import * as THREE from 'three';
+import { environmentFromAtmosphere, createDefaultEnvironmentState } from '../src/atmosphere/environment';
 import { hexCountForRings, MAP_SIZES, type MapSizeId } from '../src/game/board';
 import { GameEngine } from '../src/game/engine';
 import { legalSetupRoads, legalSetupSettlements } from '../src/game/rules';
+import { boardToRegionGraph } from '../src/gameplay/regions';
+import { findRoadPath } from '../src/gameplay/roads';
+import { enumerateSettlementSites, snapSettlementToTerrain } from '../src/gameplay/settlements';
 import {
   ATMOSPHERE_PRESETS,
   TimeOfDayController,
@@ -13,6 +17,7 @@ import {
   lerpAtmosphere,
   sampleAtmosphereAtPhase,
 } from '../src/render/atmosphere';
+import { generateIsland } from '../src/terrain/pipeline';
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -24,11 +29,11 @@ function playSetup(engine: GameEngine, players: number): void {
     assert(engine.phase === 'setupSettlement', `placement ${i} settlement phase`);
     const verts = legalSetupSettlements(engine.board);
     assert(verts.length > 0, `legal settlements at ${i}`);
-    assert(engine.placeSettlement(verts[0]), `place settlement ${i}`);
+    assert(engine.placeSettlement(verts[0]!), `place settlement ${i}`);
     assert(engine.phase === 'setupRoad', 'road phase');
     const edges = legalSetupRoads(engine.board, engine.currentPlayer, engine.lastSetupSettlement!);
     assert(edges.length > 0, `legal roads at ${i}`);
-    assert(engine.placeRoad(edges[0]), `place road ${i}`);
+    assert(engine.placeRoad(edges[0]!), `place road ${i}`);
   }
 }
 
@@ -77,7 +82,56 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(Math.abs(tod.phase - ((before + 0.25) % 1)) < 0.001, 'cycle advances 1/4 day');
   assert(tod.getCelestialDirection() instanceof THREE.Vector3, 'celestial vector');
 
+  const env = createDefaultEnvironmentState('day');
+  environmentFromAtmosphere(tod.getSnapshot(), tod.getCelestialDirection(), env);
+  assert(env.sunDirection.length() > 0.9, 'env sun from atmosphere');
+
   console.log('ok atmosphere day-cycle');
+}
+
+{
+  const engine = new GameEngine(7);
+  engine.startGame(2, 'standard', 7);
+  const graph = boardToRegionGraph(engine.board, 7);
+  assert(graph.regions.size === engine.board.hexes.size, 'region count = land hexes');
+
+  const world = generateIsland(
+    {
+      island: { seed: 7, radius: 8, falloff: 1.12, warp: 0.4 },
+      resolution: 64,
+      smoothPasses: 2,
+    },
+    engine.board,
+    graph,
+  );
+
+  assert(world.sdfField.length === 64 * 64, 'sdf field size');
+  assert(world.heightField.length === 64 * 64, 'height field size');
+  const center = world.sdf.sample(0, 0);
+  assert(center > 0, `island center should be land (d=${center})`);
+  const ocean = world.sdf.sample(world.grid.bounds.maxX * 0.95, world.grid.bounds.maxZ * 0.95);
+  assert(ocean < 0, `far corner should be ocean (d=${ocean})`);
+
+  // All region centers on land
+  for (const site of world.sites) {
+    const d = world.sdf.sample(site.x, site.z);
+    assert(d > 0, `site ${site.id} should be inland (d=${d})`);
+  }
+
+  const ids = [...graph.regions.keys()];
+  if (ids.length >= 2) {
+    const path = findRoadPath(graph, ids[0]!, ids[1]!);
+    assert(path.nodes.length >= 1, 'road path has nodes');
+  }
+
+  const sites = enumerateSettlementSites(graph, engine.board);
+  assert(sites.length > 0, 'settlement sites from board vertices');
+  const snapped = snapSettlementToTerrain(sites[0]!, world);
+  assert(Number.isFinite(snapped.y), 'settlement snaps to height');
+
+  console.log(
+    `ok island pipeline (regions=${graph.regions.size}, trees=${world.trees.length}, rocks=${world.rocks.length}, coastLoops=${world.coastline.length})`,
+  );
 }
 
 console.log('smoke ok');
