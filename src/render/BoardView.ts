@@ -131,6 +131,11 @@ export class BoardView {
     this.pickables = [];
 
     this.water.resize(board.rings);
+    const landCenters: { x: number; z: number }[] = [];
+    for (const hex of board.hexes.values()) {
+      landCenters.push(axialToWorld(hex.q, hex.r));
+    }
+    this.water.setLandHexes(landCenters, HEX_SIZE);
     this.root.add(this.water.mesh);
 
     // Full HEX_SIZE so neighbors meet edge-to-edge (matches axialToWorld / hexCorner spacing).
