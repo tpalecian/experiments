@@ -2,6 +2,25 @@
 
 Local hotseat Settlers of Catan built with Vite, TypeScript, and Three.js.
 
+## Vision
+
+The long-term look is a **handcrafted island**, not a board of tiles.
+
+- Gameplay runs on a **hidden region graph** (resources + adjacency).
+- Players never see hexes; terrain, water, beaches, and props come from **SDF + Voronoi + procedural meshes**.
+- Full architecture, pipeline, and milestone order: **[docs/VISION.md](docs/VISION.md)**.
+
+Scaffold modules (stubs, not yet wired into the live view):
+
+```
+src/terrain/   island · graph · voronoi · sdf · height · biome · coast · pipeline
+src/water/     shader · foam · waves
+src/world/     chunks · vegetation
+src/gameplay/  regions · roads · settlements
+```
+
+The current MVP still renders stylized hex tiles with tropical water; the vision modules are the migration target.
+
 ## Run
 
 ```bash
