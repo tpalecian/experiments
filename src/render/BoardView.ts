@@ -111,6 +111,7 @@ interface HexVisual {
   baseEmissive: number;
   numberToken: THREE.Mesh | null;
   numberRestY: number;
+  baseColor?: THREE.Color;
 }
 
 export class BoardView {
@@ -214,6 +215,29 @@ export class BoardView {
 
   applyAtmosphere(atm: AtmosphereSnapshot): void {
     this.water.applyAtmosphere(atm);
+    this.applyBoardTint(atm);
+  }
+
+  private applyBoardTint(atm: AtmosphereSnapshot): void {
+    const mix = atm.boardTintMix;
+    const tint = atm.beachTint;
+    for (const vis of this.hexVisuals.values()) {
+      const mat = vis.mesh.material as THREE.MeshToonMaterial;
+      const base = vis.baseColor ?? mat.color.clone();
+      vis.baseColor = base;
+      mat.color.copy(base).lerp(tint, mix);
+    }
+    for (const child of this.propsGroup.children) {
+      child.traverse((obj) => {
+        if (!(obj instanceof THREE.Mesh)) return;
+        const mat = obj.material;
+        if (!(mat instanceof THREE.MeshToonMaterial) && !(mat instanceof THREE.MeshBasicMaterial)) return;
+        const stored = obj.userData.baseColor as THREE.Color | undefined;
+        const base = stored ?? mat.color.clone();
+        obj.userData.baseColor = base;
+        mat.color.copy(base).lerp(tint, mix * 0.65);
+      });
+    }
   }
 
   build(board: BoardState): void {

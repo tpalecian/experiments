@@ -265,6 +265,7 @@ export class WaterSurface {
   private rings = 2;
   private readonly sunDir = new THREE.Vector3(0.4, 0.85, 0.3).normalize();
   private readonly hexCenters = emptyHexCenters();
+  private readonly tmpColor = new THREE.Color();
 
   constructor(config?: StyleConfig) {
     if (config) this.config = { ...config };
@@ -369,33 +370,50 @@ export class WaterSurface {
   }
 
   /**
-   * Apply game-level atmosphere: brightness, tint, specular, fresnel, caustics, sun color.
-   * Preserves style-crafted base palette while adapting water to time of day.
+   * Apply Environment State: scheme depth palettes, bands, foam, fresnel/specular/caustics.
+   * Craft StyleConfig bases compose with atmosphere (never rebuild the water mesh).
    */
   applyAtmosphere(atm: AtmosphereSnapshot): void {
     const u = this.material.uniforms;
     const bright = atm.waterBrightness;
-    const mix = atm.waterTintMix;
+    const tintMix = atm.waterTintMix;
     const tint = atm.waterTint;
+    const paletteMix = atm.waterPaletteMix;
 
-    const applyTint = (uniform: { value: THREE.Color }, baseHex: string) => {
-      uniform.value.set(baseHex).multiplyScalar(bright).lerp(tint, mix);
+    const tmp = this.tmpColor;
+    const composeBand = (craftHex: string, scheme: THREE.Color, uniform: { value: THREE.Color }) => {
+      tmp.set(craftHex).lerp(scheme, paletteMix);
+      tmp.multiplyScalar(bright).lerp(tint, tintMix);
+      uniform.value.copy(tmp);
     };
 
-    applyTint(u.uDeepOcean, this.config.waterDeepOcean);
-    applyTint(u.uOcean, this.config.waterOcean);
-    applyTint(u.uLagoon, this.config.waterLagoon);
-    applyTint(u.uShallow, this.config.waterShallow);
-    applyTint(u.uBeachEdge, this.config.waterBeachEdge);
+    composeBand(this.config.waterDeepOcean, atm.waterDeep, u.uDeepOcean);
+    composeBand(this.config.waterOcean, atm.waterOcean, u.uOcean);
+    composeBand(this.config.waterLagoon, atm.waterLagoon, u.uLagoon);
+    composeBand(this.config.waterShallow, atm.waterShallow, u.uShallow);
+    composeBand(this.config.waterBeachEdge, atm.waterShelf, u.uBeachEdge);
+
+    tmp.set(this.config.waterFoam).lerp(atm.waterFoamColor, paletteMix);
+    tmp.multiplyScalar(atm.foamBrightness);
+    u.uFoamColor.value.copy(tmp);
 
     u.uSunColor.value.copy(atm.waterSunColor);
     u.uSkyFresnel.value.copy(atm.skyFresnelColor);
-    // Dissolve into the same horizon the sky shader blooms — no leftover ocean fringe.
     u.uHorizon.value.copy(atm.skyHorizon);
     u.uHorizonHaze.value = atm.horizonHaze;
-    u.uSpecularIntensity.value = atm.waterSpecularIntensity;
-    u.uFresnelStrength.value = atm.waterFresnelStrength;
-    u.uCausticIntensity.value = atm.waterCausticIntensity;
+
+    // Craft bases × atmosphere response (afternoon craft refs as 1×).
+    const fresnelRef = 0.12;
+    const specularRef = 0.28;
+    const causticRef = 0.08;
+    u.uFresnelStrength.value =
+      this.config.waterFresnelStrength * (atm.waterFresnelStrength / Math.max(fresnelRef, 0.001));
+    u.uSpecularIntensity.value =
+      this.config.waterSpecularIntensity * (atm.waterSpecularIntensity / Math.max(specularRef, 0.001));
+    u.uCausticIntensity.value =
+      this.config.waterCausticIntensity * (atm.waterCausticIntensity / Math.max(causticRef, 0.001));
+    u.uBandIntensity.value = this.config.waterBandIntensity * atm.waveBandIntensity;
+    u.uShoreFoam.value = this.config.waterShoreFoam * atm.foamBrightness;
   }
 
   setSunDirection(dir: THREE.Vector3): void {
