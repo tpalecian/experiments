@@ -111,11 +111,23 @@ function applyStyle(config: StyleConfig, meta?: { rebuildWorld?: boolean }): voi
 function applyAtmosphereFrame(): void {
   const atm = dayCycle.getSnapshot();
   const dir = dayCycle.getCelestialDirection();
-  environmentFromAtmosphere(atm, dir, environmentState);
+  environmentFromAtmosphere(atm, dir, environmentState, {
+    waterDeepOcean: styleLive.waterDeepOcean,
+    waterOcean: styleLive.waterOcean,
+    waterLagoon: styleLive.waterLagoon,
+    waterShallow: styleLive.waterShallow,
+    waterBeachEdge: styleLive.waterBeachEdge,
+    waterFoam: styleLive.waterFoam,
+    waterBandIntensity: styleLive.waterBandIntensity,
+    waterFresnelStrength: styleLive.waterFresnelStrength,
+    waterSpecularIntensity: styleLive.waterSpecularIntensity,
+    waterCausticIntensity: styleLive.waterCausticIntensity,
+    waterShoreFoam: styleLive.waterShoreFoam,
+  });
 
   sky.applyAtmosphere(atm);
   sky.setSunDirection(dir);
-  boardView.applyAtmosphere(atm);
+  boardView.applyEnvironment(environmentState);
   boardView.setSunDirection(dir);
 
   // Craft sliders act as multipliers relative to afternoon defaults.

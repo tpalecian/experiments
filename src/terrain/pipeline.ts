@@ -31,7 +31,6 @@ import {
   buildGridSdf,
   buildIslandSdf,
   computeSignedDistanceField,
-  ensureSitesOnLand,
   type IslandSdf,
 } from './sdf';
 
@@ -161,35 +160,9 @@ export function generateIsland(
   mask = smoothIslandMask(mask, grid.width, grid.depth, params.smoothPasses);
   mask = distanceTransformSoften(mask, grid.width, grid.depth);
 
-  // Boost mask near gameplay sites so hex centers stay inland
-  const { width, depth, bounds } = grid;
-  for (const site of sites) {
-    const u = (site.x - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 1e-6);
-    const v = (site.z - bounds.minZ) / Math.max(bounds.maxZ - bounds.minZ, 1e-6);
-    const cx = Math.round(u * (width - 1));
-    const cz = Math.round(v * (depth - 1));
-    const rad = Math.max(3, Math.ceil(1.1 / ((bounds.maxX - bounds.minX) / Math.max(width - 1, 1))));
-    for (let dz = -rad; dz <= rad; dz++) {
-      for (let dx = -rad; dx <= rad; dx++) {
-        const ix = cx + dx;
-        const iz = cz + dz;
-        if (ix < 0 || iz < 0 || ix >= width || iz >= depth) continue;
-        const px =
-          bounds.minX + (ix / Math.max(width - 1, 1)) * (bounds.maxX - bounds.minX);
-        const pz =
-          bounds.minZ + (iz / Math.max(depth - 1, 1)) * (bounds.maxZ - bounds.minZ);
-        const dist = Math.hypot(px - site.x, pz - site.z);
-        if (dist < 1.05) {
-          const boost = (1 - dist / 1.05) * 0.35;
-          const i = iz * width + ix;
-          mask[i] = Math.min(1, mask[i]! + boost);
-        }
-      }
-    }
-  }
-
+  // Coastline stays organic — do not boost mask or lift SDF toward hex sites.
+  // Size the island radius (via islandRadiusScale) so the board footprint sits inland.
   const sdfField = computeSignedDistanceField(mask, grid);
-  ensureSitesOnLand(sdfField, grid, sites, 0.45);
   const sdf = buildGridSdf(sdfField, grid);
 
   const heightParams = { ...params.height, verticalScale: params.verticalScale };

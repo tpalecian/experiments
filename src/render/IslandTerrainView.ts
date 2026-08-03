@@ -1,14 +1,15 @@
 /**
  * Organic island terrain mesh from coastline SDF height field.
+ * Beach / biome albedo can recolor live from Environment State — no SDF regen.
  */
 
 import * as THREE from 'three';
+import type { EnvironmentState } from '../atmosphere/environment';
 import type { BeachParams } from '../terrain/beach';
 import { beachWeights } from '../terrain/beach';
 import { biomeIndexToKind } from '../terrain/biome';
 import type { WorldData } from '../world/types';
 import { worldXZ } from '../world/types';
-import type { AtmosphereSnapshot } from '../render/atmosphere';
 import type { StyleConfig } from '../render/styleConfig';
 
 const BIOME_COLORS: Record<string, THREE.Color> = {
@@ -30,6 +31,8 @@ export class IslandTerrainView {
   private scatterGroup = new THREE.Group();
   private beachTint = new THREE.Color(0xf5e6c8);
   private configBeach: BeachParams = { wetEnd: 0.55, dryEnd: 1.35 };
+  private world: WorldData | null = null;
+  private showSdfOverlay = false;
 
   constructor() {
     this.group.add(this.scatterGroup);
@@ -38,14 +41,15 @@ export class IslandTerrainView {
   build(world: WorldData, showSdfOverlay = false): void {
     this.disposeMesh();
     this.scatterGroup.clear();
-    this.configBeach = world.params.beach;
+    this.world = world;
+    this.configBeach = { ...world.params.beach };
+    this.showSdfOverlay = showSdfOverlay;
 
-    const { grid, heightField, sdfField, biomeField } = world;
+    const { grid, heightField, sdfField } = world;
     const { width, depth } = grid;
     const positions = new Float32Array(width * depth * 3);
     const colors = new Float32Array(width * depth * 3);
     const uvs = new Float32Array(width * depth * 2);
-    const tmp = new THREE.Color();
 
     for (let iz = 0; iz < depth; iz++) {
       for (let ix = 0; ix < width; ix++) {
@@ -58,25 +62,9 @@ export class IslandTerrainView {
         positions[pi + 2] = z;
         uvs[i * 2] = ix / Math.max(width - 1, 1);
         uvs[i * 2 + 1] = iz / Math.max(depth - 1, 1);
-
-        const d = sdfField[i]!;
-        const bw = beachWeights(d, this.configBeach);
-        const biome = biomeIndexToKind(biomeField[i]!);
-        const land = BIOME_COLORS[biome] ?? BIOME_COLORS.desert!;
-        tmp.copy(land);
-        if (d < 0) {
-          tmp.set(0x1a6a7a);
-        } else {
-          tmp.lerp(WET_SAND, bw.wet);
-          tmp.lerp(DRY_SAND, bw.dry);
-          // Keep grass/biome where beach weights say grass
-          if (bw.grass > 0.5) tmp.copy(land);
-          else if (bw.grass > 0) tmp.lerp(land, bw.grass);
-        }
-        tmp.multiply(this.beachTint);
-        colors[pi] = tmp.r;
-        colors[pi + 1] = tmp.g;
-        colors[pi + 2] = tmp.b;
+        colors[pi] = 0.5;
+        colors[pi + 1] = 0.6;
+        colors[pi + 2] = 0.4;
       }
     }
 
@@ -87,7 +75,6 @@ export class IslandTerrainView {
         const b = a + 1;
         const c = a + width;
         const d = c + 1;
-        // Skip fully underwater quads (water shader covers sea)
         const d00 = sdfField[a]!;
         const d10 = sdfField[b]!;
         const d01 = sdfField[c]!;
@@ -113,20 +100,33 @@ export class IslandTerrainView {
     this.mesh.userData = { kind: 'islandTerrain' };
     this.group.add(this.mesh);
 
-    if (showSdfOverlay) {
-      this.buildSdfOverlay(world);
+    this.recolorTerrain();
+    this.syncSdfOverlay();
+  }
+
+  /** Toggle SDF debug plane without regenerating world data. */
+  setSdfOverlayVisible(visible: boolean): void {
+    this.showSdfOverlay = visible;
+    this.syncSdfOverlay();
+  }
+
+  private syncSdfOverlay(): void {
+    if (!this.showSdfOverlay || !this.world) {
+      if (this.sdfOverlay) {
+        this.group.remove(this.sdfOverlay);
+        this.sdfOverlay.geometry.dispose();
+        const mat = this.sdfOverlay.material as THREE.MeshBasicMaterial;
+        mat.map?.dispose();
+        mat.dispose();
+        this.sdfOverlay = null;
+      }
+      return;
     }
+    if (this.sdfOverlay) return;
+    this.buildSdfOverlay(this.world);
   }
 
   private buildSdfOverlay(world: WorldData): void {
-    if (this.sdfOverlay) {
-      this.group.remove(this.sdfOverlay);
-      this.sdfOverlay.geometry.dispose();
-      const oldMat = this.sdfOverlay.material as THREE.MeshBasicMaterial;
-      oldMat.map?.dispose();
-      oldMat.dispose();
-      this.sdfOverlay = null;
-    }
     const tex = createSdfDebugTexture(world);
     const { bounds } = world.grid;
     const w = bounds.maxX - bounds.minX;
@@ -150,40 +150,65 @@ export class IslandTerrainView {
     this.scatterGroup.add(rocks);
   }
 
-  applyAtmosphere(atm: AtmosphereSnapshot): void {
-    // Soft beach tint from sky warmth
-    this.beachTint.setRGB(
-      0.85 + atm.exposure * 0.08,
-      0.82 + atm.hemiIntensity * 0.05,
-      0.75 + atm.starsIntensity * 0.05,
-    );
+  /** Live Environment State — beach tint / emissive only; never rebuilds meshes. */
+  applyEnvironment(env: EnvironmentState): void {
+    const tintChanged = !this.beachTint.equals(env.beachTint);
+    this.beachTint.copy(env.beachTint);
+    if (tintChanged) this.recolorTerrain();
     if (this.mesh) {
       const mat = this.mesh.material as THREE.MeshToonMaterial;
-      mat.emissive.copy(atm.fogColor).multiplyScalar(0.02);
+      mat.emissive.copy(env.fogColor).multiplyScalar(0.02 * env.shadowStrength);
     }
   }
 
-  applyStyleConfig(_config: StyleConfig): void {
-    // Generation knobs rebuild via BoardView; look tints live above.
+  applyStyleConfig(config: StyleConfig): void {
+    const next: BeachParams = {
+      wetEnd: config.beachWetEnd,
+      dryEnd: config.beachDryEnd,
+    };
+    const changed =
+      next.wetEnd !== this.configBeach.wetEnd || next.dryEnd !== this.configBeach.dryEnd;
+    this.configBeach = next;
+    if (changed) this.recolorTerrain();
+    this.setSdfOverlayVisible(config.showSdfOverlay);
   }
 
-  sampleHeight(world: WorldData, x: number, z: number): number {
-    const { grid, heightField } = world;
-    const u = (x - grid.bounds.minX) / Math.max(grid.bounds.maxX - grid.bounds.minX, 1e-6);
-    const v = (z - grid.bounds.minZ) / Math.max(grid.bounds.maxZ - grid.bounds.minZ, 1e-6);
-    const fx = Math.max(0, Math.min(grid.width - 1, u * (grid.width - 1)));
-    const fz = Math.max(0, Math.min(grid.depth - 1, v * (grid.depth - 1)));
-    const x0 = Math.floor(fx);
-    const z0 = Math.floor(fz);
-    const x1 = Math.min(grid.width - 1, x0 + 1);
-    const z1 = Math.min(grid.depth - 1, z0 + 1);
-    const tx = fx - x0;
-    const tz = fz - z0;
-    const a = heightField[z0 * grid.width + x0]!;
-    const b = heightField[z0 * grid.width + x1]!;
-    const c = heightField[z1 * grid.width + x0]!;
-    const d = heightField[z1 * grid.width + x1]!;
-    return a * (1 - tx) * (1 - tz) + b * tx * (1 - tz) + c * (1 - tx) * tz + d * tx * tz;
+  /**
+   * Recompute vertex colours from static SDF + biome fields and live beach look.
+   * Does not touch height / topology.
+   */
+  recolorTerrain(): void {
+    if (!this.mesh || !this.world) return;
+    const { grid, sdfField, biomeField } = this.world;
+    const { width, depth } = grid;
+    const attr = this.mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
+    const colors = attr.array as Float32Array;
+    const tmp = new THREE.Color();
+
+    for (let iz = 0; iz < depth; iz++) {
+      for (let ix = 0; ix < width; ix++) {
+        const i = iz * width + ix;
+        const pi = i * 3;
+        const d = sdfField[i]!;
+        const bw = beachWeights(d, this.configBeach);
+        const biome = biomeIndexToKind(biomeField[i]!);
+        const land = BIOME_COLORS[biome] ?? BIOME_COLORS.desert!;
+        tmp.copy(land);
+        if (d < 0) {
+          tmp.set(0x1a6a7a);
+        } else {
+          tmp.lerp(WET_SAND, bw.wet);
+          tmp.lerp(DRY_SAND, bw.dry);
+          if (bw.grass > 0.5) tmp.copy(land);
+          else if (bw.grass > 0) tmp.lerp(land, bw.grass);
+        }
+        tmp.multiply(this.beachTint);
+        colors[pi] = tmp.r;
+        colors[pi + 1] = tmp.g;
+        colors[pi + 2] = tmp.b;
+      }
+    }
+    attr.needsUpdate = true;
   }
 
   private disposeMesh(): void {
@@ -206,14 +231,14 @@ export class IslandTerrainView {
   dispose(): void {
     this.disposeMesh();
     this.scatterGroup.clear();
+    this.world = null;
   }
 }
 
-/** Upload signed SDF as a Red float texture; values remapped for viz / shaders. */
+/** Upload signed SDF as a Red float texture. */
 export function createSdfDataTexture(world: WorldData): THREE.DataTexture {
   const { width, depth } = world.grid;
   const data = new Float32Array(width * depth);
-  // Store raw signed distance (shaders interpret in world units)
   for (let i = 0; i < data.length; i++) {
     data[i] = world.sdfField[i]!;
   }

@@ -97,7 +97,7 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
 
   const world = generateIsland(
     {
-      island: { seed: 7, radius: 8, falloff: 1.12, warp: 0.4 },
+      island: { seed: 7, radius: 10, falloff: 1.12, warp: 0.35 },
       resolution: 64,
       smoothPasses: 2,
     },
@@ -112,11 +112,36 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   const ocean = world.sdf.sample(world.grid.bounds.maxX * 0.95, world.grid.bounds.maxZ * 0.95);
   assert(ocean < 0, `far corner should be ocean (d=${ocean})`);
 
-  // All region centers on land
+  // Organic coast: do not mutate SDF toward hexes. With a generous radius,
+  // the board footprint should still sit inland.
+  let inland = 0;
   for (const site of world.sites) {
-    const d = world.sdf.sample(site.x, site.z);
-    assert(d > 0, `site ${site.id} should be inland (d=${d})`);
+    if (world.sdf.sample(site.x, site.z) > 0) inland++;
   }
+  assert(
+    inland === world.sites.length,
+    `all region centers inland without coast mutation (${inland}/${world.sites.length})`,
+  );
+
+  const env = createDefaultEnvironmentState('day');
+  const todEnv = new TimeOfDayController('afternoon');
+  environmentFromAtmosphere(todEnv.getSnapshot(), todEnv.getCelestialDirection(), env, {
+    waterDeepOcean: '#1FAFD4',
+    waterOcean: '#37C9D9',
+    waterLagoon: '#62E7E0',
+    waterShallow: '#8CF7EC',
+    waterBeachEdge: '#DDFCF8',
+    waterFoam: '#FFFFFF',
+    waterBandIntensity: 0.11,
+    waterFresnelStrength: 0.12,
+    waterSpecularIntensity: 0.28,
+    waterCausticIntensity: 0.08,
+    waterShoreFoam: 0.55,
+  });
+  assert(env.waterDeepColor.r > 0 || env.waterDeepColor.g > 0, 'env water palette filled');
+  assert(env.waterShallowColor.g > 0, 'env shallow colour set');
+  assert(env.beachTint.r > 0, 'env beach tint set');
+  assert(env.horizonHaze >= 0, 'env horizon haze set');
 
   const ids = [...graph.regions.keys()];
   if (ids.length >= 2) {

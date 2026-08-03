@@ -381,7 +381,7 @@ const FIELDS: FieldDef[] = [
     max: 1.2,
     step: 0.05,
   },
-  // Coast & beach
+  // Coast & beach — look only (recolors live from static SDF)
   {
     key: 'beachWetEnd',
     label: 'Wet sand end',
@@ -391,7 +391,6 @@ const FIELDS: FieldDef[] = [
     min: 0.1,
     max: 2,
     step: 0.05,
-    rebuildsWorld: true,
   },
   {
     key: 'beachDryEnd',
@@ -402,77 +401,8 @@ const FIELDS: FieldDef[] = [
     min: 0.4,
     max: 4,
     step: 0.05,
-    rebuildsWorld: true,
   },
-  // Terrain biomes
-  {
-    key: 'islandVerticalScale',
-    label: 'Vertical scale',
-    kind: 'range',
-    category: 'terrainBiome',
-    subsection: 'height',
-    min: 0.02,
-    max: 0.15,
-    step: 0.005,
-    rebuildsWorld: true,
-  },
-  {
-    key: 'islandLargeNoise',
-    label: 'Large noise',
-    kind: 'range',
-    category: 'terrainBiome',
-    subsection: 'height',
-    min: 0,
-    max: 0.6,
-    step: 0.02,
-    rebuildsWorld: true,
-  },
-  {
-    key: 'islandSmallNoise',
-    label: 'Small noise',
-    kind: 'range',
-    category: 'terrainBiome',
-    subsection: 'height',
-    min: 0,
-    max: 0.25,
-    step: 0.01,
-    rebuildsWorld: true,
-  },
-  {
-    key: 'biomeBlur',
-    label: 'Biome blur',
-    kind: 'range',
-    category: 'terrainBiome',
-    subsection: 'biomes',
-    min: 0.4,
-    max: 3,
-    step: 0.1,
-    rebuildsWorld: true,
-  },
-  // Vegetation / rocks
-  {
-    key: 'treeDensity',
-    label: 'Tree density',
-    kind: 'range',
-    category: 'vegetation',
-    subsection: 'scatter',
-    min: 0,
-    max: 1,
-    step: 0.05,
-    rebuildsWorld: true,
-  },
-  {
-    key: 'rockDensity',
-    label: 'Rock density',
-    kind: 'range',
-    category: 'rocks',
-    subsection: 'scatter',
-    min: 0,
-    max: 1,
-    step: 0.05,
-    rebuildsWorld: true,
-  },
-  // World generation
+  // World generation (all rebuild knobs live here — Generate tag)
   {
     key: 'islandSeed',
     label: 'Seed',
@@ -491,7 +421,7 @@ const FIELDS: FieldDef[] = [
     category: 'world',
     subsection: 'mask',
     min: 0.85,
-    max: 1.4,
+    max: 1.6,
     step: 0.01,
     rebuildsWorld: true,
   },
@@ -539,6 +469,72 @@ const FIELDS: FieldDef[] = [
     step: 16,
     rebuildsWorld: true,
   },
+  {
+    key: 'islandVerticalScale',
+    label: 'Vertical scale',
+    kind: 'range',
+    category: 'world',
+    subsection: 'height',
+    min: 0.02,
+    max: 0.15,
+    step: 0.005,
+    rebuildsWorld: true,
+  },
+  {
+    key: 'islandLargeNoise',
+    label: 'Large noise',
+    kind: 'range',
+    category: 'world',
+    subsection: 'height',
+    min: 0,
+    max: 0.6,
+    step: 0.02,
+    rebuildsWorld: true,
+  },
+  {
+    key: 'islandSmallNoise',
+    label: 'Small noise',
+    kind: 'range',
+    category: 'world',
+    subsection: 'height',
+    min: 0,
+    max: 0.25,
+    step: 0.01,
+    rebuildsWorld: true,
+  },
+  {
+    key: 'biomeBlur',
+    label: 'Biome blur',
+    kind: 'range',
+    category: 'world',
+    subsection: 'biomes',
+    min: 0.4,
+    max: 3,
+    step: 0.1,
+    rebuildsWorld: true,
+  },
+  {
+    key: 'treeDensity',
+    label: 'Tree density',
+    kind: 'range',
+    category: 'world',
+    subsection: 'scatter',
+    min: 0,
+    max: 1,
+    step: 0.05,
+    rebuildsWorld: true,
+  },
+  {
+    key: 'rockDensity',
+    label: 'Rock density',
+    kind: 'range',
+    category: 'world',
+    subsection: 'scatter',
+    min: 0,
+    max: 1,
+    step: 0.05,
+    rebuildsWorld: true,
+  },
   // Debug
   {
     key: 'showHexOverlay',
@@ -553,7 +549,6 @@ const FIELDS: FieldDef[] = [
     kind: 'toggle',
     category: 'debug',
     subsection: 'overlays',
-    rebuildsWorld: true,
   },
 ];
 
@@ -628,8 +623,8 @@ export class StyleConfigurator {
   }
 
   private syncPendingBadge(): void {
-    const badge = this.panel.querySelector('[data-pending]');
-    if (badge) badge.classList.toggle('hidden', !this.pendingRebuild);
+    const bar = this.panel.querySelector('[data-pending-bar]');
+    if (bar) bar.classList.toggle('hidden', !this.pendingRebuild);
   }
 
   private syncFieldLabels(): void {
@@ -668,7 +663,9 @@ export class StyleConfigurator {
       const catFields = byCat.get(cat.id);
       if (!catFields || catFields.length === 0) return '';
       const open = !this.collapsed.has(cat.id);
-      const generate = cat.rebuildsWorld;
+      const generate =
+        cat.rebuildsWorld ||
+        catFields.some((f) => f.rebuildsWorld || WORLD_REBUILD_KEYS.includes(f.key));
       const subsections = new Map<string, FieldDef[]>();
       for (const f of catFields) {
         const list = subsections.get(f.subsection) ?? [];
@@ -691,12 +688,6 @@ export class StyleConfigurator {
             `,
               )
               .join('')}
-            ${
-              generate
-                ? `<button type="button" class="btn" data-action="apply-generate">Apply regenerate</button>
-                   <span data-pending class="pending-badge ${this.pendingRebuild ? '' : 'hidden'}">pending</span>`
-                : ''
-            }
           </div>
         </div>`;
     }).join('');
@@ -710,6 +701,10 @@ export class StyleConfigurator {
           <h3>Craft configurator</h3>
           <p>Look tweaks apply live. Generation knobs rebuild the island on Apply.</p>
           <input type="search" class="style-search" placeholder="Search fields…" value="${escapeAttr(this.search)}" data-action="search" />
+          <div class="generate-apply-bar ${this.pendingRebuild ? '' : 'hidden'}" data-pending-bar>
+            <span data-pending class="pending-badge">World changes pending</span>
+            <button type="button" class="btn" data-action="apply-generate">Apply regenerate</button>
+          </div>
         </div>
         ${catsHtml}
         <div class="style-config-actions">
@@ -804,18 +799,9 @@ export class StyleConfigurator {
           this.setLive(key, el.value);
         } else if (el instanceof HTMLInputElement && el.type === 'checkbox') {
           const v = el.checked;
-          if (field?.rebuildsWorld || WORLD_REBUILD_KEYS.includes(key)) {
-            this.draft = { ...this.draft, [key]: v };
-            this.config = { ...this.config, [key]: v };
-            if (key === 'showHexOverlay') {
-              this.emit(false);
-            } else {
-              this.pendingRebuild = true;
-              this.emit(false);
-              this.syncPendingBadge();
-            }
-          } else {
-            this.setLive(key, v);
+          this.setLive(key, v);
+          if (key === 'showSdfOverlay' || key === 'showHexOverlay') {
+            // live look / debug — no rebuild
           }
         } else if (el instanceof HTMLSelectElement) {
           this.setLive(key, el.value);

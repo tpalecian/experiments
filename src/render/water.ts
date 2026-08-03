@@ -5,6 +5,7 @@ import type { StyleConfig } from './styleConfig';
 import { DEFAULT_STYLE_CONFIG } from './styleConfig';
 import type { WorldData } from '../world/types';
 import { createSdfDataTexture } from './IslandTerrainView';
+import type { EnvironmentState } from '../atmosphere/environment';
 
 /** Max land hexes supported by the fallback hex shoreline SDF (huge map = 61). */
 export const WATER_MAX_HEXES = 64;
@@ -355,29 +356,29 @@ export class WaterSurface {
     if (nextSegs !== prevSegs) this.rebuildGeometry(this.rings, nextSegs);
   }
 
-  applyAtmosphere(atm: AtmosphereSnapshot): void {
+  applyAtmosphere(_atm: AtmosphereSnapshot): void {
+    // Prefer applyEnvironment — kept for API compatibility during migration.
+  }
+
+  /** Live Environment State drives water look — never regenerates SDF/mesh. */
+  applyEnvironment(env: EnvironmentState): void {
     const u = this.material.uniforms;
-    const bright = atm.waterBrightness;
-    const mix = atm.waterTintMix;
-    const tint = atm.waterTint;
-
-    const applyTint = (uniform: { value: THREE.Color }, baseHex: string) => {
-      uniform.value.set(baseHex).multiplyScalar(bright).lerp(tint, mix);
-    };
-
-    applyTint(u.uDeepOcean, this.config.waterDeepOcean);
-    applyTint(u.uOcean, this.config.waterOcean);
-    applyTint(u.uLagoon, this.config.waterLagoon);
-    applyTint(u.uShallow, this.config.waterShallow);
-    applyTint(u.uBeachEdge, this.config.waterBeachEdge);
-
-    u.uSunColor.value.copy(atm.waterSunColor);
-    u.uSkyFresnel.value.copy(atm.skyFresnelColor);
-    u.uHorizon.value.copy(atm.skyHorizon);
-    u.uHorizonHaze.value = atm.horizonHaze;
-    u.uSpecularIntensity.value = atm.waterSpecularIntensity;
-    u.uFresnelStrength.value = atm.waterFresnelStrength;
-    u.uCausticIntensity.value = atm.waterCausticIntensity;
+    u.uDeepOcean.value.copy(env.waterDeepColor);
+    u.uOcean.value.copy(env.waterOceanColor);
+    u.uLagoon.value.copy(env.waterLagoonColor);
+    u.uShallow.value.copy(env.waterShallowColor);
+    u.uBeachEdge.value.copy(env.waterShelfColor);
+    u.uFoamColor.value.copy(env.waterFoamColor);
+    u.uSunColor.value.copy(env.waterSunColor);
+    u.uSkyFresnel.value.copy(env.skyFresnelColor);
+    u.uHorizon.value.copy(env.skyHorizonColor);
+    u.uHorizonHaze.value = env.horizonHaze;
+    u.uBandIntensity.value = env.waveBandIntensity;
+    u.uFresnelStrength.value = env.fresnelStrength;
+    u.uSpecularIntensity.value = env.specularIntensity;
+    u.uCausticIntensity.value = env.causticIntensity;
+    u.uShoreFoam.value = env.foamBrightness;
+    this.setSunDirection(env.sunDirection);
   }
 
   setSunDirection(dir: THREE.Vector3): void {
@@ -404,6 +405,8 @@ export class WaterSurface {
     this.material.uniforms.uSdfMap.value = this.sdfTexture;
     this.material.uniforms.uSdfBounds.value.set(b.minX, b.minZ, b.maxX, b.maxZ);
     this.material.uniforms.uUseIslandSdf.value = 1;
+    // Hex shoreline fallback unused while island SDF is active
+    this.material.uniforms.uHexCount.value = 0;
   }
 
   clearIslandSdf(): void {

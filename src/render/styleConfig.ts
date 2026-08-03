@@ -148,7 +148,7 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   hemiIntensity: 0.95,
 
   islandSeed: 42,
-  islandRadiusScale: 1.05,
+  islandRadiusScale: 1.28,
   islandFalloff: 1.12,
   islandWarp: 0.42,
   islandSmoothPasses: 2,
@@ -166,7 +166,7 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   showSdfOverlay: false,
 };
 
-/** Keys that require regenerating WorldData. */
+/** Keys that require regenerating WorldData (geometry / SDF / scatter). */
 export const WORLD_REBUILD_KEYS: (keyof StyleConfig)[] = [
   'islandSeed',
   'islandRadiusScale',
@@ -177,12 +177,15 @@ export const WORLD_REBUILD_KEYS: (keyof StyleConfig)[] = [
   'islandVerticalScale',
   'islandLargeNoise',
   'islandSmallNoise',
-  'beachWetEnd',
-  'beachDryEnd',
   'biomeBlur',
   'treeDensity',
   'rockDensity',
-  'showSdfOverlay',
+];
+
+/** Look knobs that recolor terrain without regenerating SDF/meshes. */
+export const TERRAIN_LOOK_KEYS: (keyof StyleConfig)[] = [
+  'beachWetEnd',
+  'beachDryEnd',
 ];
 
 const STORAGE_KEY = 'catan-style-config-v6';

@@ -22,6 +22,7 @@ import type { StyleConfig } from './styleConfig';
 import { DEFAULT_STYLE_CONFIG, styleToWorldPartial } from './styleConfig';
 import { IslandTerrainView } from './IslandTerrainView';
 import { WaterSurface } from './water';
+import type { EnvironmentState } from '../atmosphere/environment';
 
 const TILE_HEIGHT = 0.28;
 
@@ -150,9 +151,14 @@ export class BoardView {
     this.syncPieces(b);
   }
 
-  applyAtmosphere(atm: AtmosphereSnapshot): void {
-    this.water.applyAtmosphere(atm);
-    this.island.applyAtmosphere(atm);
+  applyAtmosphere(_atm: AtmosphereSnapshot): void {
+    // Prefer applyEnvironment.
+  }
+
+  /** Island/water look from Environment State — never regenerates world data. */
+  applyEnvironment(env: EnvironmentState): void {
+    this.water.applyEnvironment(env);
+    this.island.applyEnvironment(env);
   }
 
   build(board: BoardState): void {
@@ -296,12 +302,6 @@ export class BoardView {
       createRockScatterGroup(this.world.rocks),
     );
     this.water.setIslandSdf(this.world);
-    // Keep hex centers for fallback if SDF cleared
-    const landCenters: { x: number; z: number }[] = [];
-    for (const hex of board.hexes.values()) {
-      landCenters.push(axialToWorld(hex.q, hex.r));
-    }
-    this.water.setLandHexes(landCenters, HEX_SIZE);
   }
 
   private heightAt(x: number, z: number): number {
