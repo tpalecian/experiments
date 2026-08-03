@@ -62,8 +62,8 @@ export interface StyleConfig {
 }
 
 export const DEFAULT_STYLE_CONFIG: StyleConfig = {
-  cloudCount: 8,
-  cloudScale: 7,
+  cloudCount: 2,
+  cloudScale: 2.5,
   cloudOrbitMin: 14,
   cloudOrbitMax: 24,
   cloudHeightMin: 6,
