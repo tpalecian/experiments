@@ -13,17 +13,17 @@ import { worldXZ } from '../world/types';
 import type { StyleConfig } from '../render/styleConfig';
 
 const BIOME_COLORS: Record<string, THREE.Color> = {
-  // Reference tropical: saturated grass plateau
-  forest: new THREE.Color(0x2f8a38),
-  wheat: new THREE.Color(0xe0c84a),
-  ore: new THREE.Color(0x6a707c),
-  brick: new THREE.Color(0xc4784e),
-  pasture: new THREE.Color(0x4eb83c),
-  desert: new THREE.Color(0xeddfa8),
+  // Unmistakable Catan biomes — saturated, readable from altitude
+  forest: new THREE.Color(0x1f7a32),
+  wheat: new THREE.Color(0xf0c93a),
+  ore: new THREE.Color(0x5c6575),
+  brick: new THREE.Color(0xd06a3a),
+  pasture: new THREE.Color(0x58c94a),
+  desert: new THREE.Color(0xf2e0a0),
 };
 
-const WET_SAND = new THREE.Color(0xf0e6d0);
-const DRY_SAND = new THREE.Color(0xfff8ec);
+const WET_SAND = new THREE.Color(0xfff6e0);
+const DRY_SAND = new THREE.Color(0xfffaf0);
 
 export class IslandTerrainView {
   readonly group = new THREE.Group();
@@ -92,8 +92,11 @@ export class IslandTerrainView {
     geom.setIndex(indices);
     geom.computeVertexNormals();
 
-    const mat = new THREE.MeshToonMaterial({
+    const mat = new THREE.MeshStandardMaterial({
       vertexColors: true,
+      roughness: 0.92,
+      metalness: 0.0,
+      flatShading: true,
     });
     this.mesh = new THREE.Mesh(geom, mat);
     this.mesh.receiveShadow = true;
@@ -157,8 +160,8 @@ export class IslandTerrainView {
     this.beachTint.copy(env.beachTint);
     if (tintChanged) this.recolorTerrain();
     if (this.mesh) {
-      const mat = this.mesh.material as THREE.MeshToonMaterial;
-      mat.emissive.copy(env.fogColor).multiplyScalar(0.02 * env.shadowStrength);
+      const mat = this.mesh.material as THREE.MeshStandardMaterial;
+      mat.emissive.copy(env.fogColor).multiplyScalar(0.015 * env.shadowStrength);
     }
   }
 
@@ -206,6 +209,10 @@ export class IslandTerrainView {
           else if (bw.grass > 0) tmp.lerp(land, bw.grass);
         }
         tmp.multiply(this.beachTint);
+        // Keep biome chroma strong — don't let tint mute plateaus
+        if (bw.grass > 0.55 && d > 0) {
+          tmp.lerp(land, 0.55);
+        }
         colors[pi] = tmp.r;
         colors[pi + 1] = tmp.g;
         colors[pi + 2] = tmp.b;
@@ -238,18 +245,25 @@ export class IslandTerrainView {
   }
 }
 
-/** Upload signed SDF as a Red float texture. */
+/** Upload signed SDF as RGBA float (R = distanceToCoast). RGBA is widely supported. */
 export function createSdfDataTexture(world: WorldData): THREE.DataTexture {
   const { width, depth } = world.grid;
-  const data = new Float32Array(width * depth);
-  for (let i = 0; i < data.length; i++) {
-    data[i] = world.sdfField[i]!;
+  const data = new Float32Array(width * depth * 4);
+  for (let i = 0; i < width * depth; i++) {
+    const d = world.sdfField[i]!;
+    const o = i * 4;
+    data[o] = d;
+    data[o + 1] = d;
+    data[o + 2] = d;
+    data[o + 3] = 1;
   }
-  const tex = new THREE.DataTexture(data, width, depth, THREE.RedFormat, THREE.FloatType);
+  const tex = new THREE.DataTexture(data, width, depth, THREE.RGBAFormat, THREE.FloatType);
   tex.wrapS = THREE.ClampToEdgeWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
   tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  tex.flipY = false;
   tex.needsUpdate = true;
   return tex;
 }

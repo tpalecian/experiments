@@ -54,14 +54,14 @@ export interface Heightmap {
  */
 export function terrainCurve(d: DistanceToCoast): number {
   if (d < 0) {
-    if (d > -0.65) return d * 0.015;
-    return Math.max(d, -40) * 0.016;
+    if (d > -0.8) return d * 0.012;
+    return Math.max(d, -40) * 0.014;
   }
-  // Reference look: wide flat white beach → short lip → broad grassy plateau
-  if (d < 1.15) return d * 0.045;
-  if (d < 1.7) return 0.052 + (d - 1.15) * 0.28;
-  if (d < 6.0) return 0.206 + (d - 1.7) * 0.035;
-  return 0.356 + (d - 6.0) * 0.07;
+  // Fat white beach shelf → clear lip → broad high plateau (reads from altitude)
+  if (d < 1.5) return d * 0.055;
+  if (d < 2.2) return 0.082 + (d - 1.5) * 0.38;
+  if (d < 7.0) return 0.348 + (d - 2.2) * 0.04;
+  return 0.54 + (d - 7.0) * 0.08;
 }
 
 /**

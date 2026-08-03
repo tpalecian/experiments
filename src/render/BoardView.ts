@@ -302,7 +302,7 @@ export class BoardView {
 
   private buildIsland(board: BoardState): void {
     const partial = styleToWorldPartial(this.style);
-    const layoutScale = partial.layoutScale ?? 5.2;
+    const layoutScale = partial.layoutScale ?? 3.6;
     const r = boardRadiusWorld(board.rings) * this.style.islandRadiusScale * layoutScale;
     const graph = boardToRegionGraph(board, this.style.islandSeed);
     this.world = generateIsland(

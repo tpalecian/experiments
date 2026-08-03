@@ -96,8 +96,8 @@ export function buildPerSiteIslands(
     return [{ x: 0, z: 0, radius: params.radius, biome: 'pasture' }];
   }
   const sep = minSiteSeparation(sites);
-  // Keep a clear water gap: coast ~0.72*radius, so 2*0.36*sep leaves ~28% channel
-  const radius = Math.max(2.4, sep * 0.36);
+  // Fat islands with a thin sandbar gap (reference look)
+  const radius = Math.max(3.0, sep * 0.46);
   return sites.map((s) => ({
     x: s.x,
     z: s.z,

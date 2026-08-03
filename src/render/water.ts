@@ -148,23 +148,23 @@ float softCaustic(vec2 p, float t) {
 
 void main() {
   float shoreDist = shoreDistance(vWorldPos.xz);
-  float shore = max(uShoreWidth, 0.001);
-  float deepSpan = max(uDeepFade, 0.001);
 
   // Under land — keep water out
-  if (shoreDist < -0.02) discard;
+  if (shoreDist < -0.04) discard;
 
-  float d0 = 0.0;
-  float d1 = shore * 0.22;
-  float d2 = shore * 0.55;
-  float d3 = shore * 1.05;
-  float d4 = shore + deepSpan;
+  // Fixed tropical bands in world units (readable like the reference aerial)
+  float b0 = 0.0;
+  float b1 = 1.1;   // beach edge / foam
+  float b2 = 3.2;   // bright turquoise shallow
+  float b3 = 6.5;   // lagoon
+  float b4 = 12.0;  // ocean
+  float b5 = 22.0;  // deep
 
-  float tBeach = 1.0 - smoothstep(d0, d1, shoreDist);
-  float tShallow = smoothstep(d0, d1, shoreDist) * (1.0 - smoothstep(d1, d2, shoreDist));
-  float tLagoon = smoothstep(d1, d2, shoreDist) * (1.0 - smoothstep(d2, d3, shoreDist));
-  float tOcean = smoothstep(d2, d3, shoreDist) * (1.0 - smoothstep(d3, d4, shoreDist));
-  float tDeep = smoothstep(d3, d4, shoreDist);
+  float tBeach = 1.0 - smoothstep(b0, b1, shoreDist);
+  float tShallow = smoothstep(b0, b1, shoreDist) * (1.0 - smoothstep(b1, b2, shoreDist));
+  float tLagoon = smoothstep(b1, b2, shoreDist) * (1.0 - smoothstep(b2, b3, shoreDist));
+  float tOcean = smoothstep(b2, b3, shoreDist) * (1.0 - smoothstep(b3, b4, shoreDist));
+  float tDeep = smoothstep(b3, b5, shoreDist);
 
   float wSum = tBeach + tShallow + tLagoon + tOcean + tDeep + 1e-5;
   vec3 col =
@@ -174,9 +174,11 @@ void main() {
      uOcean * tOcean +
      uDeepOcean * tDeep) / wSum;
 
-  float shoreGlow = 1.0 - smoothstep(0.0, shore * 0.45, shoreDist);
-  shoreGlow = pow(max(shoreGlow, 0.0), 1.6);
-  col = mix(col, uShallow, shoreGlow * 0.16);
+  // Punch turquoise near every coast
+  float nearGlow = 1.0 - smoothstep(0.0, 4.0, shoreDist);
+  nearGlow = pow(max(nearGlow, 0.0), 1.25);
+  col = mix(col, uShallow, nearGlow * 0.35);
+  col = mix(col, uLagoon, nearGlow * 0.12);
 
   float wt = uTime * uWaveSpeed;
   float wave =
@@ -184,18 +186,17 @@ void main() {
     sin(vWorldPos.z * 0.20 + wt * 0.10) +
     sin((vWorldPos.x + vWorldPos.z) * 0.15 + wt * 0.08);
   wave *= 1.0 / 3.0;
-  col += vec3(0.05) * wave;
-  col = mix(col, uLagoon, max(wave, 0.0) * 0.07);
-  col += vec3(0.025) * vWave;
+  col += vec3(0.04) * wave;
+  col = mix(col, uLagoon, max(wave, 0.0) * 0.08);
+  col += vec3(0.02) * vWave;
 
-  // Contour bands from coastline distance (breathing)
   float radial = shoreDist * uBandScale - uTime * uBandSpeed * 0.2;
   float drift = dot(vWorldPos.xz, vec2(0.72, 0.35)) * uBandScale * 0.55 - uTime * uBandSpeed * 0.65;
   float bands =
     softBand(radial) * 0.55 +
     softBand(radial * 0.5 + 1.4) * 0.25 +
     softBand(drift) * 0.20;
-  col += vec3(uBandIntensity) * bands;
+  col += vec3(uBandIntensity) * bands * (0.55 + 0.45 * nearGlow);
 
   vec3 N = normalize(vNormalW);
   vec3 V = normalize(vViewDir);
@@ -207,23 +208,23 @@ void main() {
   float edgeFade = smoothstep(seaR - soft, seaR, radialDist);
 
   float camDist = length(cameraPosition - vWorldPos);
-  float distFade = smoothstep(14.0, 48.0, camDist);
+  float distFade = smoothstep(28.0, 90.0, camDist);
 
   vec3 fromCam = normalize(vWorldPos - cameraPosition);
   float horizonFade = smoothstep(-0.28, -0.01, fromCam.y);
-  horizonFade *= smoothstep(10.0, 36.0, camDist);
+  horizonFade *= smoothstep(18.0, 70.0, camDist);
 
   float ndotvEarly = max(dot(N, V), 0.0);
   float graze = pow(1.0 - ndotvEarly, 1.6) * distFade;
 
-  float haze = max(edgeFade, max(distFade * 0.92, max(horizonFade, graze)));
+  float haze = max(edgeFade, max(distFade * 0.85, max(horizonFade, graze)));
   haze = clamp(haze, 0.0, 1.0);
   haze = haze * haze * (3.0 - 2.0 * haze);
   float keep = 1.0 - haze;
 
   float fres = pow(1.0 - max(dot(N, V), 0.0), uFresnelPower);
   fres *= uFresnelStrength * keep;
-  col = mix(col, uSkyFresnel, fres * 0.35);
+  col = mix(col, uSkyFresnel, fres * 0.28);
 
   vec3 H = normalize(L + V);
   float spec = pow(max(dot(N, H), 0.0), uSpecularPower);
@@ -231,20 +232,21 @@ void main() {
   spec *= 0.85 + 0.15 * wave;
   col += uSunColor * spec * uSpecularIntensity * keep;
 
-  float shallowMask = 1.0 - smoothstep(0.0, shore * 0.95, shoreDist);
-  shallowMask = pow(max(shallowMask, 0.0), 0.85);
+  float shallowMask = 1.0 - smoothstep(0.0, 5.0, shoreDist);
+  shallowMask = pow(max(shallowMask, 0.0), 0.75);
   float cau = softCaustic(vWorldPos.xz * uCausticScale, uTime * uCausticSpeed);
-  col += mix(uBeachEdge, uShallow, 0.4) * cau * uCausticIntensity * shallowMask * keep;
+  col += mix(uBeachEdge, uShallow, 0.35) * cau * uCausticIntensity * shallowMask * keep;
 
-  float foam = smoothstep(-uFoamWidth * 0.2, uFoamWidth * 0.15, shoreDist);
-  foam *= 1.0 - smoothstep(uFoamWidth * 0.2, uFoamWidth, shoreDist);
-  float foamPulse = 0.78 + 0.22 * sin(uTime * 0.7 + shoreDist * 2.0 + wave * 2.5);
-  foam = pow(max(foam, 0.0), 1.15) * foamPulse * uShoreFoam;
-  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.85) * keep);
+  // White shore foam ring
+  float foam = smoothstep(-0.15, 0.35, shoreDist);
+  foam *= 1.0 - smoothstep(0.45, max(uFoamWidth * 1.8, 1.6), shoreDist);
+  float foamPulse = 0.75 + 0.25 * sin(uTime * 0.85 + shoreDist * 3.0 + wave * 3.0);
+  foam = pow(max(foam, 0.0), 1.05) * foamPulse * max(uShoreFoam, 0.65);
+  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.92) * keep);
 
-  vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);
-  col = mix(col, fadeCol, haze);
-  if (keep < 0.04) discard;
+  vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.45);
+  col = mix(col, fadeCol, haze * 0.85);
+  if (keep < 0.03) discard;
 
   gl_FragColor = vec4(col, keep);
 }
@@ -405,8 +407,22 @@ export class WaterSurface {
     this.material.uniforms.uSdfMap.value = this.sdfTexture;
     this.material.uniforms.uSdfBounds.value.set(b.minX, b.minZ, b.maxX, b.maxZ);
     this.material.uniforms.uUseIslandSdf.value = 1;
-    // Hex shoreline fallback unused while island SDF is active
     this.material.uniforms.uHexCount.value = 0;
+    // Fit sea disc to the generated world, not the raw hex apothem
+    const extent = Math.max(
+      Math.abs(b.minX),
+      Math.abs(b.maxX),
+      Math.abs(b.minZ),
+      Math.abs(b.maxZ),
+    );
+    const radius = Math.max(80, extent * 3.2);
+    const segs = Math.max(16, Math.round(this.config.waterSegments));
+    const old = this.mesh.geometry;
+    const geom = new THREE.CircleGeometry(radius, Math.max(96, segs * 2));
+    geom.rotateX(-Math.PI / 2);
+    this.mesh.geometry = geom;
+    old.dispose();
+    this.material.uniforms.uSeaRadius.value = radius * 0.94;
   }
 
   clearIslandSdf(): void {

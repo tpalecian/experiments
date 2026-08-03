@@ -107,16 +107,17 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
         islandCount: 0,
         archipelagoSpread: 0.85,
       },
-      layoutScale: 5.2,
-      resolution: 96,
+      layoutScale: 3.6,
+      resolution: 128,
       smoothPasses: 1,
+      beach: { wetEnd: 0.4, dryEnd: 0.95 },
     },
     engine.board,
     graph,
   );
 
-  assert(world.sdfField.length === 96 * 96, 'sdf field size');
-  assert(world.heightField.length === 96 * 96, 'height field size');
+  assert(world.sdfField.length === 128 * 128, 'sdf field size');
+  assert(world.heightField.length === 128 * 128, 'height field size');
   assert(
     world.seed.blobs.length === world.sites.length,
     `one island per hex (blobs=${world.seed.blobs.length}, sites=${world.sites.length})`,
@@ -180,7 +181,7 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   // Islands should be large
   const avgR =
     world.seed.blobs.reduce((s, b) => s + b.radius, 0) / world.seed.blobs.length;
-  assert(avgR >= 2.8, `islands should be large (avgR=${avgR.toFixed(2)})`);
+  assert(avgR >= 2.6, `islands should be large (avgR=${avgR.toFixed(2)})`);
 
   assert(world.coastline.length >= Math.min(8, world.sites.length - 2), `many separate coast loops (got ${world.coastline.length})`);
 

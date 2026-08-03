@@ -165,25 +165,26 @@ function queueStyleApply(config: StyleConfig, meta?: { rebuildWorld?: boolean })
 configurator.subscribe(queueStyleApply);
 
 function frameCamera(rings: number): void {
-  const layoutScale = loadStyleConfig().layoutScale ?? 5.2;
+  const layoutScale = loadStyleConfig().layoutScale ?? 3.6;
   const r = boardRadiusWorld(rings) * layoutScale;
-  const dist = Math.max(18, r * 2.1);
-  const height = Math.max(14, r * 1.65);
+  // Pull in so islands fill the frame
+  const dist = Math.max(12, r * 1.45);
+  const height = Math.max(10, r * 1.15);
   camera.position.set(0, height, dist);
   camera.far = Math.max(400, dist * 14);
   camera.updateProjectionMatrix();
-  controls.minDistance = Math.max(8, r * 0.7);
-  controls.maxDistance = Math.max(40, r * 4.5);
-  controls.target.set(0, 0, 0);
+  controls.minDistance = Math.max(6, r * 0.55);
+  controls.maxDistance = Math.max(36, r * 3.8);
+  controls.target.set(0, 0.2, 0);
   controls.update();
 
-  fogNear = dist * 1.8;
-  fogFar = dist * 5.8;
+  fogNear = dist * 2.2;
+  fogFar = dist * 7.5;
   scene.fog = new THREE.Fog(dayCycle.getSnapshot().fogColor, fogNear, fogFar);
   sky.resize(r);
 
   sunAnchor = Math.max(10, r * 1.05);
-  const shadowSpan = r + 6;
+  const shadowSpan = r + 8;
   sun.shadow.camera.far = shadowSpan * 4;
   sun.shadow.camera.left = -shadowSpan;
   sun.shadow.camera.right = shadowSpan;
