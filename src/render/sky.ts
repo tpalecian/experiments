@@ -91,48 +91,70 @@ function seededRand(seed: number): () => number {
 function createFoamPuffGeometry(config: StyleConfig): THREE.BufferGeometry {
   const seg = Math.max(4, Math.round(config.cloudPuffSegments));
   if (config.cloudPuffShape === 'icosahedron') {
-    const detail = seg >= 9 ? 1 : 0;
+    // detail 0 = sharp low-poly facets (reference look); detail 1 only at high slider
+    const detail = seg >= 10 ? 1 : 0;
     return new THREE.IcosahedronGeometry(1, detail);
   }
-  return new THREE.SphereGeometry(1, seg, Math.max(4, Math.round(seg * 0.7)));
+  // Low segment spheres stay chunky / faceted rather than smooth foam
+  return new THREE.SphereGeometry(1, Math.min(seg, 7), Math.max(4, Math.round(Math.min(seg, 7) * 0.65)));
 }
 
-function makeFoamCloud(
+/**
+ * Compact low-poly cloud: a few overlapping faceted blobs,
+ * matching the small scattered clusters in low-poly landscape art.
+ */
+function makeLowPolyCloud(
   rand: () => number,
   geom: THREE.BufferGeometry,
   lit: THREE.Material,
   shade: THREE.Material,
 ): THREE.Group {
   const g = new THREE.Group();
-  const spots: [number, number, number, number][] = [
-    [0.0, 0.0, 0.0, 1.25],
-    [-1.3, 0.05, 0.15, 1.15],
-    [1.3, 0.05, -0.1, 1.15],
-    [-2.3, -0.05, 0.0, 0.95],
-    [2.3, -0.05, 0.05, 0.95],
-    [-0.6, 0.75, 0.1, 1.0],
-    [0.7, 0.8, -0.05, 1.05],
-    [0.05, 1.2, 0.0, 0.9],
-    [-1.5, 0.55, -0.7, 0.85],
-    [1.4, 0.5, 0.75, 0.85],
-    [-0.2, 0.15, 0.95, 0.9],
-    [0.25, 0.1, -1.0, 0.9],
-    [-2.0, 0.35, 0.55, 0.75],
-    [2.05, 0.3, -0.5, 0.75],
+  // Tight 3–6 puff layouts — small isolated clusters, not foam banks
+  const layouts: [number, number, number, number][][] = [
+    [
+      [0.0, 0.0, 0.0, 1.0],
+      [-0.85, 0.05, 0.15, 0.78],
+      [0.75, 0.08, -0.1, 0.72],
+      [0.1, 0.55, 0.05, 0.62],
+    ],
+    [
+      [0.0, 0.0, 0.0, 0.95],
+      [-0.7, -0.05, 0.2, 0.7],
+      [0.65, 0.1, -0.15, 0.68],
+      [-0.15, 0.5, -0.05, 0.55],
+      [0.4, 0.35, 0.35, 0.5],
+    ],
+    [
+      [0.0, 0.05, 0.0, 0.88],
+      [-0.95, 0.0, -0.1, 0.75],
+      [0.9, -0.05, 0.15, 0.7],
+    ],
+    [
+      [0.0, 0.0, 0.0, 1.05],
+      [-0.6, 0.15, 0.35, 0.65],
+      [0.55, 0.1, -0.3, 0.6],
+      [-0.25, 0.45, -0.2, 0.58],
+      [0.3, 0.5, 0.25, 0.52],
+      [0.05, -0.15, 0.55, 0.48],
+    ],
   ];
 
+  const spots = layouts[Math.floor(rand() * layouts.length)];
+
   for (const [x, y, z, s] of spots) {
-    if (rand() < 0.05) continue;
-    const mat = y < 0.35 && rand() > 0.5 ? shade : lit;
+    if (rand() < 0.08) continue;
+    const mat = y < 0.2 && rand() > 0.4 ? shade : lit;
     const mesh = new THREE.Mesh(geom, mat);
     mesh.position.set(
-      x + (rand() - 0.5) * 0.2,
+      x + (rand() - 0.5) * 0.18,
       y + (rand() - 0.5) * 0.1,
-      z + (rand() - 0.5) * 0.2,
+      z + (rand() - 0.5) * 0.18,
     );
-    const sc = s * (0.95 + rand() * 0.12);
-    mesh.scale.set(sc * 1.05, sc * 0.82, sc * 1.05);
-    mesh.rotation.set(rand() * 0.5, rand() * Math.PI, rand() * 0.5);
+    const sc = s * (0.9 + rand() * 0.2);
+    // Slightly squashed horizontal blobs with irregular facet orientation
+    mesh.scale.set(sc * (1.05 + rand() * 0.15), sc * (0.7 + rand() * 0.2), sc * (1.0 + rand() * 0.15));
+    mesh.rotation.set(rand() * Math.PI, rand() * Math.PI * 2, rand() * Math.PI);
     mesh.frustumCulled = false;
     g.add(mesh);
   }
@@ -186,8 +208,17 @@ export class SkyDome {
       fog: false,
     });
 
-    this.litMat = new THREE.MeshBasicMaterial({ color: this.config.cloudLit, fog: false });
-    this.shadeMat = new THREE.MeshBasicMaterial({ color: this.config.cloudShade, fog: false });
+    // Unlit so atmosphere palette colors stay exact across the day cycle.
+    this.litMat = new THREE.MeshBasicMaterial({
+      color: this.config.cloudLit,
+      fog: false,
+      toneMapped: false,
+    });
+    this.shadeMat = new THREE.MeshBasicMaterial({
+      color: this.config.cloudShade,
+      fog: false,
+      toneMapped: false,
+    });
     this.puffGeom = createFoamPuffGeometry(this.config);
 
     this.mesh = new THREE.Mesh(new THREE.SphereGeometry(this.skyRadius, 32, 24), this.material);
@@ -287,14 +318,16 @@ export class SkyDome {
     const drift = this.config.cloudDriftSpeed;
 
     for (let i = 0; i < count; i++) {
-      const cloud = makeFoamCloud(rand, this.puffGeom, this.litMat, this.shadeMat);
-      const scale = scaleBase * (0.85 + rand() * 0.35);
+      const cloud = makeLowPolyCloud(rand, this.puffGeom, this.litMat, this.shadeMat);
+      const scale = scaleBase * (0.75 + rand() * 0.5);
       cloud.scale.setScalar(scale);
 
-      const angle = (i / count) * Math.PI * 2 + rand() * 0.2;
+      // Scatter across a wide sky band (not clumped into a few large banks)
+      const angle = (i / count) * Math.PI * 2 + (rand() - 0.5) * 0.55;
       const orbitR = orbitMin + rand() * (orbitMax - orbitMin);
       const height = heightMin + rand() * (heightMax - heightMin);
       cloud.position.set(Math.cos(angle) * orbitR, height, Math.sin(angle) * orbitR);
+      cloud.rotation.y = rand() * Math.PI * 2;
 
       this.clouds.add(cloud);
       this.cloudDrift.push({
