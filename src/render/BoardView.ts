@@ -10,6 +10,7 @@ import {
   getToonGradient,
   toonMat,
 } from './style';
+import type { AtmosphereSnapshot } from './atmosphere';
 import type { StyleConfig } from './styleConfig';
 import { WaterSurface } from './water';
 
@@ -124,6 +125,10 @@ export class BoardView {
 
   applyStyleConfig(config: StyleConfig): void {
     this.water.applyConfig(config);
+  }
+
+  applyAtmosphere(atm: AtmosphereSnapshot): void {
+    this.water.applyAtmosphere(atm);
   }
 
   build(board: BoardState): void {

@@ -19,6 +19,39 @@ interface FieldDef {
 
 const SECTIONS: { title: string; fields: FieldDef[] }[] = [
   {
+    title: 'Time of day',
+    fields: [
+      {
+        key: 'timeOfDay',
+        label: 'Scheme',
+        kind: 'select',
+        options: [
+          { value: 'morning', label: 'Morning' },
+          { value: 'afternoon', label: 'Afternoon' },
+          { value: 'evening', label: 'Evening' },
+          { value: 'night', label: 'Night' },
+          { value: 'cycle', label: 'Slow day cycle' },
+        ],
+      },
+      {
+        key: 'dayLengthSec',
+        label: 'Full day (sec)',
+        kind: 'range',
+        min: 45,
+        max: 600,
+        step: 15,
+      },
+      {
+        key: 'dayTransitionSec',
+        label: 'Scheme blend (sec)',
+        kind: 'range',
+        min: 1,
+        max: 30,
+        step: 1,
+      },
+    ],
+  },
+  {
     title: 'Clouds',
     fields: [
       { key: 'cloudCount', label: 'Count', kind: 'range', min: 2, max: 16, step: 1 },
@@ -43,10 +76,10 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
     ],
   },
   {
-    title: 'Sky',
+    title: 'Sky craft',
     fields: [
-      { key: 'skyZenith', label: 'Zenith', kind: 'color' },
-      { key: 'skyHorizon', label: 'Horizon', kind: 'color' },
+      { key: 'skyZenith', label: 'Zenith (ref)', kind: 'color' },
+      { key: 'skyHorizon', label: 'Horizon (ref)', kind: 'color' },
     ],
   },
   {
@@ -98,11 +131,11 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
     ],
   },
   {
-    title: 'Lighting',
+    title: 'Lighting craft',
     fields: [
-      { key: 'exposure', label: 'Exposure', kind: 'range', min: 0.7, max: 1.8, step: 0.05 },
-      { key: 'sunIntensity', label: 'Sun', kind: 'range', min: 0.4, max: 2.5, step: 0.05 },
-      { key: 'hemiIntensity', label: 'Sky light', kind: 'range', min: 0.2, max: 1.6, step: 0.05 },
+      { key: 'exposure', label: 'Exposure (ref)', kind: 'range', min: 0.7, max: 1.8, step: 0.05 },
+      { key: 'sunIntensity', label: 'Sun (ref)', kind: 'range', min: 0.4, max: 2.5, step: 0.05 },
+      { key: 'hemiIntensity', label: 'Sky light (ref)', kind: 'range', min: 0.2, max: 1.6, step: 0.05 },
     ],
   },
 ];
@@ -169,7 +202,7 @@ export class StyleConfigurator {
       <div class="style-config-panel ${this.open ? '' : 'hidden'}">
         <div class="style-config-header">
           <h3>Style configurator</h3>
-          <p>Tweak tropical water, clouds, sky & light live.</p>
+          <p>Time of day drives sky, lights, fog & water. Craft water and clouds below.</p>
         </div>
         ${SECTIONS.map(
           (section) => `

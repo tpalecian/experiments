@@ -2,9 +2,17 @@
  * Headless smoke test for game engine setup + a few turns.
  * Run: npx tsx scripts/smoke.ts
  */
+import * as THREE from 'three';
 import { hexCountForRings, MAP_SIZES, type MapSizeId } from '../src/game/board';
 import { GameEngine } from '../src/game/engine';
 import { legalSetupRoads, legalSetupSettlements } from '../src/game/rules';
+import {
+  ATMOSPHERE_PRESETS,
+  TimeOfDayController,
+  celestialDirection,
+  lerpAtmosphere,
+  sampleAtmosphereAtPhase,
+} from '../src/render/atmosphere';
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -39,6 +47,37 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
     `${size} after roll`,
   );
   console.log(`ok ${size} (${expected} hexes, ${engine.board.harbors.length} harbors)`);
+}
+
+{
+  const mid = sampleAtmosphereAtPhase(0.125);
+  assert(mid.sunIntensity > ATMOSPHERE_PRESETS.morning.sunIntensity, 'morning→afternoon brightens');
+  assert(mid.sunIntensity < ATMOSPHERE_PRESETS.afternoon.sunIntensity, 'not fully afternoon yet');
+
+  const out = sampleAtmosphereAtPhase(0);
+  lerpAtmosphere(ATMOSPHERE_PRESETS.evening, ATMOSPHERE_PRESETS.night, 0.5, out);
+  assert(out.starsIntensity > 0.4, 'evening→night raises stars');
+
+  const dir = celestialDirection(0.82, 0.55);
+  assert(dir.length() > 0.99 && dir.length() < 1.01, 'celestial dir normalized');
+  assert(dir.y > 0.7, 'afternoon sun high');
+
+  const tod = new TimeOfDayController('afternoon');
+  tod.setMode('night', 4);
+  tod.update(2);
+  const half = tod.getSnapshot();
+  assert(half.starsIntensity > 0.3 && half.starsIntensity < 0.9, 'night transition mid-blend');
+  tod.update(3);
+  assert(tod.getSnapshot().starsIntensity > 0.95, 'night transition completes');
+
+  tod.setMode('cycle');
+  tod.setDayLength(60);
+  const before = tod.phase;
+  tod.update(15);
+  assert(Math.abs(tod.phase - ((before + 0.25) % 1)) < 0.001, 'cycle advances 1/4 day');
+  assert(tod.getCelestialDirection() instanceof THREE.Vector3, 'celestial vector');
+
+  console.log('ok atmosphere day-cycle');
 }
 
 console.log('smoke ok');

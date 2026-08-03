@@ -1,6 +1,15 @@
 export type CloudPuffShape = 'sphere' | 'icosahedron';
 
+export type TimeOfDayModeConfig = 'morning' | 'afternoon' | 'evening' | 'night' | 'cycle';
+
 export interface StyleConfig {
+  // Time of day (game-level atmosphere)
+  timeOfDay: TimeOfDayModeConfig;
+  /** Seconds for one full day when cycling. */
+  dayLengthSec: number;
+  /** Seconds to ease when picking a fixed scheme. */
+  dayTransitionSec: number;
+
   // Clouds
   cloudCount: number;
   cloudScale: number;
@@ -14,7 +23,7 @@ export interface StyleConfig {
   cloudPuffShape: CloudPuffShape;
   cloudPuffSegments: number;
 
-  // Sky
+  // Sky (craft / afternoon reference — overridden live by atmosphere)
   skyZenith: string;
   skyHorizon: string;
 
@@ -55,14 +64,18 @@ export interface StyleConfig {
   waterCausticScale: number;
   waterCausticSpeed: number;
 
-  // Lighting
+  // Lighting (craft reference — atmosphere owns live values)
   exposure: number;
   sunIntensity: number;
   hemiIntensity: number;
 }
 
 export const DEFAULT_STYLE_CONFIG: StyleConfig = {
-  cloudCount: 2,
+  timeOfDay: 'afternoon',
+  dayLengthSec: 180,
+  dayTransitionSec: 8,
+
+  cloudCount: 6,
   cloudScale: 2.5,
   cloudOrbitMin: 14,
   cloudOrbitMax: 24,
@@ -112,7 +125,7 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   hemiIntensity: 0.95,
 };
 
-const STORAGE_KEY = 'catan-style-config-v3';
+const STORAGE_KEY = 'catan-style-config-v4';
 
 export function loadStyleConfig(): StyleConfig {
   try {
