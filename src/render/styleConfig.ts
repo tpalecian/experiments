@@ -40,6 +40,10 @@ export interface StyleConfig {
   waterDeepFade: number;
   /** Soft radial fade so the sea disc rim dissolves into the sky. */
   waterEdgeSoft: number;
+  /** Near-shore turquoise glow mix (hex edge hug). */
+  waterShoreGlow: number;
+  /** Large sine colour motion amplitude. */
+  waterColorWave: number;
 
   // Water — sine swell motion
   waterWaveHeight: number;
@@ -50,6 +54,8 @@ export interface StyleConfig {
   waterBandIntensity: number;
   waterBandScale: number;
   waterBandSpeed: number;
+  /** Softness of band contours (higher = softer). */
+  waterBandSoftness: number;
 
   // Water — Fresnel / specular
   waterFresnelStrength: number;
@@ -60,6 +66,9 @@ export interface StyleConfig {
   // Water — foam
   waterShoreFoam: number;
   waterFoamWidth: number;
+  /** Foam breathing amplitude (0 = static). */
+  waterFoamPulse: number;
+  waterFoamPulseSpeed: number;
 
   // Water — caustics
   waterCausticIntensity: number;
@@ -70,6 +79,21 @@ export interface StyleConfig {
   exposure: number;
   sunIntensity: number;
   hemiIntensity: number;
+
+  // Hex board & props
+  hexHoverLift: number;
+  productionPulseSec: number;
+  productionPulseStrength: number;
+  harborBobAmp: number;
+
+  // Motion & feedback
+  motionPieceSpawnSec: number;
+  motionRoadSpawnSec: number;
+  motionUpgradeSec: number;
+  motionRobberHopSec: number;
+  motionHighlightFade: number;
+  motionCameraNudgeSec: number;
+  motionCameraNudgeBlend: number;
 }
 
 export const DEFAULT_STYLE_CONFIG: StyleConfig = {
@@ -77,7 +101,6 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   dayLengthSec: 180,
   dayTransitionSec: 4,
 
-  // Many small low-poly clusters scattered across the sky (landscape-art look)
   cloudCount: 12,
   cloudScale: 1.45,
   cloudOrbitMin: 11,
@@ -103,6 +126,8 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterShoreWidth: 9.5,
   waterDeepFade: 14,
   waterEdgeSoft: 90,
+  waterShoreGlow: 0.16,
+  waterColorWave: 0.05,
 
   waterWaveHeight: 0.14,
   waterWaveSpeed: 1.15,
@@ -111,6 +136,7 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterBandIntensity: 0.11,
   waterBandScale: 0.42,
   waterBandSpeed: 0.28,
+  waterBandSoftness: 0.55,
 
   waterFresnelStrength: 0.12,
   waterFresnelPower: 3.5,
@@ -119,6 +145,8 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
 
   waterShoreFoam: 0.55,
   waterFoamWidth: 0.55,
+  waterFoamPulse: 0.22,
+  waterFoamPulseSpeed: 0.7,
 
   waterCausticIntensity: 0.08,
   waterCausticScale: 0.55,
@@ -127,9 +155,110 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   exposure: 1.15,
   sunIntensity: 1.45,
   hemiIntensity: 0.95,
+
+  hexHoverLift: 0.045,
+  productionPulseSec: 1.15,
+  productionPulseStrength: 0.55,
+  harborBobAmp: 0.035,
+
+  motionPieceSpawnSec: 0.32,
+  motionRoadSpawnSec: 0.26,
+  motionUpgradeSec: 0.38,
+  motionRobberHopSec: 0.48,
+  motionHighlightFade: 8,
+  motionCameraNudgeSec: 0.55,
+  motionCameraNudgeBlend: 0.55,
 };
 
-const STORAGE_KEY = 'catan-style-config-v5';
+export type StylePresetId = 'day' | 'sunset' | 'night' | 'cinematic';
+
+export interface StylePreset {
+  id: StylePresetId;
+  label: string;
+  /** Partial overlay on defaults (then merged with current for unspecified). */
+  patch: Partial<StyleConfig>;
+}
+
+/** Named looks — apply as overlay on current config (time / water / light focus). */
+export const STYLE_PRESETS: StylePreset[] = [
+  {
+    id: 'day',
+    label: 'Day',
+    patch: {
+      timeOfDay: 'afternoon',
+      waterDeepOcean: '#1FAFD4',
+      waterOcean: '#37C9D9',
+      waterLagoon: '#62E7E0',
+      waterShallow: '#8CF7EC',
+      waterBeachEdge: '#DDFCF8',
+      waterBandIntensity: 0.12,
+      waterShoreFoam: 0.55,
+      waterCausticIntensity: 0.1,
+      exposure: 1.15,
+      sunIntensity: 1.45,
+      hemiIntensity: 0.95,
+    },
+  },
+  {
+    id: 'sunset',
+    label: 'Sunset',
+    patch: {
+      timeOfDay: 'evening',
+      waterDeepOcean: '#205A8C',
+      waterOcean: '#3A91B8',
+      waterLagoon: '#4FB8C4',
+      waterShallow: '#7AD4CF',
+      waterBeachEdge: '#FFD8B8',
+      waterBandIntensity: 0.08,
+      waterShoreFoam: 0.45,
+      waterCausticIntensity: 0.06,
+      exposure: 1.05,
+      sunIntensity: 1.2,
+      hemiIntensity: 0.85,
+    },
+  },
+  {
+    id: 'night',
+    label: 'Night',
+    patch: {
+      timeOfDay: 'night',
+      waterDeepOcean: '#0C2340',
+      waterOcean: '#10304F',
+      waterLagoon: '#153B5F',
+      waterShallow: '#1A466E',
+      waterBeachEdge: '#294A67',
+      waterBandIntensity: 0.05,
+      waterShoreFoam: 0.35,
+      waterCausticIntensity: 0.03,
+      waterFresnelStrength: 0.2,
+      exposure: 0.95,
+      sunIntensity: 0.7,
+      hemiIntensity: 0.55,
+    },
+  },
+  {
+    id: 'cinematic',
+    label: 'Cinematic',
+    patch: {
+      timeOfDay: 'cycle',
+      dayLengthSec: 120,
+      waterShoreGlow: 0.22,
+      waterColorWave: 0.07,
+      waterBandIntensity: 0.14,
+      waterBandSoftness: 0.65,
+      waterShoreFoam: 0.7,
+      waterFoamPulse: 0.3,
+      waterCausticIntensity: 0.12,
+      motionPieceSpawnSec: 0.42,
+      motionRobberHopSec: 0.58,
+      motionCameraNudgeSec: 0.7,
+      hexHoverLift: 0.055,
+      productionPulseStrength: 0.7,
+    },
+  },
+];
+
+const STORAGE_KEY = 'catan-style-config-v6';
 
 export function loadStyleConfig(): StyleConfig {
   try {
@@ -149,4 +278,10 @@ export function saveStyleConfig(config: StyleConfig): void {
 export function resetStyleConfig(): StyleConfig {
   localStorage.removeItem(STORAGE_KEY);
   return { ...DEFAULT_STYLE_CONFIG };
+}
+
+export function applyStylePreset(current: StyleConfig, id: StylePresetId): StyleConfig {
+  const preset = STYLE_PRESETS.find((p) => p.id === id);
+  if (!preset) return current;
+  return { ...current, ...preset.patch };
 }

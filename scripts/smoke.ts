@@ -14,6 +14,11 @@ import {
   sampleAtmosphereAtPhase,
 } from '../src/render/atmosphere';
 import { TweenPlayer, ease } from '../src/render/tween';
+import {
+  DEFAULT_STYLE_CONFIG,
+  STYLE_PRESETS,
+  applyStylePreset,
+} from '../src/render/styleConfig';
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
