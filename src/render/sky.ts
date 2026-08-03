@@ -44,10 +44,15 @@ void main() {
   vec3 sky = mix(uHorizon, uMid, midT);
   sky = mix(sky, uZenith, zenT);
 
-  // Soft horizon bloom so sea and sky meet
-  float haze = 1.0 - smoothstep(0.0, max(uHorizonHazeWidth, 0.02), abs(dir.y));
-  haze = pow(max(haze, 0.0), 1.4) * uHorizonHaze;
-  sky += uHorizon * haze * 0.55;
+  // Soft horizon bloom so sea and sky meet (wide, low-contrast — avoid a TOD stripe)
+  float hazeW = max(uHorizonHazeWidth, 0.04);
+  float haze = 1.0 - smoothstep(0.0, hazeW, abs(dir.y));
+  haze = pow(max(haze, 0.0), 1.15) * uHorizonHaze;
+  sky = mix(sky, sky + uHorizon * 0.45, haze);
+
+  // Below the horizon: keep the same horizon tone so transparent water has nowhere to "cut"
+  float below = 1.0 - smoothstep(-0.08, 0.04, dir.y);
+  sky = mix(sky, uHorizon, below * 0.85);
 
   // Celestial disc + wide glow (sun by day, moon by night)
   vec3 L = normalize(uSunDir);
