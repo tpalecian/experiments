@@ -38,6 +38,8 @@ export interface StyleConfig {
   // Water — depth / shoreline
   waterShoreWidth: number;
   waterDeepFade: number;
+  /** Soft radial fade so the sea disc rim dissolves into the sky. */
+  waterEdgeSoft: number;
 
   // Water — sine swell motion
   waterWaveHeight: number;
@@ -99,6 +101,7 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
 
   waterShoreWidth: 9.5,
   waterDeepFade: 14,
+  waterEdgeSoft: 90,
 
   waterWaveHeight: 0.14,
   waterWaveSpeed: 1.15,
@@ -125,7 +128,7 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   hemiIntensity: 0.95,
 };
 
-const STORAGE_KEY = 'catan-style-config-v4';
+const STORAGE_KEY = 'catan-style-config-v5';
 
 export function loadStyleConfig(): StyleConfig {
   try {

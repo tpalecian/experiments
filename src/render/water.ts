@@ -11,7 +11,8 @@ export const WATER_MAX_HEXES = 64;
  * Stylized tropical low-poly water — calm, painterly, aerial-friendly.
  * Shoreline is the SDF union of every land hex so foam/depth hug tile edges.
  * Layers: depth gradient → shoreline → sine swells → wave bands →
- * soft Fresnel → satin specular → caustics → beach foam.
+ * soft Fresnel → satin specular → caustics → beach foam → horizon alpha fade.
+ * Geometry is a large disc that soft-dissolves into the sky so no hard sea rim.
  */
 const waterVertexShader = /* glsl */ `
 uniform float uTime;
@@ -70,6 +71,9 @@ uniform vec3 uBeachEdge;
 uniform vec3 uFoamColor;
 uniform float uShoreWidth;
 uniform float uDeepFade;
+uniform float uSeaRadius;
+uniform float uEdgeSoft;
+uniform vec3 uHorizon;
 uniform float uBandIntensity;
 uniform float uBandScale;
 uniform float uBandSpeed;
@@ -210,7 +214,35 @@ void main() {
   foam = pow(max(foam, 0.0), 1.15) * foamPulse * uShoreFoam;
   col = mix(col, uFoamColor, clamp(foam, 0.0, 0.85));
 
-  gl_FragColor = vec4(col, 1.0);
+  // 9. Horizon dissolve.
+  // Grazing views foreshorten a world-space rim into a hard screen line, so also
+  // fade by camera distance and by how horizontally we look at each fragment.
+  // Alpha goes to 0 so the sky (and its TOD horizon band) shows through.
+  float seaR = max(uSeaRadius, 1.0);
+  float soft = max(uEdgeSoft, seaR * 0.55);
+  float radialDist = length(vWorldPos.xz);
+  float edgeFade = smoothstep(seaR - soft, seaR, radialDist);
+
+  float camDist = length(cameraPosition - vWorldPos);
+  float distFade = smoothstep(16.0, 52.0, camDist);
+
+  vec3 fromCam = normalize(vWorldPos - cameraPosition);
+  float horizonFade = smoothstep(-0.22, -0.015, fromCam.y);
+  horizonFade *= smoothstep(12.0, 40.0, camDist);
+
+  float ndotv = max(dot(N, V), 0.0);
+  float graze = pow(1.0 - ndotv, 1.8) * distFade;
+
+  float haze = max(edgeFade, max(distFade * 0.9, max(horizonFade, graze)));
+  haze = clamp(haze, 0.0, 1.0);
+  haze = haze * haze * (3.0 - 2.0 * haze);
+
+  vec3 fadeCol = mix(uDeepOcean, uHorizon, 0.45);
+  col = mix(col, fadeCol, haze);
+  float alpha = 1.0 - haze;
+  if (alpha < 0.04) discard;
+
+  gl_FragColor = vec4(col, alpha);
 }
 `;
 
@@ -243,6 +275,9 @@ export class WaterSurface {
         uFoamColor: { value: new THREE.Color(this.config.waterFoam) },
         uShoreWidth: { value: this.config.waterShoreWidth },
         uDeepFade: { value: this.config.waterDeepFade },
+        uSeaRadius: { value: 180 * 0.94 },
+        uEdgeSoft: { value: this.config.waterEdgeSoft },
+        uHorizon: { value: new THREE.Color(this.config.skyHorizon) },
         uBandIntensity: { value: this.config.waterBandIntensity },
         uBandScale: { value: this.config.waterBandScale },
         uBandSpeed: { value: this.config.waterBandSpeed },
@@ -263,13 +298,14 @@ export class WaterSurface {
         // Pointy-top tile apothem (center → flat) matches BoardView HEX_SIZE tiles
         uHexApothem: { value: HEX_SIZE * Math.sqrt(3) * 0.5 },
       },
-      transparent: false,
+      transparent: true,
       depthWrite: true,
       side: THREE.DoubleSide,
     });
 
     const segs = Math.max(16, Math.round(this.config.waterSegments));
-    const geom = new THREE.PlaneGeometry(80, 80, segs, segs);
+    const radius = 180;
+    const geom = new THREE.CircleGeometry(radius, Math.max(64, segs * 2));
     geom.rotateX(-Math.PI / 2);
     this.mesh = new THREE.Mesh(geom, this.material);
     this.mesh.position.y = -0.08;
@@ -293,6 +329,8 @@ export class WaterSurface {
     u.uFoamColor.value.set(config.waterFoam);
     u.uShoreWidth.value = config.waterShoreWidth;
     u.uDeepFade.value = config.waterDeepFade;
+    u.uEdgeSoft.value = config.waterEdgeSoft;
+    u.uHorizon.value.set(config.skyHorizon);
     u.uBandIntensity.value = config.waterBandIntensity;
     u.uBandScale.value = config.waterBandScale;
     u.uBandSpeed.value = config.waterBandSpeed;
@@ -333,6 +371,8 @@ export class WaterSurface {
 
     u.uSunColor.value.copy(atm.waterSunColor);
     u.uSkyFresnel.value.copy(atm.skyFresnelColor);
+    // Dissolve target tracks the live sky/fog horizon across time-of-day schemes.
+    u.uHorizon.value.copy(atm.skyHorizon).lerp(atm.fogColor, 0.35);
     u.uSpecularIntensity.value = atm.waterSpecularIntensity;
     u.uFresnelStrength.value = atm.waterFresnelStrength;
     u.uCausticIntensity.value = atm.waterCausticIntensity;
@@ -366,12 +406,14 @@ export class WaterSurface {
 
   private rebuildGeometry(rings: number, segments: number): void {
     const apothem = islandHexApothem(rings, HEX_SIZE);
-    const size = Math.max(48, apothem * 8);
+    // Large disc; soft rim is wide so grazing views still dissolve in screen space.
+    const radius = Math.max(180, apothem * 24);
     const old = this.mesh.geometry;
-    const geom = new THREE.PlaneGeometry(size, size, segments, segments);
+    const geom = new THREE.CircleGeometry(radius, Math.max(64, segments * 2));
     geom.rotateX(-Math.PI / 2);
     this.mesh.geometry = geom;
     old.dispose();
+    this.material.uniforms.uSeaRadius.value = radius * 0.94;
   }
 
   update(time: number): void {
