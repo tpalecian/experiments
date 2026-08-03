@@ -269,21 +269,24 @@ type EnvironmentState = {
 }
 ```
 
-### Live MVP mapping
+### Live mapping
 
-Today’s runtime already follows this pattern via `AtmosphereSnapshot` + `TimeOfDayController` in `src/render/atmosphere.ts`:
+Runtime Environment State is `AtmosphereSnapshot` via `TimeOfDayController` in `src/render/atmosphere.ts`. Palette tables come from `src/atmosphere/environment.ts`.
 
 | Vision field | Live field(s) |
 | --- | --- |
 | `sunDirection` | Derived from `sunAltitude` + `sunAzimuth` |
 | `sunColor` / intensity | `sunColor`, `sunIntensity` |
 | Sky | `skyZenith`, `skyMid`, `skyHorizon` |
-| Fog | `fogColor` |
-| Ambient / bounce | `hemiSky`, `hemiGround`, `fillColor` |
-| Water response | `waterBrightness`, `waterTint`, `waterFresnelStrength`, `waterCausticIntensity`, … |
+| Fog | `fogColor`, `fogNearMul`, `fogFarMul` |
+| Ambient / bounce / rim | `hemiSky`, `hemiGround`, `fillColor`, `rimColor`, `rimIntensity` |
+| Shadows | `shadowStrength` (softness / opacity feel) |
+| Water depth palette | `waterDeep`, `waterOcean`, `waterLagoon`, `waterShallow`, `waterShelf` |
+| Water response | `waterBrightness`, `waterTint`, `waterFresnelStrength`, `waterSpecularIntensity`, `waterCausticIntensity`, `waveBandIntensity`, `foamBrightness`, `waterFoamColor`, `waterPaletteMix` |
+| Board tint | `beachTint`, `boardTintMix` (hex/prop albedo only — no mesh rebuild) |
 | Stars / moon disc | `starsIntensity`, night celestial as cool “sun” |
 
-Palette constants and a target `EnvironmentState` shape also live in `src/atmosphere/environment.ts` for craft expansion — wire them into the live hex water path, not a separate organic island.
+`WaterSurface.applyAtmosphere` composes **Style craft bases × Environment State**. `BoardView.applyAtmosphere` soft-tints tiles/props. `main.ts` applies lights, rim, fog, and shadow strength every frame.
 
 ---
 
