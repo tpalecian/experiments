@@ -152,9 +152,9 @@ function makeLowPolyCloud(
       z + (rand() - 0.5) * 0.18,
     );
     const sc = s * (0.9 + rand() * 0.2);
-    // Slightly squashed horizontal blobs with irregular facet orientation
-    mesh.scale.set(sc * (1.05 + rand() * 0.15), sc * (0.7 + rand() * 0.2), sc * (1.0 + rand() * 0.15));
-    mesh.rotation.set(rand() * Math.PI, rand() * Math.PI * 2, rand() * Math.PI);
+    // Slightly squashed horizontal blobs; light yaw only so lit/shade tops hold
+    mesh.scale.set(sc * (1.05 + rand() * 0.15), sc * (0.72 + rand() * 0.18), sc * (1.0 + rand() * 0.15));
+    mesh.rotation.set((rand() - 0.5) * 0.35, rand() * Math.PI * 2, (rand() - 0.5) * 0.35);
     mesh.frustumCulled = false;
     g.add(mesh);
   }
