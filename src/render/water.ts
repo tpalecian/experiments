@@ -7,6 +7,9 @@ import { DEFAULT_STYLE_CONFIG } from './styleConfig';
 /** Max land hexes supported by the water shoreline SDF (huge map = 61). */
 export const WATER_MAX_HEXES = 64;
 
+/** Still-water plane height — coastal beaches meet the sea here. */
+export const SEA_LEVEL = -0.08;
+
 /**
  * Stylized tropical low-poly water — calm, painterly, aerial-friendly.
  * Shoreline is the SDF union of every land hex so foam/depth hug tile edges.
@@ -18,11 +21,32 @@ const waterVertexShader = /* glsl */ `
 uniform float uTime;
 uniform float uWaveHeight;
 uniform float uWaveSpeed;
+uniform vec2 uHexCenters[${WATER_MAX_HEXES}];
+uniform int uHexCount;
+uniform float uHexApothem;
 
 varying vec3 vWorldPos;
 varying vec3 vNormalW;
 varying vec3 vViewDir;
 varying float vWave;
+
+float sdHexagon(vec2 p, float r) {
+  p = abs(p.yx);
+  vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
+  p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
+  p -= vec2(clamp(p.x, -k.z * r, k.z * r), r);
+  return length(p) * sign(p.y);
+}
+
+float shoreDistance(vec2 p) {
+  float d = 1e5;
+  for (int i = 0; i < ${WATER_MAX_HEXES}; i++) {
+    float alive = step(float(i), float(uHexCount) - 0.5);
+    float hd = sdHexagon(p - uHexCenters[i], uHexApothem);
+    d = min(d, mix(1e5, hd, alive));
+  }
+  return d;
+}
 
 float swell(vec2 p, float t) {
   float w =
@@ -48,10 +72,15 @@ void main() {
   float w = swell(world.xz, t);
   vec2 d = swellDeriv(world.xz, t);
 
-  world.y += w * uWaveHeight;
-  vWave = w;
+  // Calm the swell at the beach so the shoreline stays level with the sand.
+  float shoreDist = shoreDistance(world.xz);
+  float calm = smoothstep(0.05, 1.35, shoreDist);
+  float amp = uWaveHeight * calm;
 
-  vec3 n = normalize(vec3(-d.x * uWaveHeight, 1.0, -d.y * uWaveHeight));
+  world.y += w * amp;
+  vWave = w * calm;
+
+  vec3 n = normalize(vec3(-d.x * amp, 1.0, -d.y * amp));
   vNormalW = normalize(mat3(modelMatrix) * n);
   vWorldPos = world.xyz;
   vViewDir = normalize(cameraPosition - world.xyz);
@@ -309,7 +338,7 @@ export class WaterSurface {
     const geom = new THREE.CircleGeometry(radius, Math.max(64, segs * 2));
     geom.rotateX(-Math.PI / 2);
     this.mesh = new THREE.Mesh(geom, this.material);
-    this.mesh.position.y = -0.08;
+    this.mesh.position.y = SEA_LEVEL;
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -1;
     this.mesh.receiveShadow = false;
@@ -388,15 +417,22 @@ export class WaterSurface {
   /**
    * Feed land hex world centers so the shoreline SDF hugs every tile edge.
    * `tileRadius` is center-to-vertex (same as BoardView HEX_SIZE).
+   * `shorePad` expands the SDF past the hex (e.g. beach shelf width) so foam
+   * meets the outer beach lip rather than the tile wall.
    */
-  setLandHexes(centers: { x: number; z: number }[], tileRadius = HEX_SIZE): void {
+  setLandHexes(
+    centers: { x: number; z: number }[],
+    tileRadius = HEX_SIZE,
+    shorePad = 0,
+  ): void {
     const count = Math.min(centers.length, WATER_MAX_HEXES);
     for (let i = 0; i < WATER_MAX_HEXES; i++) {
       if (i < count) this.hexCenters[i].set(centers[i].x, centers[i].z);
       else this.hexCenters[i].set(0, 0);
     }
     this.material.uniforms.uHexCount.value = count;
-    this.material.uniforms.uHexApothem.value = tileRadius * Math.sqrt(3) * 0.5;
+    this.material.uniforms.uHexApothem.value =
+      tileRadius * Math.sqrt(3) * 0.5 + shorePad;
     this.material.uniforms.uHexCenters.value = this.hexCenters;
   }
 

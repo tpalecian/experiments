@@ -243,7 +243,7 @@ function axialDistance(a: Axial, b: Axial): number {
 }
 
 /** Outward-facing edge index for a coastal hex (edge with no land neighbor). */
-function coastalEdgeDirs(hex: HexTile, hexIds: Set<string>): number[] {
+export function coastalEdgeDirs(hex: HexTile, hexIds: Set<string>): number[] {
   const dirs: number[] = [];
   for (let i = 0; i < 6; i++) {
     const nq = hex.q + HEX_DIRS[i].q;
