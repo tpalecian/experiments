@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { STYLE } from './style';
+import type { AtmosphereSnapshot } from './atmosphere';
 import type { StyleConfig } from './styleConfig';
 import { DEFAULT_STYLE_CONFIG } from './styleConfig';
 
@@ -15,18 +15,62 @@ void main() {
 
 const skyFragmentShader = /* glsl */ `
 uniform vec3 uZenith;
+uniform vec3 uMid;
 uniform vec3 uHorizon;
 uniform vec3 uSunColor;
 uniform vec3 uSunDir;
+uniform float uSunDiscIntensity;
+uniform float uSunGlowIntensity;
+uniform float uSunDiscPower;
+uniform float uHorizonHaze;
+uniform float uHorizonHazeWidth;
+uniform float uStarsIntensity;
 
 varying vec3 vDir;
+
+float hash13(vec3 p) {
+  p = fract(p * 0.1031);
+  p += dot(p, p.yzx + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
 
 void main() {
   vec3 dir = normalize(vDir);
   float h = dir.y * 0.5 + 0.5;
-  vec3 sky = mix(uHorizon, uZenith, smoothstep(0.0, 0.72, h));
-  float sunDot = max(dot(dir, normalize(uSunDir)), 0.0);
-  sky += uSunColor * pow(sunDot, 40.0) * 0.45;
+
+  // Three-stop sky: horizon → mid → zenith (reference low-poly twilight look)
+  float midT = smoothstep(0.0, 0.42, h);
+  float zenT = smoothstep(0.35, 0.92, h);
+  vec3 sky = mix(uHorizon, uMid, midT);
+  sky = mix(sky, uZenith, zenT);
+
+  // Soft horizon bloom so sea and sky meet
+  float haze = 1.0 - smoothstep(0.0, max(uHorizonHazeWidth, 0.02), abs(dir.y));
+  haze = pow(max(haze, 0.0), 1.4) * uHorizonHaze;
+  sky += uHorizon * haze * 0.55;
+
+  // Celestial disc + wide glow (sun by day, moon by night)
+  vec3 L = normalize(uSunDir);
+  float sunDot = max(dot(dir, L), 0.0);
+  float disc = pow(sunDot, max(uSunDiscPower, 4.0));
+  float glow = pow(sunDot, max(uSunDiscPower * 0.12, 2.0));
+  sky += uSunColor * disc * uSunDiscIntensity;
+  sky += uSunColor * glow * uSunGlowIntensity;
+
+  // Warm Mie-ish scatter toward the sun near the horizon
+  float scatter = glow * (1.0 - smoothstep(0.05, 0.55, dir.y)) * 0.35;
+  sky += uSunColor * scatter * uSunGlowIntensity;
+
+  // Procedural stars — only when night weight is up
+  if (uStarsIntensity > 0.001) {
+    vec3 cell = floor(dir * 120.0);
+    float n = hash13(cell);
+    float star = step(0.992, n) * smoothstep(0.992, 1.0, n);
+    float twinkle = 0.65 + 0.35 * hash13(cell + 17.0);
+    float nightMask = smoothstep(0.15, 0.55, dir.y);
+    sky += vec3(0.92, 0.95, 1.0) * star * twinkle * uStarsIntensity * nightMask;
+  }
+
   gl_FragColor = vec4(sky, 1.0);
 }
 `;
@@ -100,6 +144,7 @@ export class SkyDome {
   private shadeMat: THREE.MeshBasicMaterial;
   private puffGeom: THREE.BufferGeometry;
   private clouds = new THREE.Group();
+  private celestial: THREE.Mesh;
   private cloudDrift: {
     obj: THREE.Object3D;
     speed: number;
@@ -108,7 +153,9 @@ export class SkyDome {
     phase: number;
   }[] = [];
   private skyRadius = 120;
+  private landRadius = 8;
   private config: StyleConfig = { ...DEFAULT_STYLE_CONFIG };
+  private readonly sunDir = new THREE.Vector3(0.55, 0.85, 0.2).normalize();
 
   constructor(config?: StyleConfig) {
     if (config) this.config = { ...config };
@@ -118,9 +165,16 @@ export class SkyDome {
       fragmentShader: skyFragmentShader,
       uniforms: {
         uZenith: { value: new THREE.Color(this.config.skyZenith) },
+        uMid: { value: new THREE.Color('#7ec8ea') },
         uHorizon: { value: new THREE.Color(this.config.skyHorizon) },
-        uSunColor: { value: new THREE.Color(STYLE.sunDisc) },
-        uSunDir: { value: new THREE.Vector3(0.55, 0.85, 0.2).normalize() },
+        uSunColor: { value: new THREE.Color('#fff3c0') },
+        uSunDir: { value: this.sunDir.clone() },
+        uSunDiscIntensity: { value: 0.55 },
+        uSunGlowIntensity: { value: 0.35 },
+        uSunDiscPower: { value: 40 },
+        uHorizonHaze: { value: 0.22 },
+        uHorizonHazeWidth: { value: 0.18 },
+        uStarsIntensity: { value: 0 },
       },
       side: THREE.BackSide,
       depthWrite: false,
@@ -135,8 +189,20 @@ export class SkyDome {
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -2;
 
+    const celGeom = new THREE.SphereGeometry(1, 16, 12);
+    const celMat = new THREE.MeshBasicMaterial({
+      color: '#fff3c0',
+      fog: false,
+      depthWrite: false,
+    });
+    this.celestial = new THREE.Mesh(celGeom, celMat);
+    this.celestial.frustumCulled = false;
+    this.celestial.renderOrder = -1;
+    this.celestial.scale.setScalar(2.8);
+
     this.group.add(this.mesh);
     this.group.add(this.clouds);
+    this.group.add(this.celestial);
     this.clouds.frustumCulled = false;
     this.spawnClouds();
   }
@@ -145,8 +211,18 @@ export class SkyDome {
     const shapeChanged =
       config.cloudPuffShape !== this.config.cloudPuffShape ||
       config.cloudPuffSegments !== this.config.cloudPuffSegments;
+    const countChanged = config.cloudCount !== this.config.cloudCount;
+    const layoutChanged =
+      countChanged ||
+      config.cloudScale !== this.config.cloudScale ||
+      config.cloudOrbitMin !== this.config.cloudOrbitMin ||
+      config.cloudOrbitMax !== this.config.cloudOrbitMax ||
+      config.cloudHeightMin !== this.config.cloudHeightMin ||
+      config.cloudHeightMax !== this.config.cloudHeightMax ||
+      config.cloudDriftSpeed !== this.config.cloudDriftSpeed;
     this.config = { ...config };
 
+    // Craft colors apply when atmosphere is not driving; atmosphere overwrites each frame.
     this.material.uniforms.uZenith.value.set(config.skyZenith);
     this.material.uniforms.uHorizon.value.set(config.skyHorizon);
     this.litMat.color.set(config.cloudLit);
@@ -155,8 +231,35 @@ export class SkyDome {
     if (shapeChanged) {
       this.puffGeom.dispose();
       this.puffGeom = createFoamPuffGeometry(config);
+      this.spawnClouds();
+    } else if (layoutChanged) {
+      this.spawnClouds();
     }
-    this.spawnClouds();
+  }
+
+  /** Drive sky + clouds + celestial from the game atmosphere snapshot. */
+  applyAtmosphere(atm: AtmosphereSnapshot): void {
+    const u = this.material.uniforms;
+    u.uZenith.value.copy(atm.skyZenith);
+    u.uMid.value.copy(atm.skyMid);
+    u.uHorizon.value.copy(atm.skyHorizon);
+    u.uSunColor.value.copy(atm.sunDiscColor);
+    u.uSunDiscIntensity.value = atm.sunDiscIntensity;
+    u.uSunGlowIntensity.value = atm.sunGlowIntensity;
+    u.uSunDiscPower.value = atm.sunDiscPower;
+    u.uHorizonHaze.value = atm.horizonHaze;
+    u.uHorizonHazeWidth.value = atm.horizonHazeWidth;
+    u.uStarsIntensity.value = atm.starsIntensity;
+
+    this.litMat.color.copy(atm.cloudLit);
+    this.shadeMat.color.copy(atm.cloudShade);
+
+    const celMat = this.celestial.material as THREE.MeshBasicMaterial;
+    celMat.color.copy(atm.sunDiscColor);
+    // Moon reads larger; sun a bit smaller
+    const size = 2.2 + atm.starsIntensity * 1.6;
+    this.celestial.scale.setScalar(size);
+    this.celestial.visible = atm.sunAltitude > -0.05;
   }
 
   private clearClouds(): void {
@@ -171,8 +274,9 @@ export class SkyDome {
     const rand = seededRand(120);
     const count = Math.max(1, Math.round(this.config.cloudCount));
     const scaleBase = this.config.cloudScale;
-    const orbitMin = this.config.cloudOrbitMin;
-    const orbitMax = Math.max(orbitMin, this.config.cloudOrbitMax);
+    const orbitScale = Math.max(1, this.landRadius / 8);
+    const orbitMin = this.config.cloudOrbitMin * orbitScale;
+    const orbitMax = Math.max(orbitMin, this.config.cloudOrbitMax * orbitScale);
     const heightMin = this.config.cloudHeightMin;
     const heightMax = Math.max(heightMin, this.config.cloudHeightMax);
     const drift = this.config.cloudDriftSpeed;
@@ -199,16 +303,21 @@ export class SkyDome {
   }
 
   setSunDirection(dir: THREE.Vector3): void {
-    this.material.uniforms.uSunDir.value.copy(dir).normalize();
+    this.sunDir.copy(dir).normalize();
+    this.material.uniforms.uSunDir.value.copy(this.sunDir);
+    const dist = this.skyRadius * 0.82;
+    this.celestial.position.copy(this.sunDir).multiplyScalar(dist);
   }
 
   resize(landRadius: number): void {
+    this.landRadius = landRadius;
     const r = Math.max(90, landRadius * 11);
     this.skyRadius = r;
     const old = this.mesh.geometry;
     this.mesh.geometry = new THREE.SphereGeometry(r, 32, 24);
     old.dispose();
     this.spawnClouds();
+    this.setSunDirection(this.sunDir);
   }
 
   update(time: number): void {
@@ -228,5 +337,7 @@ export class SkyDome {
     this.litMat.dispose();
     this.shadeMat.dispose();
     this.puffGeom.dispose();
+    this.celestial.geometry.dispose();
+    (this.celestial.material as THREE.Material).dispose();
   }
 }

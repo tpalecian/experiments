@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { HEX_SIZE, islandHexApothem } from '../game/board';
+import type { AtmosphereSnapshot } from './atmosphere';
 import type { StyleConfig } from './styleConfig';
 import { DEFAULT_STYLE_CONFIG } from './styleConfig';
 
@@ -83,6 +84,7 @@ uniform float uCausticScale;
 uniform float uCausticSpeed;
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
+uniform vec3 uSkyFresnel;
 uniform vec2 uHexCenters[${WATER_MAX_HEXES}];
 uniform int uHexCount;
 uniform float uHexApothem;
@@ -183,11 +185,10 @@ void main() {
   vec3 V = normalize(vViewDir);
   vec3 L = normalize(uSunDir);
 
-  // 5. Subtle Fresnel
+  // 5. Subtle Fresnel — tinted by sky atmosphere
   float fres = pow(1.0 - max(dot(N, V), 0.0), uFresnelPower);
   fres *= uFresnelStrength;
-  vec3 skyTint = mix(uLagoon, uOcean, 0.55);
-  col = mix(col, skyTint, fres * 0.35);
+  col = mix(col, uSkyFresnel, fres * 0.35);
 
   // 6. Satin specular
   vec3 H = normalize(L + V);
@@ -256,6 +257,7 @@ export class WaterSurface {
         uCausticSpeed: { value: this.config.waterCausticSpeed },
         uSunDir: { value: this.sunDir.clone() },
         uSunColor: { value: new THREE.Color('#fff6e8') },
+        uSkyFresnel: { value: new THREE.Color(this.config.waterLagoon) },
         uHexCenters: { value: this.hexCenters },
         uHexCount: { value: 0 },
         // Pointy-top tile apothem (center → flat) matches BoardView HEX_SIZE tiles
@@ -282,6 +284,7 @@ export class WaterSurface {
     const u = this.material.uniforms;
     u.uWaveHeight.value = config.waterWaveHeight;
     u.uWaveSpeed.value = config.waterWaveSpeed;
+    // Base palette — atmosphere re-tints these every frame.
     u.uDeepOcean.value.set(config.waterDeepOcean);
     u.uOcean.value.set(config.waterOcean);
     u.uLagoon.value.set(config.waterLagoon);
@@ -302,9 +305,37 @@ export class WaterSurface {
     u.uCausticIntensity.value = config.waterCausticIntensity;
     u.uCausticScale.value = config.waterCausticScale;
     u.uCausticSpeed.value = config.waterCausticSpeed;
+    u.uSkyFresnel.value.set(config.waterLagoon);
 
     const nextSegs = Math.max(16, Math.round(config.waterSegments));
     if (nextSegs !== prevSegs) this.rebuildGeometry(this.rings, nextSegs);
+  }
+
+  /**
+   * Apply game-level atmosphere: brightness, tint, specular, fresnel, caustics, sun color.
+   * Preserves style-crafted base palette while adapting water to time of day.
+   */
+  applyAtmosphere(atm: AtmosphereSnapshot): void {
+    const u = this.material.uniforms;
+    const bright = atm.waterBrightness;
+    const mix = atm.waterTintMix;
+    const tint = atm.waterTint;
+
+    const applyTint = (uniform: { value: THREE.Color }, baseHex: string) => {
+      uniform.value.set(baseHex).multiplyScalar(bright).lerp(tint, mix);
+    };
+
+    applyTint(u.uDeepOcean, this.config.waterDeepOcean);
+    applyTint(u.uOcean, this.config.waterOcean);
+    applyTint(u.uLagoon, this.config.waterLagoon);
+    applyTint(u.uShallow, this.config.waterShallow);
+    applyTint(u.uBeachEdge, this.config.waterBeachEdge);
+
+    u.uSunColor.value.copy(atm.waterSunColor);
+    u.uSkyFresnel.value.copy(atm.skyFresnelColor);
+    u.uSpecularIntensity.value = atm.waterSpecularIntensity;
+    u.uFresnelStrength.value = atm.waterFresnelStrength;
+    u.uCausticIntensity.value = atm.waterCausticIntensity;
   }
 
   setSunDirection(dir: THREE.Vector3): void {

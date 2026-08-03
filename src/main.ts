@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { boardRadiusWorld } from './game/board';
 import { GameEngine } from './game/engine';
 import { Picker } from './input/picker';
+import { TimeOfDayController, type TimeOfDayMode } from './render/atmosphere';
 import { BoardView } from './render/BoardView';
 import { SkyDome } from './render/sky';
 import { STYLE } from './render/style';
@@ -23,6 +24,9 @@ const initialConfig = configurator.getConfig();
 const boardView = new BoardView();
 boardView.applyStyleConfig(initialConfig);
 const sky = new SkyDome(initialConfig);
+const dayCycle = new TimeOfDayController(initialConfig.timeOfDay as TimeOfDayMode);
+dayCycle.setDayLength(initialConfig.dayLengthSec);
+dayCycle.setTransitionSec(initialConfig.dayTransitionSec);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -75,13 +79,59 @@ const picker = new Picker(camera, canvas);
 new Hud(hudEl, lobbyEl, engine);
 
 let boardBuilt = false;
+let sunAnchor = 10;
+let fogNear = 28;
+let fogFar = 70;
+let lastTimeOfDay = initialConfig.timeOfDay;
+let styleLive = initialConfig;
 
 function applyStyle(config: StyleConfig): void {
+  styleLive = config;
   sky.applyConfig(config);
   boardView.applyStyleConfig(config);
-  renderer.toneMappingExposure = config.exposure;
-  sun.intensity = config.sunIntensity;
-  hemi.intensity = config.hemiIntensity;
+
+  dayCycle.setDayLength(config.dayLengthSec);
+  dayCycle.setTransitionSec(config.dayTransitionSec);
+  if (config.timeOfDay !== lastTimeOfDay) {
+    lastTimeOfDay = config.timeOfDay;
+    dayCycle.setMode(config.timeOfDay as TimeOfDayMode);
+  }
+}
+
+function applyAtmosphereFrame(): void {
+  const atm = dayCycle.getSnapshot();
+  const dir = dayCycle.getCelestialDirection();
+
+  sky.applyAtmosphere(atm);
+  sky.setSunDirection(dir);
+  boardView.applyAtmosphere(atm);
+  boardView.setSunDirection(dir);
+
+  // Craft sliders act as multipliers relative to afternoon defaults.
+  const sunMul = styleLive.sunIntensity / 1.45;
+  const hemiMul = styleLive.hemiIntensity / 0.95;
+  const expMul = styleLive.exposure / 1.15;
+
+  sun.color.copy(atm.sunColor);
+  sun.intensity = atm.sunIntensity * sunMul;
+  sun.position.copy(dir).multiplyScalar(sunAnchor);
+
+  hemi.color.copy(atm.hemiSky);
+  hemi.groundColor.copy(atm.hemiGround);
+  hemi.intensity = atm.hemiIntensity * hemiMul;
+
+  fill.color.copy(atm.fillColor);
+  fill.intensity = atm.fillIntensity;
+  fill.position.copy(dir).multiplyScalar(-sunAnchor * 0.55);
+  fill.position.y = Math.abs(fill.position.y) * 0.4 + 2;
+
+  renderer.toneMappingExposure = atm.exposure * expMul;
+
+  if (scene.fog instanceof THREE.Fog) {
+    scene.fog.color.copy(atm.fogColor);
+    scene.fog.near = fogNear;
+    scene.fog.far = fogFar;
+  }
 }
 
 let styleApplyTimer = 0;
@@ -103,18 +153,20 @@ function frameCamera(rings: number): void {
   controls.target.set(0, 0, 0);
   controls.update();
 
-  scene.fog = new THREE.Fog(STYLE.fog, dist * 1.8, dist * 5.8);
+  fogNear = dist * 1.8;
+  fogFar = dist * 5.8;
+  scene.fog = new THREE.Fog(dayCycle.getSnapshot().fogColor, fogNear, fogFar);
   sky.resize(r);
 
+  sunAnchor = Math.max(8, r * 1.1);
   const shadowSpan = r + 4;
-  sun.position.set(r * 1.2, r * 2.2, r * 0.9);
   sun.shadow.camera.far = shadowSpan * 4;
   sun.shadow.camera.left = -shadowSpan;
   sun.shadow.camera.right = shadowSpan;
   sun.shadow.camera.top = shadowSpan;
   sun.shadow.camera.bottom = -shadowSpan;
   sun.shadow.camera.updateProjectionMatrix();
-  sky.setSunDirection(sun.position.clone().normalize());
+  applyAtmosphereFrame();
 }
 
 function syncView(): void {
@@ -163,16 +215,13 @@ window.addEventListener('resize', onResize);
 const clock = new THREE.Clock();
 function animate(): void {
   requestAnimationFrame(animate);
-  const t = clock.getElapsedTime();
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
   controls.update();
+  dayCycle.update(dt);
+  applyAtmosphereFrame();
   boardView.update(t);
   sky.update(t);
-  const base = Math.max(8, boardRadiusWorld(engine.board.rings) * 1.1);
-  sun.position.x = Math.cos(t * 0.04) * base;
-  sun.position.z = Math.sin(t * 0.04) * base * 0.75 + 2;
-  const sunDir = sun.position.clone().normalize();
-  sky.setSunDirection(sunDir);
-  boardView.setSunDirection(sunDir);
   renderer.render(scene, camera);
 }
 animate();
