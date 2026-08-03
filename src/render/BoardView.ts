@@ -15,14 +15,8 @@ import type { StyleConfig } from './styleConfig';
 import { SEA_LEVEL, WaterSurface } from './water';
 
 const TILE_HEIGHT = 0.28;
-/** How far the sand shelf extends past the hex edge into the water. */
-const BEACH_OUTSET = 0.85;
-/** How far the sand tucks over the tile top from the coastal edge. */
-const BEACH_INSET = 0.14;
-/** Thickness under the beach shelf. */
-const BEACH_THICKNESS = 0.06;
-/** Outer beach lip sits a hair above the water to avoid z-fighting. */
-const BEACH_SEA_Y = SEA_LEVEL + 0.012;
+/** How far coastal hex sides flare outward as they slope down to the sea. */
+const COAST_FLARE = 0.38;
 
 /** Pointy-top hex in the XY plane (matches board hexCorner angles). */
 function hexShape(size: number): THREE.Shape {
@@ -61,142 +55,86 @@ function hexRimGeometry(inner: number, outer: number): THREE.BufferGeometry {
 }
 
 /**
- * Beach side for one coastal hex edge.
- * Covers the vertical tile wall with sand that slopes from the tile top
- * down to a flat shelf level with the sea.
+ * Hex tile solid. Inland sides stay vertical; water-facing sides flare outward
+ * and slope smoothly down to SEA_LEVEL so the coastline meets the water.
+ * `coastalEdges[i]` is true when edge i (between corners i and i+1) faces water.
  */
-function coastalBeachGeometry(edgeIndex: number, size: number): THREE.BufferGeometry {
-  const a0 = (Math.PI / 180) * (60 * edgeIndex - 30);
-  const a1 = (Math.PI / 180) * (60 * ((edgeIndex + 1) % 6) - 30);
-  const c0x = size * Math.cos(a0);
-  const c0z = size * Math.sin(a0);
-  const c1x = size * Math.cos(a1);
-  const c1z = size * Math.sin(a1);
+function hexTileGeometry(size: number, coastalEdges: boolean[]): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const indices: number[] = [];
+  let v = 0;
+  const push = (x: number, y: number, z: number): number => {
+    positions.push(x, y, z);
+    return v++;
+  };
 
-  const midX = (c0x + c1x) * 0.5;
-  const midZ = (c0z + c1z) * 0.5;
-  const len = Math.hypot(midX, midZ) || 1;
-  const nx = midX / len;
-  const nz = midZ / len;
+  const cornerAngle = (i: number) => (Math.PI / 180) * (60 * i - 30);
+  // Pointy-top edge i midpoint faces this world angle (outward normal in XZ).
+  const edgeOutAngle = (i: number) => (Math.PI / 180) * (60 * i);
 
-  const edgeLen = Math.hypot(c1x - c0x, c1z - c0z) || 1;
-  const ex = ((c1x - c0x) / edgeLen) * 0.05;
-  const ez = ((c1z - c0z) / edgeLen) * 0.05;
+  const topCenter = push(0, TILE_HEIGHT, 0);
+  const tops: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    const a = cornerAngle(i);
+    tops.push(push(size * Math.cos(a), TILE_HEIGHT, size * Math.sin(a)));
+  }
+  for (let i = 0; i < 6; i++) {
+    indices.push(topCenter, tops[i], tops[(i + 1) % 6]);
+  }
 
-  // Top of the beach sits on the tile surface; outer lip meets the sea.
-  const topY = TILE_HEIGHT + 0.004;
-  const seaY = BEACH_SEA_Y;
-  const botY = SEA_LEVEL - BEACH_THICKNESS;
-  // Drop most of the height quickly, then a wide flat shelf at sea level.
-  const midY = seaY + 0.02;
+  // Shared bottom corners keep the solid watertight at coast/inland transitions.
+  const bots: number[] = [];
+  for (let i = 0; i < 6; i++) {
+    const a = cornerAngle(i);
+    const cx = Math.cos(a);
+    const cz = Math.sin(a);
+    const prevCoast = coastalEdges[(i + 5) % 6];
+    const nextCoast = coastalEdges[i];
 
-  // Inner: tucked onto the tile top so the cliff face is covered.
-  const i0x = c0x - nx * BEACH_INSET - ex;
-  const i0z = c0z - nz * BEACH_INSET - ez;
-  const i1x = c1x - nx * BEACH_INSET + ex;
-  const i1z = c1z - nz * BEACH_INSET + ez;
+    if (prevCoast || nextCoast) {
+      let nx = 0;
+      let nz = 0;
+      if (nextCoast) {
+        const ea = edgeOutAngle(i);
+        nx += Math.cos(ea);
+        nz += Math.sin(ea);
+      }
+      if (prevCoast) {
+        const ea = edgeOutAngle((i + 5) % 6);
+        nx += Math.cos(ea);
+        nz += Math.sin(ea);
+      }
+      const nlen = Math.hypot(nx, nz) || 1;
+      nx /= nlen;
+      nz /= nlen;
+      bots.push(
+        push(
+          size * cx + nx * COAST_FLARE,
+          SEA_LEVEL + 0.02,
+          size * cz + nz * COAST_FLARE,
+        ),
+      );
+    } else {
+      bots.push(push(size * cx, 0, size * cz));
+    }
+  }
 
-  // Mid: just past the hex wall — already nearly at sea level.
-  const e0x = c0x + nx * (BEACH_OUTSET * 0.22) - ex;
-  const e0z = c0z + nz * (BEACH_OUTSET * 0.22) - ez;
-  const e1x = c1x + nx * (BEACH_OUTSET * 0.22) + ex;
-  const e1z = c1z + nz * (BEACH_OUTSET * 0.22) + ez;
+  // Side faces. Coastal edges slope out and down to the sea; inland stay vertical.
+  for (let i = 0; i < 6; i++) {
+    const j = (i + 1) % 6;
+    // Outward-facing winding (viewed from outside the hex).
+    indices.push(tops[i], bots[i], bots[j]);
+    indices.push(tops[i], bots[j], tops[j]);
+  }
 
-  // Outer: wide flat sand shelf level with the sea.
-  const o0x = c0x + nx * BEACH_OUTSET - ex;
-  const o0z = c0z + nz * BEACH_OUTSET - ez;
-  const o1x = c1x + nx * BEACH_OUTSET + ex;
-  const o1z = c1z + nz * BEACH_OUTSET + ez;
-
-  const positions = new Float32Array([
-    i0x, topY, i0z,
-    i1x, topY, i1z,
-    e0x, midY, e0z,
-    e1x, midY, e1z,
-    o0x, seaY, o0z,
-    o1x, seaY, o1z,
-    i0x, botY, i0z,
-    i1x, botY, i1z,
-    e0x, botY, e0z,
-    e1x, botY, e1z,
-    o0x, botY, o0z,
-    o1x, botY, o1z,
-  ]);
-
-  const indices = [
-    0, 2, 3, 0, 3, 1,
-    2, 4, 5, 2, 5, 3,
-    6, 7, 9, 6, 9, 8,
-    8, 9, 11, 8, 11, 10,
-    4, 10, 11, 4, 11, 5,
-    0, 1, 7, 0, 7, 6,
-    0, 6, 8, 0, 8, 2,
-    2, 8, 10, 2, 10, 4,
-    1, 3, 9, 1, 9, 7,
-    3, 5, 11, 3, 11, 9,
-  ];
-
-  const geom = new THREE.BufferGeometry();
-  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geom.setIndex(indices);
-  geom.computeVertexNormals();
-  return geom;
-}
-
-/** Thin darker sand strip on the outer beach lip, sitting at sea level. */
-function wetSandStrip(edgeIndex: number, size: number): THREE.BufferGeometry {
-  const a0 = (Math.PI / 180) * (60 * edgeIndex - 30);
-  const a1 = (Math.PI / 180) * (60 * ((edgeIndex + 1) % 6) - 30);
-  const c0x = size * Math.cos(a0);
-  const c0z = size * Math.sin(a0);
-  const c1x = size * Math.cos(a1);
-  const c1z = size * Math.sin(a1);
-
-  const midX = (c0x + c1x) * 0.5;
-  const midZ = (c0z + c1z) * 0.5;
-  const len = Math.hypot(midX, midZ) || 1;
-  const nx = midX / len;
-  const nz = midZ / len;
-
-  const edgeLen = Math.hypot(c1x - c0x, c1z - c0z) || 1;
-  const ex = ((c1x - c0x) / edgeLen) * 0.06;
-  const ez = ((c1z - c0z) / edgeLen) * 0.06;
-
-  const inner = BEACH_OUTSET * 0.7;
-  const outer = BEACH_OUTSET;
-  const y = BEACH_SEA_Y + 0.004;
-  const bot = SEA_LEVEL - 0.012;
-
-  const i0x = c0x + nx * inner - ex;
-  const i0z = c0z + nz * inner - ez;
-  const i1x = c1x + nx * inner + ex;
-  const i1z = c1z + nz * inner + ez;
-  const o0x = c0x + nx * outer - ex;
-  const o0z = c0z + nz * outer - ez;
-  const o1x = c1x + nx * outer + ex;
-  const o1z = c1z + nz * outer + ez;
-
-  const positions = new Float32Array([
-    i0x, y, i0z,
-    i1x, y, i1z,
-    o0x, y, o0z,
-    o1x, y, o1z,
-    i0x, bot, i0z,
-    i1x, bot, i1z,
-    o0x, bot, o0z,
-    o1x, bot, o1z,
-  ]);
-  const indices = [
-    0, 2, 3, 0, 3, 1,
-    4, 5, 7, 4, 7, 6,
-    2, 6, 7, 2, 7, 3,
-    0, 1, 5, 0, 5, 4,
-    0, 4, 6, 0, 6, 2,
-    1, 3, 7, 1, 7, 5,
-  ];
+  const botCenterY = coastalEdges.some(Boolean) ? SEA_LEVEL : 0;
+  const botCenter = push(0, botCenterY, 0);
+  for (let i = 0; i < 6; i++) {
+    indices.push(botCenter, bots[(i + 1) % 6], bots[i]);
+  }
 
   const geom = new THREE.BufferGeometry();
-  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
   geom.setIndex(indices);
   geom.computeVertexNormals();
   return geom;
@@ -290,29 +228,16 @@ export class BoardView {
     for (const hex of board.hexes.values()) {
       landCenters.push(axialToWorld(hex.q, hex.r));
     }
-    this.water.setLandHexes(landCenters, HEX_SIZE, BEACH_OUTSET * 0.88);
+    this.water.setLandHexes(landCenters, HEX_SIZE, COAST_FLARE);
     this.root.add(this.water.mesh);
 
     const hexIds = new Set(board.hexes.keys());
-    const sandMat = toonMat(STYLE.sand);
-    sandMat.side = THREE.DoubleSide;
-    const sandDeepMat = toonMat(STYLE.sandDeep);
-    sandDeepMat.side = THREE.DoubleSide;
 
     // Full HEX_SIZE so neighbors meet edge-to-edge (matches axialToWorld / hexCorner spacing).
     const tileRadius = HEX_SIZE;
-    const geom = new THREE.ExtrudeGeometry(hexShape(tileRadius), {
-      depth: TILE_HEIGHT,
-      bevelEnabled: false,
-    });
-    geom.rotateX(-Math.PI / 2);
-    // Soften normals for chunkier toon look on sides
-    geom.computeVertexNormals();
+    const inlandCoast = [false, false, false, false, false, false];
+    const inlandGeom = hexTileGeometry(tileRadius, inlandCoast);
     const rimGeom = hexRimGeometry(tileRadius * 0.9, tileRadius * 0.985);
-
-    // Dirt foundation sits on the sea floor so coastal sides meet the water.
-    const skirtHeight = -SEA_LEVEL;
-    const skirtY = SEA_LEVEL + skirtHeight * 0.5;
 
     const grassPatches: { x: number; z: number; y: number }[] = [];
 
@@ -321,8 +246,12 @@ export class BoardView {
       const terrain = hex.terrain as Terrain;
       const isPasture = terrain === 'sheep';
       const coastDirs = coastalEdgeDirs(hex, hexIds);
+      const coastalEdges = inlandCoast.map((_, i) => coastDirs.includes(i));
+      const geom =
+        coastDirs.length > 0 ? hexTileGeometry(tileRadius, coastalEdges) : inlandGeom;
 
       const mat = toonMat(STYLIZED_TERRAIN[terrain]);
+      mat.side = THREE.DoubleSide;
       const mesh = new THREE.Mesh(geom, mat);
       mesh.position.set(x, 0, z);
       mesh.castShadow = true;
@@ -332,28 +261,14 @@ export class BoardView {
       this.root.add(mesh);
       this.pickables.push(mesh);
 
-      // Dirt skirt under the tile — keep it inside the hex so sand beaches can read outside.
+      // Dirt skirt under the tile (kept inside the footprint so coastal slopes stay clear).
       const skirt = new THREE.Mesh(
-        new THREE.CylinderGeometry(HEX_SIZE * 0.88, HEX_SIZE * 0.9, skirtHeight, 6),
-        toonMat(coastDirs.length > 0 ? STYLE.sandDeep : STYLE.dirt),
+        new THREE.CylinderGeometry(HEX_SIZE * 0.85, HEX_SIZE * 0.88, 0.06, 6),
+        toonMat(STYLE.dirt),
       );
-      skirt.position.set(x, skirtY, z);
+      skirt.position.set(x, coastDirs.length > 0 ? SEA_LEVEL + 0.04 : -0.01, z);
       skirt.receiveShadow = true;
       this.propsGroup.add(skirt);
-
-      // Sand beaches only on water-facing sides — ramp down, then sit level with the sea.
-      for (const dir of coastDirs) {
-        const beach = new THREE.Mesh(coastalBeachGeometry(dir, HEX_SIZE), sandMat);
-        beach.position.set(x, 0, z);
-        beach.receiveShadow = true;
-        beach.castShadow = false;
-        this.propsGroup.add(beach);
-
-        const wet = new THREE.Mesh(wetSandStrip(dir, HEX_SIZE), sandDeepMat);
-        wet.position.set(x, 0, z);
-        wet.receiveShadow = true;
-        this.propsGroup.add(wet);
-      }
 
       // Slightly darker rim on top edge (same pointy-top hex as the tile mesh)
       const rim = new THREE.Mesh(
@@ -518,7 +433,7 @@ export class BoardView {
         new THREE.BoxGeometry(0.35, 0.06, 0.18),
         toonMat(STYLE.woodTrim),
       );
-      pier.position.set(px, SEA_LEVEL + 0.06, pz);
+      pier.position.set(px, SEA_LEVEL + 0.05, pz);
       pier.rotation.y = -Math.atan2(outward.y, outward.x);
       pier.castShadow = true;
       this.harborGroup.add(pier);

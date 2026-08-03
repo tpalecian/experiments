@@ -19,9 +19,6 @@ export const STYLE = {
   roof: 0x5c3d2e,
   woodTrim: 0x8b5a3c,
   dirt: 0x8b6a42,
-  /** Warm sand for coastal beaches that meet the sea. */
-  sand: 0xe6d09a,
-  sandDeep: 0xc9b074,
 } as const;
 
 /** Hand-painted terrain tops. */

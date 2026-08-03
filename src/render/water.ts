@@ -72,7 +72,7 @@ void main() {
   float w = swell(world.xz, t);
   vec2 d = swellDeriv(world.xz, t);
 
-  // Calm the swell at the beach so the shoreline stays level with the sand.
+  // Calm the swell near shore so waves don't punch through the sloped coastline.
   float shoreDist = shoreDistance(world.xz);
   float calm = smoothstep(0.05, 1.35, shoreDist);
   float amp = uWaveHeight * calm;
@@ -417,8 +417,8 @@ export class WaterSurface {
   /**
    * Feed land hex world centers so the shoreline SDF hugs every tile edge.
    * `tileRadius` is center-to-vertex (same as BoardView HEX_SIZE).
-   * `shorePad` expands the SDF past the hex (e.g. beach shelf width) so foam
-   * meets the outer beach lip rather than the tile wall.
+   * `shorePad` expands the SDF past the hex (e.g. coastal side flare) so foam
+   * meets the sloped lip rather than the vertical footprint.
    */
   setLandHexes(
     centers: { x: number; z: number }[],
