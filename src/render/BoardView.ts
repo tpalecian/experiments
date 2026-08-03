@@ -12,16 +12,11 @@ import {
 } from './style';
 import type { AtmosphereSnapshot } from './atmosphere';
 import type { StyleConfig } from './styleConfig';
+import { DEFAULT_STYLE_CONFIG } from './styleConfig';
 import { TweenPlayer, ease } from './tween';
 import { WaterSurface } from './water';
 
 const TILE_HEIGHT = 0.28;
-const HOVER_LIFT = 0.045;
-const HIGHLIGHT_FADE = 8;
-const ROBBER_HOP_SEC = 0.48;
-const SPAWN_SEC = 0.32;
-const ROAD_SPAWN_SEC = 0.26;
-const UPGRADE_SEC = 0.38;
 
 /** Pointy-top hex in the XY plane (matches board hexCorner angles). */
 function hexShape(size: number): THREE.Shape {
@@ -143,6 +138,17 @@ export class BoardView {
   private robberHopping = false;
   private robberTargetHex: string | null = null;
   private elapsed = 0;
+  private motion = {
+    hoverLift: DEFAULT_STYLE_CONFIG.hexHoverLift,
+    highlightFade: DEFAULT_STYLE_CONFIG.motionHighlightFade,
+    pieceSpawnSec: DEFAULT_STYLE_CONFIG.motionPieceSpawnSec,
+    roadSpawnSec: DEFAULT_STYLE_CONFIG.motionRoadSpawnSec,
+    upgradeSec: DEFAULT_STYLE_CONFIG.motionUpgradeSec,
+    robberHopSec: DEFAULT_STYLE_CONFIG.motionRobberHopSec,
+    productionPulseSec: DEFAULT_STYLE_CONFIG.productionPulseSec,
+    productionPulseStrength: DEFAULT_STYLE_CONFIG.productionPulseStrength,
+    harborBobAmp: DEFAULT_STYLE_CONFIG.harborBobAmp,
+  };
 
   constructor() {
     this.robber = this.makeRobber();
@@ -172,7 +178,7 @@ export class BoardView {
     for (const [id, vis] of this.hexVisuals) {
       const hexNum = vis.mesh.userData.number as number | null | undefined;
       if (hexNum === total) {
-        this.productionPulse.set(id, 1.15);
+        this.productionPulse.set(id, this.motion.productionPulseSec);
       }
     }
   }
@@ -193,6 +199,17 @@ export class BoardView {
 
   applyStyleConfig(config: StyleConfig): void {
     this.water.applyConfig(config);
+    this.motion = {
+      hoverLift: config.hexHoverLift,
+      highlightFade: config.motionHighlightFade,
+      pieceSpawnSec: config.motionPieceSpawnSec,
+      roadSpawnSec: config.motionRoadSpawnSec,
+      upgradeSec: config.motionUpgradeSec,
+      robberHopSec: config.motionRobberHopSec,
+      productionPulseSec: config.productionPulseSec,
+      productionPulseStrength: config.productionPulseStrength,
+      harborBobAmp: config.harborBobAmp,
+    };
   }
 
   applyAtmosphere(atm: AtmosphereSnapshot): void {
@@ -515,7 +532,7 @@ export class BoardView {
 
       if (animate) {
         this.tweens.play(
-          ROAD_SPAWN_SEC,
+          this.motion.roadSpawnSec,
           (u) => {
             const s = 0.15 + (restingScale - 0.15) * u;
             mesh.scale.set(s, s * (0.6 + 0.4 * u), s);
@@ -569,7 +586,7 @@ export class BoardView {
 
         if (animate) {
           this.tweens.play(
-            UPGRADE_SEC,
+            this.motion.upgradeSec,
             (u) => {
               old.scale.setScalar(existing.restingScale * (1 - u * 0.85));
               old.position.y = TILE_HEIGHT + u * 0.35;
@@ -613,7 +630,7 @@ export class BoardView {
 
       if (animate) {
         this.tweens.play(
-          SPAWN_SEC,
+          this.motion.pieceSpawnSec,
           (u) => {
             piece.scale.setScalar(baked * u);
             piece.position.y = TILE_HEIGHT + (1 - u) * 0.55 - Math.sin(u * Math.PI) * 0.08 * (1 - u);
@@ -669,7 +686,7 @@ export class BoardView {
     const from = this.robber.position.clone();
     this.robberHopping = true;
     this.tweens.play(
-      ROBBER_HOP_SEC,
+      this.motion.robberHopSec,
       (u) => {
         const s = ease.easeInOutCubic(u);
         this.robber.position.x = from.x + (tx - from.x) * s;
@@ -760,7 +777,7 @@ export class BoardView {
 
   private updateHighlightFade(dt: number): void {
     const pulse = 0.82 + Math.sin(this.elapsed * 3.2) * 0.1;
-    const step = 1 - Math.exp(-HIGHLIGHT_FADE * dt);
+    const step = 1 - Math.exp(-this.motion.highlightFade * dt);
 
     for (const [id, m] of this.vertexMarkers) {
       const mat = m.material as THREE.MeshToonMaterial;
@@ -793,15 +810,15 @@ export class BoardView {
 
     for (const [id, vis] of this.hexVisuals) {
       const hovered = this.hoverHexId === id;
-      const targetY = vis.restingY + (hovered ? HOVER_LIFT : 0);
+      const targetY = vis.restingY + (hovered ? this.motion.hoverLift : 0);
       vis.mesh.position.y += (targetY - vis.mesh.position.y) * step;
 
       let pulse = this.productionPulse.get(id) ?? 0;
       if (pulse > 0) {
         pulse = Math.max(0, pulse - dt);
         this.productionPulse.set(id, pulse);
-        const wave = Math.sin((1.15 - pulse) * Math.PI * 3) * Math.min(1, pulse * 2);
-        const boost = Math.max(0, wave) * 0.55;
+        const wave = Math.sin((this.motion.productionPulseSec - pulse) * Math.PI * 3) * Math.min(1, pulse * 2);
+        const boost = Math.max(0, wave) * this.motion.productionPulseStrength;
         if (!this.legalHexes.has(id)) {
           const mat = vis.mesh.material as THREE.MeshToonMaterial;
           mat.emissive.set(0x886622);
@@ -809,7 +826,7 @@ export class BoardView {
         }
         if (vis.numberToken) {
           const bob = Math.max(0, wave) * 0.08;
-          const scale = 1 + Math.max(0, wave) * 0.22;
+          const scale = 1 + Math.max(0, wave) * (0.12 + this.motion.productionPulseStrength * 0.2);
           vis.numberToken.position.y = vis.numberRestY + bob;
           vis.numberToken.scale.setScalar(scale);
         }
@@ -826,7 +843,7 @@ export class BoardView {
     for (const sprite of this.harborSprites) {
       const base = (sprite.userData.bobBaseY as number) ?? TILE_HEIGHT + 0.4;
       const phase = (sprite.userData.bobPhase as number) ?? 0;
-      sprite.position.y = base + Math.sin(time * 1.4 + phase) * 0.035;
+      sprite.position.y = base + Math.sin(time * 1.4 + phase) * this.motion.harborBobAmp;
     }
   }
 

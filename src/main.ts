@@ -179,13 +179,14 @@ function frameCamera(rings: number): void {
 }
 
 function nudgeCameraToward(world: THREE.Vector3): void {
+  const cfg = styleLive;
   cameraLookFrom.copy(controls.target);
   cameraLook.copy(world);
   cameraLook.y = 0;
   // Blend toward the event without yanking the orbit target fully off the board center.
-  cameraLook.lerp(boardCenter, 0.55);
+  cameraLook.lerp(boardCenter, cfg.motionCameraNudgeBlend);
   cameraTweens.play(
-    0.55,
+    cfg.motionCameraNudgeSec,
     (u) => {
       controls.target.lerpVectors(cameraLookFrom, cameraLook, ease.easeOutCubic(u));
     },

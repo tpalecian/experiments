@@ -79,6 +79,8 @@ Legacy island-generation stubs under `src/terrain/`, `src/water/`, `src/world/`,
 | 8 | Deep configurator | Schema-driven panel: search, categories, presets, Motion section |
 | 9 | Weather (later) | Palette / scalar swaps on Environment State only |
 
+Milestones 1–8 are implemented on the live hex board. Weather remains future work.
+
 Day-night is already live (`TimeOfDayController`). Keep feeding Environment State into water/sky/lights — never rebuild hex geometry when the clock moves.
 
 **Rule:** a visual feature is not done until it is editable in the craft panel under the correct category ([CONFIGURATOR.md](CONFIGURATOR.md)).

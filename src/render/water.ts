@@ -78,12 +78,17 @@ uniform float uHorizonHaze;
 uniform float uBandIntensity;
 uniform float uBandScale;
 uniform float uBandSpeed;
+uniform float uBandSoftness;
 uniform float uFresnelStrength;
 uniform float uFresnelPower;
 uniform float uSpecularIntensity;
 uniform float uSpecularPower;
 uniform float uShoreFoam;
 uniform float uFoamWidth;
+uniform float uFoamPulse;
+uniform float uFoamPulseSpeed;
+uniform float uShoreGlow;
+uniform float uColorWave;
 uniform float uCausticIntensity;
 uniform float uCausticScale;
 uniform float uCausticSpeed;
@@ -121,7 +126,10 @@ float shoreDistance(vec2 p) {
 
 float softBand(float x) {
   float s = 0.5 + 0.5 * sin(x);
-  return smoothstep(0.25, 0.8, s);
+  float soft = clamp(uBandSoftness, 0.15, 0.95);
+  float lo = mix(0.45, 0.15, soft);
+  float hi = mix(0.65, 0.9, soft);
+  return smoothstep(lo, hi, s);
 }
 
 float softCaustic(vec2 p, float t) {
@@ -164,7 +172,7 @@ void main() {
   // 2. Soft near-shore turquoise (no separate geometric halo)
   float shoreGlow = 1.0 - smoothstep(0.0, shore * 0.45, shoreDist);
   shoreGlow = pow(max(shoreGlow, 0.0), 1.6);
-  col = mix(col, uShallow, shoreGlow * 0.16);
+  col = mix(col, uShallow, shoreGlow * uShoreGlow);
 
   // 3. Large sine-wave color motion — runs all the way to the hex edges
   float wt = uTime * uWaveSpeed;
@@ -173,9 +181,9 @@ void main() {
     sin(vWorldPos.z * 0.20 + wt * 0.10) +
     sin((vWorldPos.x + vWorldPos.z) * 0.15 + wt * 0.08);
   wave *= 1.0 / 3.0;
-  col += vec3(0.05) * wave;
-  col = mix(col, uLagoon, max(wave, 0.0) * 0.07);
-  col += vec3(0.025) * vWave;
+  col += vec3(uColorWave) * wave;
+  col = mix(col, uLagoon, max(wave, 0.0) * uColorWave * 1.4);
+  col += vec3(uColorWave * 0.5) * vWave;
 
   // 4. Soft wave bands traveling toward shore — including right at the tiles
   float radial = shoreDist * uBandScale - uTime * uBandSpeed;
@@ -232,7 +240,7 @@ void main() {
   // 8. Thin foam exactly where water meets each land hex edge
   float foam = smoothstep(-uFoamWidth * 0.2, uFoamWidth * 0.15, shoreDist);
   foam *= 1.0 - smoothstep(uFoamWidth * 0.2, uFoamWidth, shoreDist);
-  float foamPulse = 0.78 + 0.22 * sin(uTime * 0.7 + shoreDist * 2.0 + wave * 2.5);
+  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 2.0 + wave * 2.5));
   foam = pow(max(foam, 0.0), 1.15) * foamPulse * uShoreFoam;
   col = mix(col, uFoamColor, clamp(foam, 0.0, 0.85) * keep);
 
@@ -282,12 +290,17 @@ export class WaterSurface {
         uBandIntensity: { value: this.config.waterBandIntensity },
         uBandScale: { value: this.config.waterBandScale },
         uBandSpeed: { value: this.config.waterBandSpeed },
+        uBandSoftness: { value: this.config.waterBandSoftness },
         uFresnelStrength: { value: this.config.waterFresnelStrength },
         uFresnelPower: { value: this.config.waterFresnelPower },
         uSpecularIntensity: { value: this.config.waterSpecularIntensity },
         uSpecularPower: { value: this.config.waterSpecularPower },
         uShoreFoam: { value: this.config.waterShoreFoam },
         uFoamWidth: { value: this.config.waterFoamWidth },
+        uFoamPulse: { value: this.config.waterFoamPulse },
+        uFoamPulseSpeed: { value: this.config.waterFoamPulseSpeed },
+        uShoreGlow: { value: this.config.waterShoreGlow },
+        uColorWave: { value: this.config.waterColorWave },
         uCausticIntensity: { value: this.config.waterCausticIntensity },
         uCausticScale: { value: this.config.waterCausticScale },
         uCausticSpeed: { value: this.config.waterCausticSpeed },
@@ -335,12 +348,17 @@ export class WaterSurface {
     u.uBandIntensity.value = config.waterBandIntensity;
     u.uBandScale.value = config.waterBandScale;
     u.uBandSpeed.value = config.waterBandSpeed;
+    u.uBandSoftness.value = config.waterBandSoftness;
     u.uFresnelStrength.value = config.waterFresnelStrength;
     u.uFresnelPower.value = config.waterFresnelPower;
     u.uSpecularIntensity.value = config.waterSpecularIntensity;
     u.uSpecularPower.value = config.waterSpecularPower;
     u.uShoreFoam.value = config.waterShoreFoam;
     u.uFoamWidth.value = config.waterFoamWidth;
+    u.uFoamPulse.value = config.waterFoamPulse;
+    u.uFoamPulseSpeed.value = config.waterFoamPulseSpeed;
+    u.uShoreGlow.value = config.waterShoreGlow;
+    u.uColorWave.value = config.waterColorWave;
     u.uCausticIntensity.value = config.waterCausticIntensity;
     u.uCausticScale.value = config.waterCausticScale;
     u.uCausticSpeed.value = config.waterCausticSpeed;

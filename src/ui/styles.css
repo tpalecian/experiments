@@ -536,7 +536,7 @@ button:disabled {
   pointer-events: auto;
   margin-top: 0.55rem;
   width: min(320px, calc(100vw - 2rem));
-  max-height: min(70vh, 560px);
+  max-height: min(78vh, 640px);
   overflow: auto;
   padding: 0.9rem 1rem 1rem;
   background: var(--panel);
@@ -556,23 +556,106 @@ button:disabled {
 }
 
 .style-config-header p {
-  margin: 0.25rem 0 0.75rem;
+  margin: 0.25rem 0 0.65rem;
   color: var(--muted);
   font-size: 0.8rem;
 }
 
+.style-search {
+  display: block;
+  margin-bottom: 0.55rem;
+}
+
+.style-search input {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 2px solid var(--panel-border);
+  border-radius: 10px;
+  background: #fff8e8;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.style-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+}
+
+.style-preset {
+  padding: 0.35rem 0.55rem !important;
+  font-size: 0.75rem !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.style-empty {
+  margin: 0.5rem 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .style-section {
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.55rem;
+  margin-bottom: 0.55rem;
+  padding-bottom: 0.45rem;
   border-bottom: 1px solid rgba(92, 61, 46, 0.12);
 }
 
 .style-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.2rem 0;
+  margin: 0;
+  border: none;
+  background: transparent;
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
-  margin-bottom: 0.4rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+
+.style-section-title:hover {
+  color: var(--ink);
+  transform: none;
+}
+
+.style-section-chevron {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.style-section-blurb {
+  margin: 0 0 0.4rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.style-section.collapsed .style-section-blurb {
+  display: none;
+}
+
+.style-section-body.hidden {
+  display: none;
 }
 
 .style-field {

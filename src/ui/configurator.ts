@@ -1,5 +1,7 @@
-import type { StyleConfig } from '../render/styleConfig';
+import type { StyleConfig, StylePresetId } from '../render/styleConfig';
 import {
+  STYLE_PRESETS,
+  applyStylePreset,
   loadStyleConfig,
   resetStyleConfig,
   saveStyleConfig,
@@ -15,11 +17,22 @@ interface FieldDef {
   max?: number;
   step?: number;
   options?: { value: string; label: string }[];
+  /** Optional search aliases. */
+  tags?: string[];
 }
 
-const SECTIONS: { title: string; fields: FieldDef[] }[] = [
+interface CategoryDef {
+  id: string;
+  title: string;
+  blurb: string;
+  fields: FieldDef[];
+}
+
+const CATEGORIES: CategoryDef[] = [
   {
-    title: 'Time of day',
+    id: 'atmosphere',
+    title: 'Atmosphere',
+    blurb: 'Time of day — Environment State only.',
     fields: [
       {
         key: 'timeOfDay',
@@ -32,6 +45,7 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
           { value: 'night', label: 'Night' },
           { value: 'cycle', label: 'Slow day cycle' },
         ],
+        tags: ['clock', 'day', 'night'],
       },
       {
         key: 'dayLengthSec',
@@ -52,8 +66,12 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
     ],
   },
   {
-    title: 'Clouds',
+    id: 'skyClouds',
+    title: 'Sky & Clouds',
+    blurb: 'Dome refs and low-poly cloud flocks.',
     fields: [
+      { key: 'skyZenith', label: 'Zenith (ref)', kind: 'color', tags: ['sky'] },
+      { key: 'skyHorizon', label: 'Horizon (ref)', kind: 'color', tags: ['sky'] },
       { key: 'cloudCount', label: 'Count', kind: 'range', min: 2, max: 20, step: 1 },
       { key: 'cloudScale', label: 'Scale', kind: 'range', min: 0.4, max: 6, step: 0.1 },
       { key: 'cloudOrbitMin', label: 'Orbit min', kind: 'range', min: 8, max: 30, step: 1 },
@@ -76,67 +94,97 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
     ],
   },
   {
-    title: 'Sky craft',
+    id: 'lighting',
+    title: 'Lighting & Shadows',
+    blurb: 'Craft multipliers — atmosphere owns live values.',
     fields: [
-      { key: 'skyZenith', label: 'Zenith (ref)', kind: 'color' },
-      { key: 'skyHorizon', label: 'Horizon (ref)', kind: 'color' },
+      { key: 'exposure', label: 'Exposure (ref)', kind: 'range', min: 0.7, max: 1.8, step: 0.05 },
+      { key: 'sunIntensity', label: 'Sun (ref)', kind: 'range', min: 0.4, max: 2.5, step: 0.05 },
+      { key: 'hemiIntensity', label: 'Sky light (ref)', kind: 'range', min: 0.2, max: 1.6, step: 0.05 },
     ],
   },
   {
-    title: 'Water colors',
+    id: 'water',
+    title: 'Water',
+    blurb: 'Hex-shore palette, swell, bands, foam, caustics.',
     fields: [
-      { key: 'waterDeepOcean', label: 'Deep ocean', kind: 'color' },
-      { key: 'waterOcean', label: 'Ocean', kind: 'color' },
-      { key: 'waterLagoon', label: 'Lagoon', kind: 'color' },
-      { key: 'waterShallow', label: 'Shallow', kind: 'color' },
-      { key: 'waterBeachEdge', label: 'Beach edge', kind: 'color' },
-      { key: 'waterFoam', label: 'Foam', kind: 'color' },
-    ],
-  },
-  {
-    title: 'Water depth',
-    fields: [
+      { key: 'waterDeepOcean', label: 'Deep ocean', kind: 'color', tags: ['palette'] },
+      { key: 'waterOcean', label: 'Ocean', kind: 'color', tags: ['palette'] },
+      { key: 'waterLagoon', label: 'Lagoon', kind: 'color', tags: ['palette'] },
+      { key: 'waterShallow', label: 'Shallow', kind: 'color', tags: ['palette'] },
+      { key: 'waterBeachEdge', label: 'Beach edge', kind: 'color', tags: ['palette'] },
+      { key: 'waterFoam', label: 'Foam colour', kind: 'color' },
       { key: 'waterShoreWidth', label: 'Shore width', kind: 'range', min: 2, max: 22, step: 0.5 },
       { key: 'waterDeepFade', label: 'Deep fade', kind: 'range', min: 4, max: 30, step: 0.5 },
       { key: 'waterEdgeSoft', label: 'Horizon fade', kind: 'range', min: 20, max: 160, step: 2 },
-    ],
-  },
-  {
-    title: 'Water motion',
-    fields: [
+      { key: 'waterShoreGlow', label: 'Shore glow', kind: 'range', min: 0, max: 0.4, step: 0.01 },
+      { key: 'waterColorWave', label: 'Colour wave', kind: 'range', min: 0, max: 0.15, step: 0.005 },
       { key: 'waterWaveHeight', label: 'Swell height', kind: 'range', min: 0, max: 0.4, step: 0.01 },
       { key: 'waterWaveSpeed', label: 'Swell speed', kind: 'range', min: 0, max: 2.5, step: 0.05 },
       { key: 'waterSegments', label: 'Mesh detail', kind: 'range', min: 16, max: 128, step: 8 },
       { key: 'waterBandIntensity', label: 'Band brightness', kind: 'range', min: 0, max: 0.25, step: 0.005 },
       { key: 'waterBandScale', label: 'Band spacing', kind: 'range', min: 0.1, max: 1.5, step: 0.05 },
       { key: 'waterBandSpeed', label: 'Band speed', kind: 'range', min: 0, max: 1.2, step: 0.02 },
-    ],
-  },
-  {
-    title: 'Water light',
-    fields: [
+      { key: 'waterBandSoftness', label: 'Band softness', kind: 'range', min: 0.15, max: 0.95, step: 0.05 },
       { key: 'waterFresnelStrength', label: 'Fresnel', kind: 'range', min: 0, max: 0.45, step: 0.01 },
       { key: 'waterFresnelPower', label: 'Fresnel power', kind: 'range', min: 1, max: 8, step: 0.25 },
       { key: 'waterSpecularIntensity', label: 'Specular', kind: 'range', min: 0, max: 0.7, step: 0.02 },
       { key: 'waterSpecularPower', label: 'Specular softness', kind: 'range', min: 4, max: 64, step: 1 },
-    ],
-  },
-  {
-    title: 'Water foam & caustics',
-    fields: [
       { key: 'waterShoreFoam', label: 'Foam amount', kind: 'range', min: 0, max: 1.5, step: 0.05 },
       { key: 'waterFoamWidth', label: 'Foam width', kind: 'range', min: 0.2, max: 2.5, step: 0.05 },
+      { key: 'waterFoamPulse', label: 'Foam pulse', kind: 'range', min: 0, max: 1, step: 0.05 },
+      { key: 'waterFoamPulseSpeed', label: 'Foam pulse speed', kind: 'range', min: 0, max: 2, step: 0.05 },
       { key: 'waterCausticIntensity', label: 'Caustics', kind: 'range', min: 0, max: 0.25, step: 0.01 },
       { key: 'waterCausticScale', label: 'Caustic scale', kind: 'range', min: 0.15, max: 1.5, step: 0.05 },
       { key: 'waterCausticSpeed', label: 'Caustic speed', kind: 'range', min: 0, max: 1.2, step: 0.05 },
     ],
   },
   {
-    title: 'Lighting craft',
+    id: 'hexBoard',
+    title: 'Hex Board & Props',
+    blurb: 'Hover lift, production pulse, harbor bob.',
     fields: [
-      { key: 'exposure', label: 'Exposure (ref)', kind: 'range', min: 0.7, max: 1.8, step: 0.05 },
-      { key: 'sunIntensity', label: 'Sun (ref)', kind: 'range', min: 0.4, max: 2.5, step: 0.05 },
-      { key: 'hemiIntensity', label: 'Sky light (ref)', kind: 'range', min: 0.2, max: 1.6, step: 0.05 },
+      { key: 'hexHoverLift', label: 'Hover lift', kind: 'range', min: 0, max: 0.12, step: 0.005, tags: ['hex', 'hover'] },
+      {
+        key: 'productionPulseSec',
+        label: 'Production pulse (sec)',
+        kind: 'range',
+        min: 0.4,
+        max: 2.5,
+        step: 0.05,
+        tags: ['dice', 'token'],
+      },
+      {
+        key: 'productionPulseStrength',
+        label: 'Pulse strength',
+        kind: 'range',
+        min: 0,
+        max: 1,
+        step: 0.05,
+        tags: ['dice', 'token'],
+      },
+      { key: 'harborBobAmp', label: 'Harbor bob', kind: 'range', min: 0, max: 0.1, step: 0.005 },
+    ],
+  },
+  {
+    id: 'motion',
+    title: 'Motion & Feedback',
+    blurb: 'Piece tweens, robber hop, highlights, camera nudge.',
+    fields: [
+      { key: 'motionPieceSpawnSec', label: 'Piece spawn (sec)', kind: 'range', min: 0.1, max: 1, step: 0.02 },
+      { key: 'motionRoadSpawnSec', label: 'Road spawn (sec)', kind: 'range', min: 0.08, max: 0.8, step: 0.02 },
+      { key: 'motionUpgradeSec', label: 'City upgrade (sec)', kind: 'range', min: 0.15, max: 1, step: 0.02 },
+      { key: 'motionRobberHopSec', label: 'Robber hop (sec)', kind: 'range', min: 0.2, max: 1.2, step: 0.02 },
+      { key: 'motionHighlightFade', label: 'Highlight fade speed', kind: 'range', min: 2, max: 20, step: 0.5 },
+      { key: 'motionCameraNudgeSec', label: 'Camera nudge (sec)', kind: 'range', min: 0.15, max: 1.5, step: 0.05 },
+      {
+        key: 'motionCameraNudgeBlend',
+        label: 'Camera center blend',
+        kind: 'range',
+        min: 0.2,
+        max: 0.9,
+        step: 0.05,
+      },
     ],
   },
 ];
@@ -147,6 +195,9 @@ export class StyleConfigurator {
   private config: StyleConfig;
   private listeners = new Set<Listener>();
   private open = false;
+  private search = '';
+  private collapsed = new Set<string>();
+  private lastOpenCategory = 'atmosphere';
 
   constructor(parent: HTMLElement) {
     this.config = loadStyleConfig();
@@ -156,6 +207,10 @@ export class StyleConfigurator {
 
     this.panel = document.createElement('div');
     this.root.appendChild(this.panel);
+    // Collapse all but atmosphere by default (progressive disclosure).
+    for (const cat of CATEGORIES) {
+      if (cat.id !== this.lastOpenCategory) this.collapsed.add(cat.id);
+    }
     this.render();
   }
 
@@ -194,41 +249,121 @@ export class StyleConfigurator {
     });
   }
 
+  private fieldMatches(f: FieldDef, q: string): boolean {
+    if (!q) return true;
+    const hay = `${f.label} ${f.key} ${(f.tags ?? []).join(' ')}`.toLowerCase();
+    return hay.includes(q);
+  }
+
+  private categoryMatches(cat: CategoryDef, q: string): boolean {
+    if (!q) return true;
+    if (`${cat.title} ${cat.blurb} ${cat.id}`.toLowerCase().includes(q)) return true;
+    return cat.fields.some((f) => this.fieldMatches(f, q));
+  }
+
   private render(): void {
+    const q = this.search.trim().toLowerCase();
+    const visibleCats = CATEGORIES.filter((c) => this.categoryMatches(c, q));
+
     this.root.className = this.open ? 'style-config open' : 'style-config';
     this.panel.innerHTML = `
       <button type="button" class="style-config-toggle" data-action="toggle">
-        ${this.open ? 'Close style' : 'Style'}
+        ${this.open ? 'Close craft' : 'Style'}
       </button>
       <div class="style-config-panel ${this.open ? '' : 'hidden'}">
         <div class="style-config-header">
-          <h3>Style configurator</h3>
-          <p>Time of day drives sky, lights, fog & water. Craft water and clouds below.</p>
+          <h3>Craft configurator</h3>
+          <p>Hex board look & motion. Search, collapse, and presets — day-night never rebuilds tiles.</p>
+          <label class="style-search">
+            <span class="sr-only">Search</span>
+            <input type="search" data-action="search" placeholder="Search knobs…" value="${escapeAttr(this.search)}" />
+          </label>
+          <div class="style-presets" role="group" aria-label="Presets">
+            ${STYLE_PRESETS.map(
+              (p) =>
+                `<button type="button" class="btn secondary style-preset" data-preset="${p.id}">${p.label}</button>`,
+            ).join('')}
+          </div>
         </div>
-        ${SECTIONS.map(
-          (section) => `
-          <div class="style-section">
-            <div class="style-section-title">${section.title}</div>
-            ${section.fields.map((f) => this.fieldHtml(f)).join('')}
-          </div>`,
-        ).join('')}
+        ${
+          visibleCats.length === 0
+            ? `<p class="style-empty">No fields match “${escapeHtml(this.search)}”.</p>`
+            : visibleCats
+                .map((cat) => {
+                  const fields = q
+                    ? cat.fields.filter((f) => this.fieldMatches(f, q))
+                    : cat.fields;
+                  if (fields.length === 0) return '';
+                  const isOpen = q ? true : !this.collapsed.has(cat.id);
+                  return `
+          <div class="style-section ${isOpen ? 'open' : 'collapsed'}" data-category="${cat.id}">
+            <button type="button" class="style-section-title" data-action="toggle-cat" data-category="${cat.id}" aria-expanded="${isOpen}">
+              <span>${cat.title}</span>
+              <span class="style-section-chevron" aria-hidden="true">${isOpen ? '▾' : '▸'}</span>
+            </button>
+            <p class="style-section-blurb">${cat.blurb}</p>
+            <div class="style-section-body ${isOpen ? '' : 'hidden'}">
+              ${fields.map((f) => this.fieldHtml(f)).join('')}
+            </div>
+          </div>`;
+                })
+                .join('')
+        }
         <div class="style-config-actions">
           <button type="button" class="btn secondary" data-action="reset">Reset defaults</button>
         </div>
       </div>
     `;
 
+    this.bindEvents();
+  }
+
+  private bindEvents(): void {
     this.panel.querySelectorAll<HTMLElement>('[data-action]').forEach((el) => {
-      el.addEventListener('click', () => {
-        const action = el.dataset.action;
-        if (action === 'toggle') {
+      const action = el.dataset.action;
+      if (action === 'toggle') {
+        el.addEventListener('click', () => {
           this.open = !this.open;
           this.render();
-        } else if (action === 'reset') {
+        });
+      } else if (action === 'reset') {
+        el.addEventListener('click', () => {
           this.config = resetStyleConfig();
           this.emit();
           this.render();
-        }
+        });
+      } else if (action === 'toggle-cat') {
+        el.addEventListener('click', () => {
+          const id = el.dataset.category!;
+          if (this.collapsed.has(id)) {
+            this.collapsed.delete(id);
+            this.lastOpenCategory = id;
+          } else {
+            this.collapsed.add(id);
+          }
+          this.render();
+        });
+      } else if (action === 'search' && el instanceof HTMLInputElement) {
+        el.addEventListener('input', () => {
+          this.search = el.value;
+          // Keep focus: re-render then restore caret.
+          const pos = el.selectionStart ?? el.value.length;
+          this.render();
+          const next = this.panel.querySelector<HTMLInputElement>('input[data-action="search"]');
+          if (next) {
+            next.focus();
+            next.setSelectionRange(pos, pos);
+          }
+        });
+      }
+    });
+
+    this.panel.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.preset as StylePresetId;
+        this.config = applyStylePreset(this.config, id);
+        this.emit();
+        this.render();
       });
     });
 
@@ -284,10 +419,17 @@ function formatNum(n: number): string {
   return n.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
 }
 
-/** HTML color inputs require #rrggbb lowercase. */
 function normalizeHex(hex: string): string {
   if (/^#[0-9A-Fa-f]{6}$/.test(hex)) return hex.toLowerCase();
   return hex;
+}
+
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 export { DEFAULT_STYLE_CONFIG } from '../render/styleConfig';
