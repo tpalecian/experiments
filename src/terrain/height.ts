@@ -54,14 +54,14 @@ export interface Heightmap {
  */
 export function terrainCurve(d: DistanceToCoast): number {
   if (d < 0) {
-    // Underwater shelf: gently deeper offshore
-    return Math.max(d, -40) * 0.015;
+    if (d > -0.55) return d * 0.02;
+    return Math.max(d, -40) * 0.018;
   }
-  // Land: gentle rise — beach shelf then hills
-  if (d < 1.2) return d * 0.08;
-  if (d < 3.5) return 0.096 + (d - 1.2) * 0.14;
-  if (d < 6.5) return 0.418 + (d - 3.5) * 0.18;
-  return 0.958 + (d - 6.5) * 0.12;
+  // Wide white beach shelf → short rise → flat grassy plateau
+  if (d < 1.45) return d * 0.04;
+  if (d < 2.1) return 0.058 + (d - 1.45) * 0.24;
+  if (d < 6.5) return 0.214 + (d - 2.1) * 0.03;
+  return 0.346 + (d - 6.5) * 0.085;
 }
 
 /**

@@ -52,24 +52,24 @@ export const DEFAULT_WORLD_GENERATION: WorldGenerationParams = {
     falloff: 1.12,
     warp: 0.42,
     islandCount: 0,
-    archipelagoSpread: 0.55,
+    archipelagoSpread: 0.68,
   },
   smoothPasses: 2,
   resolution: 128,
   extentScale: 1.85,
   height: {
-    verticalScale: 0.055,
-    largeNoise: 0.22,
-    smallNoise: 0.06,
+    verticalScale: 0.048,
+    largeNoise: 0.12,
+    smallNoise: 0.035,
   },
   beach: {
-    wetEnd: 0.55,
-    dryEnd: 1.35,
+    wetEnd: 0.62,
+    dryEnd: 1.55,
   },
   biomeBlur: 1.4,
-  verticalScale: 0.055,
+  verticalScale: 0.048,
   treeDensity: 0.55,
-  rockDensity: 0.4,
+  rockDensity: 0.55,
   showHexOverlay: false,
   showSdfOverlay: false,
 };
@@ -80,6 +80,8 @@ export interface ScatterInstance {
   z: number;
   scale: number;
   yaw: number;
+  /** Optional non-uniform height for rock pillars. */
+  scaleY?: number;
 }
 
 export interface WorldData {

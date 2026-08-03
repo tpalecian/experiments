@@ -150,11 +150,35 @@ export function resolveHarborPose(
     z = again.z;
   }
 
+  // Never leave the pier footing in open water (channel / jagged coast)
+  if (sdfAt(world, x, z) < 0.02) {
+    const inland = walkSdf(world, x, z, 1, 0.12, 48, 0.2);
+    x = inland.x;
+    z = inland.z;
+  }
+
   const g = sdfGradient(world, x, z);
-  // Ocean direction = decreasing SDF
+  // Ocean direction = decreasing SDF; verify tip is actually more seaward
   let out = normalize2(-g.gx, -g.gz);
   if (Math.hypot(out.x, out.z) < 0.05) {
-    out = normalize2(x, z); // radial fallback
+    out = normalize2(x, z);
+  }
+  const shoreD = sdfAt(world, x, z);
+  let best = out;
+  let bestTipD = sdfAt(world, x + out.x * 0.85, z + out.z * 0.85);
+  // Prefer a direction that clearly steps into water (archipelago coasts are noisy)
+  for (let k = 0; k < 8; k++) {
+    const ang = (k / 8) * Math.PI * 2;
+    const cand = { x: Math.sin(ang), z: Math.cos(ang) };
+    const td = sdfAt(world, x + cand.x * 0.85, z + cand.z * 0.85);
+    if (td < bestTipD) {
+      bestTipD = td;
+      best = cand;
+    }
+  }
+  if (bestTipD < shoreD) out = best;
+  else if (sdfAt(world, x - out.x * 0.85, z - out.z * 0.85) < bestTipD) {
+    out = { x: -out.x, z: -out.z };
   }
 
   const yaw = Math.atan2(out.x, out.z);

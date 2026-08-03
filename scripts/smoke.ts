@@ -18,6 +18,7 @@ import {
   lerpAtmosphere,
   sampleAtmosphereAtPhase,
 } from '../src/render/atmosphere';
+import { biomeIndexToKind } from '../src/terrain/biome';
 import { generateIsland } from '../src/terrain/pipeline';
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -116,11 +117,43 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(world.sdfField.length === 64 * 64, 'sdf field size');
   assert(world.heightField.length === 64 * 64, 'height field size');
   assert(world.seed.blobs.length === 2, `expected 2 archipelago blobs, got ${world.seed.blobs.length}`);
+  assert(
+    world.seed.blobs.every((b) => typeof b.biome === 'string'),
+    'each island blob has a biome',
+  );
+  // Per-island biomes: land cells near each nucleus should match that blob's biome
+  for (const blob of world.seed.blobs) {
+    const sample = world.sdf.sample(blob.x, blob.z);
+    if (sample <= 0) continue;
+    const u =
+      (blob.x - world.grid.bounds.minX) /
+      Math.max(world.grid.bounds.maxX - world.grid.bounds.minX, 1e-6);
+    const v =
+      (blob.z - world.grid.bounds.minZ) /
+      Math.max(world.grid.bounds.maxZ - world.grid.bounds.minZ, 1e-6);
+    const ix = Math.round(u * (world.grid.width - 1));
+    const iz = Math.round(v * (world.grid.depth - 1));
+    const idx = iz * world.grid.width + ix;
+    const kind = biomeIndexToKind(world.biomeField[idx]!);
+    assert(kind === blob.biome, `island nucleus biome ${blob.biome} vs field ${kind}`);
+  }
   const center = world.sdf.sample(0, 0);
   // With two offset islands, map center may be a sea channel — that's OK.
   const ocean = world.sdf.sample(world.grid.bounds.maxX * 0.95, world.grid.bounds.maxZ * 0.95);
   assert(ocean < 0, `far corner should be ocean (d=${ocean})`);
   assert(world.coastline.length >= 1, 'at least one coastline loop');
+  // Prefer multiple landmasses when archipelago; allow a thin sandbar bridge
+  if (world.seed.blobs.length >= 2) {
+    assert(
+      world.coastline.length >= 1,
+      'archipelago should produce coastline geometry',
+    );
+    // Mid-channel should not be deep inland — sandbar or open water
+    const a = world.seed.blobs[0]!;
+    const b = world.seed.blobs[1]!;
+    const midD = world.sdf.sample((a.x + b.x) * 0.5, (a.z + b.z) * 0.5);
+    assert(midD < 1.25, `channel between islands should be shallow/open (d=${midD})`);
+  }
 
   // Organic coast: sites covered by their blob radii without SDF mutation.
   let inland = 0;

@@ -13,16 +13,16 @@ import { worldXZ } from '../world/types';
 import type { StyleConfig } from '../render/styleConfig';
 
 const BIOME_COLORS: Record<string, THREE.Color> = {
-  forest: new THREE.Color(0x3f8f4a),
-  wheat: new THREE.Color(0xe8c84a),
-  ore: new THREE.Color(0x8a92a6),
-  brick: new THREE.Color(0xd4784a),
-  pasture: new THREE.Color(0x7bc95a),
-  desert: new THREE.Color(0xe8c988),
+  forest: new THREE.Color(0x3a9a45),
+  wheat: new THREE.Color(0xd4c04a),
+  ore: new THREE.Color(0x6a7180),
+  brick: new THREE.Color(0xb86a48),
+  pasture: new THREE.Color(0x5cb84a),
+  desert: new THREE.Color(0xe8d9a0),
 };
 
-const WET_SAND = new THREE.Color(0xc9a86c);
-const DRY_SAND = new THREE.Color(0xe8d4a8);
+const WET_SAND = new THREE.Color(0xe8d9b8);
+const DRY_SAND = new THREE.Color(0xf7f2e4);
 
 export class IslandTerrainView {
   readonly group = new THREE.Group();
@@ -195,7 +195,9 @@ export class IslandTerrainView {
         const land = BIOME_COLORS[biome] ?? BIOME_COLORS.desert!;
         tmp.copy(land);
         if (d < 0) {
-          tmp.set(0x1a6a7a);
+          // Shallow sandbar shelf reads lighter than deep ocean under-mesh
+          if (d > -0.55) tmp.set(0x7ec8b8);
+          else tmp.set(0x1a6a7a);
         } else {
           tmp.lerp(WET_SAND, bw.wet);
           tmp.lerp(DRY_SAND, bw.dry);

@@ -156,17 +156,17 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   islandFalloff: 1.12,
   islandWarp: 0.42,
   islandCount: 0,
-  archipelagoSpread: 0.55,
+  archipelagoSpread: 0.68,
   islandSmoothPasses: 2,
   islandResolution: 128,
-  islandVerticalScale: 0.055,
-  islandLargeNoise: 0.22,
-  islandSmallNoise: 0.06,
-  beachWetEnd: 0.55,
-  beachDryEnd: 1.35,
+  islandVerticalScale: 0.048,
+  islandLargeNoise: 0.12,
+  islandSmallNoise: 0.035,
+  beachWetEnd: 0.62,
+  beachDryEnd: 1.55,
   biomeBlur: 1.4,
   treeDensity: 0.55,
-  rockDensity: 0.4,
+  rockDensity: 0.55,
 
   showHexOverlay: false,
   showSdfOverlay: false,
@@ -196,7 +196,7 @@ export const TERRAIN_LOOK_KEYS: (keyof StyleConfig)[] = [
   'beachDryEnd',
 ];
 
-const STORAGE_KEY = 'catan-style-config-v7';
+const STORAGE_KEY = 'catan-style-config-v8';
 
 export function loadStyleConfig(): StyleConfig {
   try {

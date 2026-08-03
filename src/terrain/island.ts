@@ -8,7 +8,9 @@
  * Never use high-frequency noise on the coastline.
  */
 
+import type { ResourceKind } from '../gameplay/regions';
 import type { GraphPoint } from './graph';
+import { majorityBiomeForSites } from './biome';
 import { fbm2, makePerm, mulberry32 } from './noise';
 
 export interface IslandParams {
@@ -34,15 +36,17 @@ export const DEFAULT_ISLAND: IslandParams = {
   falloff: 1.12,
   warp: 0.42,
   islandCount: 0,
-  archipelagoSpread: 0.55,
+  archipelagoSpread: 0.68,
 };
 
-/** One soft landmass nucleus. */
+/** One soft landmass nucleus with a dominant biome. */
 export interface IslandBlob {
   x: number;
   z: number;
   /** Local radius covering that cluster (+ margin). */
   radius: number;
+  /** Dominant terrain biome for this landmass (drives color + scatter). */
+  biome: ResourceKind;
 }
 
 export interface IslandSeed {
@@ -56,7 +60,7 @@ export function createIslandSeed(params: Partial<IslandParams> = {}): IslandSeed
   return {
     params: merged,
     perm: makePerm(merged.seed | 0),
-    blobs: [{ x: 0, z: 0, radius: merged.radius }],
+    blobs: [{ x: 0, z: 0, radius: merged.radius, biome: 'pasture' }],
   };
 }
 
@@ -72,9 +76,12 @@ export function autoIslandCount(siteCount: number, rings?: number): number {
   return 4;
 }
 
+const BIOME_CYCLE: ResourceKind[] = ['pasture', 'forest', 'wheat', 'brick', 'ore'];
+
 /**
  * K-means-ish clustering of gameplay sites → archipelago nuclei.
  * Each blob radius covers its members so hex centers stay inland naturally.
+ * Each landmass gets one dominant biome.
  */
 export function buildArchipelagoBlobs(
   sites: GraphPoint[],
@@ -88,10 +95,9 @@ export function buildArchipelagoBlobs(
   const k = Math.max(1, Math.min(countWanted, Math.max(1, sites.length)));
 
   if (sites.length === 0) {
-    return [{ x: 0, z: 0, radius: params.radius }];
+    return [{ x: 0, z: 0, radius: params.radius, biome: 'pasture' }];
   }
   if (k === 1) {
-    // Single island centered on site centroid
     let cx = 0;
     let cz = 0;
     for (const s of sites) {
@@ -104,11 +110,17 @@ export function buildArchipelagoBlobs(
     for (const s of sites) {
       maxR = Math.max(maxR, Math.hypot(s.x - cx, s.z - cz));
     }
-    return [{ x: cx, z: cz, radius: Math.max(params.radius * 0.55, maxR + 1.35) }];
+    return [
+      {
+        x: cx,
+        z: cz,
+        radius: Math.max(params.radius * 0.55, maxR + 1.35),
+        biome: majorityBiomeForSites(sites),
+      },
+    ];
   }
 
   const rng = mulberry32(params.seed ^ 0xa5a5a5);
-  // Seed centroids: spaced samples around the site cloud
   let meanX = 0;
   let meanZ = 0;
   for (const s of sites) {
@@ -119,7 +131,6 @@ export function buildArchipelagoBlobs(
   meanZ /= sites.length;
 
   const centroids: { x: number; z: number }[] = [];
-  // Start with farthest-point sampling for stable spread
   const first = sites[Math.floor(rng() * sites.length)]!;
   centroids.push({ x: first.x, z: first.z });
   while (centroids.length < k) {
@@ -163,9 +174,18 @@ export function buildArchipelagoBlobs(
     }
   }
 
-  // Channel clarity comes from carveArchipelagoChannels (uses archipelagoSpread).
+  // Mild radial spread from cloud mean (carve does the hard separation)
+  const spread = Math.max(0, Math.min(1, params.archipelagoSpread));
+  if (spread > 0.05) {
+    for (const c of centroids) {
+      const dx = c.x - meanX;
+      const dz = c.z - meanZ;
+      const len = Math.hypot(dx, dz) || 1;
+      c.x += (dx / len) * spread * 0.85;
+      c.z += (dz / len) * spread * 0.85;
+    }
+  }
 
-  // Assign sites → blob radii
   const members: GraphPoint[][] = centroids.map(() => []);
   for (const s of sites) {
     let bi = 0;
@@ -180,22 +200,34 @@ export function buildArchipelagoBlobs(
     members[bi]!.push(s);
   }
 
+  const used = new Set<ResourceKind>();
   const blobs: IslandBlob[] = [];
   for (let i = 0; i < centroids.length; i++) {
     const c = centroids[i]!;
     const group = members[i]!;
     let maxR = params.radius * 0.28;
     if (group.length === 0) {
-      // Empty cluster — keep a small decorative islet near the nucleus
-      blobs.push({ x: c.x, z: c.z, radius: Math.max(1.6, params.radius * 0.22) });
+      const biome = BIOME_CYCLE[i % BIOME_CYCLE.length]!;
+      blobs.push({
+        x: c.x,
+        z: c.z,
+        radius: Math.max(1.6, params.radius * 0.22),
+        biome,
+      });
+      used.add(biome);
       continue;
     }
     for (const s of group) {
       maxR = Math.max(maxR, Math.hypot(s.x - c.x, s.z - c.z));
     }
-    // Margin so sites sit inland
-    const margin = 0.75;
-    blobs.push({ x: c.x, z: c.z, radius: maxR + margin });
+    let biome = majorityBiomeForSites(group);
+    if (used.has(biome) && biome !== 'desert') {
+      const alt = BIOME_CYCLE.find((b) => !used.has(b));
+      if (alt) biome = alt;
+    }
+    used.add(biome);
+    const margin = 0.9;
+    blobs.push({ x: c.x, z: c.z, radius: maxR + margin, biome });
   }
   return blobs;
 }
@@ -239,7 +271,10 @@ function blobMask(
  */
 export function islandMask(seed: IslandSeed, x: number, z: number): number {
   const { falloff, warp } = seed.params;
-  const blobs = seed.blobs.length > 0 ? seed.blobs : [{ x: 0, z: 0, radius: seed.params.radius }];
+  const blobs =
+    seed.blobs.length > 0
+      ? seed.blobs
+      : [{ x: 0, z: 0, radius: seed.params.radius, biome: 'pasture' as const }];
   let m = 0;
   for (const blob of blobs) {
     m = Math.max(m, blobMask(seed.perm, blob, x, z, falloff, warp));
