@@ -5,9 +5,11 @@
 1. **The gameplay graph is invisible.** Players never see tiles. Rules run on a hidden region graph; rendering never draws that graph as hexes.
 2. **Coastline first.** Do not generate terrain and then add water. Generate a coastline, then let **everything else** derive from one value: `distanceToCoast`.
 3. **Day-night never regenerates the world.** Terrain, SDF, meshes, and instances stay static; only the **Environment State** (lighting / palettes / atmosphere) changes.
+4. **Deep craft configurator.** Every tunable value is editable from a well-categorised, easy-to-use panel — look tweaks live; generation knobs gated behind Apply.
 
 - Terrain algorithm: **[docs/TERRAIN.md](TERRAIN.md)**
 - Day-night / atmosphere: **[docs/DAY_NIGHT.md](DAY_NIGHT.md)**
+- Configurator UX & taxonomy: **[docs/CONFIGURATOR.md](CONFIGURATOR.md)**
 
 ```
 Gameplay Graph (hidden)
@@ -155,9 +157,11 @@ src/
     regions.ts
     roads.ts
     settlements.ts
+  ui/
+    craftSchema.ts # deep configurator category taxonomy
 ```
 
-Existing `src/game/` remains rules authority until the hidden graph replaces hex-facing APIs. Existing `src/render/` (including `atmosphere.ts` / `AtmosphereSnapshot`) drives the live day cycle; modules above are the migration target.
+Existing `src/game/` remains rules authority until the hidden graph replaces hex-facing APIs. Existing `src/render/` (including `atmosphere.ts` / `AtmosphereSnapshot`) and `src/ui/configurator.ts` drive the live day cycle and Style panel; modules above are the migration target for island systems and the **deep craft configurator**.
 
 ---
 
@@ -177,8 +181,11 @@ Existing `src/game/` remains rules authority until the hidden graph replaces hex
 | 10 | Rocks | Cliff scatter from slope |
 | 11 | Roads / buildings | Graph → splines / junctions |
 | 12 | Polish | Environment State sync, LODs, craft |
+| 13 | Deep configurator | Schema-driven panel: search, categories, presets, edit everything |
 
 Day-night itself is already live on the hex MVP (`TimeOfDayController`). For the organic island, keep feeding the same Environment State pattern into terrain/water/veg shaders — never rebuild world data when the clock moves.
+
+**Configurator rule:** a visual feature is not done until it is editable in the craft panel under the correct category ([CONFIGURATOR.md](CONFIGURATOR.md)).
 
 ---
 

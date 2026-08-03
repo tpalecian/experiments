@@ -348,3 +348,5 @@ The day-night cycle does **not** modify the terrain.
 Every renderer interprets the same world through a shared Environment State that controls lighting, colours, atmosphere, reflections, shadows, and post-processing.
 
 That keeps rendering efficient, consistent, and cohesive while preserving the handcrafted tropical aesthetic.
+
+Atmosphere scalars and palettes should be editable from the deep craft configurator under **Atmosphere**, **Sky & Clouds**, **Lighting**, **Fog**, and **Water** — see [CONFIGURATOR.md](CONFIGURATOR.md).
