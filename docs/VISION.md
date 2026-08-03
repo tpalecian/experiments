@@ -77,9 +77,10 @@ Legacy island-generation stubs under `src/terrain/`, `src/water/`, `src/world/`,
 | 6 | HUD dice | Pop-in dice chips on new rolls |
 | 7 | Water craft depth | Richer hex-shore palette / bands / foam knobs in Style |
 | 8 | Deep configurator | Schema-driven panel: search, categories, presets, Motion section |
-| 9 | Weather (later) | Palette / scalar swaps on Environment State only |
+| 9 | Day-night Environment State | Scheme palettes, bands, foam, shadows, rim, board tint |
+| 10 | Weather (later) | Palette / scalar swaps on Environment State only |
 
-Milestones 1–8 are implemented on the live hex board. Weather remains future work.
+Milestones 1–9 are implemented on the live hex board. Weather remains future work.
 
 Day-night is already live (`TimeOfDayController`). Keep feeding Environment State into water/sky/lights — never rebuild hex geometry when the clock moves.
 

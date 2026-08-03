@@ -75,6 +75,10 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(half.starsIntensity > 0.3 && half.starsIntensity < 0.9, 'night transition mid-blend');
   tod.update(3);
   assert(tod.getSnapshot().starsIntensity > 0.95, 'night transition completes');
+  assert(tod.getSnapshot().waterDeep !== undefined, 'scheme water palette on snapshot');
+  assert(tod.getSnapshot().waveBandIntensity < 0.5, 'night softens wave bands');
+  assert(tod.getSnapshot().shadowStrength < 0.55, 'night softens shadows');
+  assert(tod.getSnapshot().foamBrightness < 0.7, 'night foam dimmer');
 
   tod.setMode('cycle');
   tod.setDayLength(60);
@@ -82,6 +86,12 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   tod.update(15);
   assert(Math.abs(tod.phase - ((before + 0.25) % 1)) < 0.001, 'cycle advances 1/4 day');
   assert(tod.getCelestialDirection() instanceof THREE.Vector3, 'celestial vector');
+
+  const aft = ATMOSPHERE_PRESETS.afternoon;
+  const nite = ATMOSPHERE_PRESETS.night;
+  assert(aft.waterDeep.getHexString() !== nite.waterDeep.getHexString(), 'day/night water palettes differ');
+  assert(aft.waveBandIntensity > nite.waveBandIntensity, 'bands stronger by day');
+  assert(aft.rimIntensity >= 0 && nite.rimIntensity > 0, 'rim light present');
 
   console.log('ok atmosphere day-cycle');
 }
@@ -105,6 +115,19 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(ease.easeOutBack(1) === 1, 'easeOutBack ends at 1');
   assert(ease.smoothstep(0.5) === 0.5, 'smoothstep mid');
   console.log('ok tween player');
+}
+
+{
+  assert(STYLE_PRESETS.length >= 4, 'style presets present');
+  const night = applyStylePreset(DEFAULT_STYLE_CONFIG, 'night');
+  assert(night.timeOfDay === 'night', 'night preset sets scheme');
+  assert(night.waterDeepOcean !== DEFAULT_STYLE_CONFIG.waterDeepOcean, 'night palette changes');
+  assert(typeof DEFAULT_STYLE_CONFIG.waterShoreGlow === 'number', 'shore glow craft knob');
+  assert(typeof DEFAULT_STYLE_CONFIG.motionRobberHopSec === 'number', 'motion craft knob');
+  assert(typeof DEFAULT_STYLE_CONFIG.hexHoverLift === 'number', 'hex board craft knob');
+  const cine = applyStylePreset(DEFAULT_STYLE_CONFIG, 'cinematic');
+  assert(cine.timeOfDay === 'cycle', 'cinematic uses cycle');
+  console.log('ok style craft presets');
 }
 
 console.log('smoke ok');

@@ -75,6 +75,10 @@ const fill = new THREE.DirectionalLight(STYLE.fill, 0.35);
 fill.position.set(-6, 4, -8);
 scene.add(fill);
 
+const rim = new THREE.DirectionalLight(0xc8e8f8, 0.12);
+rim.position.set(-4, 6, 10);
+scene.add(rim);
+
 scene.add(sky.group);
 scene.add(boardView.root);
 
@@ -134,12 +138,27 @@ function applyAtmosphereFrame(): void {
   fill.position.copy(dir).multiplyScalar(-sunAnchor * 0.55);
   fill.position.y = Math.abs(fill.position.y) * 0.4 + 2;
 
+  rim.color.copy(atm.rimColor);
+  rim.intensity = atm.rimIntensity;
+  rim.position.copy(dir).multiplyScalar(-sunAnchor * 0.35);
+  rim.position.y = Math.abs(rim.position.y) * 0.55 + 3;
+  rim.position.x += sunAnchor * 0.25;
+
+  // Soft cool moon shadows at night — opacity via shadowStrength.
+  sun.castShadow = atm.shadowStrength > 0.05;
+  sun.shadow.radius = atm.shadowStrength < 0.55 ? 3.5 : 1.25;
+  sun.shadow.bias = -0.0008;
+  // Dim the effective light contribution into shadows by keeping intensity × strength feel.
+  if (atm.shadowStrength < 1) {
+    sun.intensity *= 0.65 + 0.35 * atm.shadowStrength;
+  }
+
   renderer.toneMappingExposure = atm.exposure * expMul;
 
   if (scene.fog instanceof THREE.Fog) {
     scene.fog.color.copy(atm.fogColor);
-    scene.fog.near = fogNear;
-    scene.fog.far = fogFar;
+    scene.fog.near = fogNear * atm.fogNearMul;
+    scene.fog.far = fogFar * atm.fogFarMul;
   }
 }
 

@@ -104,9 +104,25 @@ const CATEGORIES: CategoryDef[] = [
     ],
   },
   {
+    id: 'fogPost',
+    title: 'Fog & Post',
+    blurb: 'Fog follows the sky; exposure craft sits with lighting.',
+    fields: [
+      {
+        key: 'exposure',
+        label: 'Exposure (ref)',
+        kind: 'range',
+        min: 0.7,
+        max: 1.8,
+        step: 0.05,
+        tags: ['post', 'fog'],
+      },
+    ],
+  },
+  {
     id: 'water',
     title: 'Water',
-    blurb: 'Hex-shore palette, swell, bands, foam, caustics.',
+    blurb: 'Craft bases × day-night Environment State (palette, bands, foam).',
     fields: [
       { key: 'waterDeepOcean', label: 'Deep ocean', kind: 'color', tags: ['palette'] },
       { key: 'waterOcean', label: 'Ocean', kind: 'color', tags: ['palette'] },

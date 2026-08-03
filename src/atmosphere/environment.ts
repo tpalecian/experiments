@@ -4,9 +4,9 @@
  * Hex board data (tiles, props, pieces, water mesh, grass) is static.
  * Every frame, renderers read this object; nothing regenerates.
  *
- * Live MVP: `AtmosphereSnapshot` in `src/render/atmosphere.ts` already
- * plays this role. This module holds palette tables and the target shape
- * for craft expansion on the hex board — see docs/DAY_NIGHT.md.
+ * Live path: `AtmosphereSnapshot` + `TimeOfDayController` in
+ * `src/render/atmosphere.ts` import these palette tables every frame.
+ * Board meshes never regenerate — see docs/DAY_NIGHT.md.
  */
 
 import * as THREE from 'three';

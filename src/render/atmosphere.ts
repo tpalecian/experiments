@@ -1,13 +1,39 @@
 import * as THREE from 'three';
+import {
+  BEACH_TINTS,
+  CAUSTIC_INTENSITY,
+  FRESNEL_STRENGTH,
+  WATER_DEPTH_PALETTES,
+  WAVE_BAND_INTENSITY,
+  type EnvironmentScheme,
+} from '../atmosphere/environment';
 
 /** Fixed day schemes the game can hold or cycle through. */
 export type DayScheme = 'morning' | 'afternoon' | 'evening' | 'night';
 
 export const DAY_SCHEMES: DayScheme[] = ['morning', 'afternoon', 'evening', 'night'];
 
+/** Map game schemes onto Environment State palette tables. */
+export function environmentSchemeFor(day: DayScheme): EnvironmentScheme {
+  switch (day) {
+    case 'morning':
+    case 'afternoon':
+      return 'day';
+    case 'evening':
+      return 'sunset';
+    case 'night':
+      return 'night';
+    default: {
+      const _exhaustive: never = day;
+      return _exhaustive;
+    }
+  }
+}
+
 /**
  * Full environment snapshot for one moment in the day.
  * Applied every frame so sky, lights, fog, water, and clouds stay coherent.
+ * This is the live Environment State — board meshes never regenerate.
  */
 export interface AtmosphereSnapshot {
   // Sky dome
@@ -36,14 +62,29 @@ export interface AtmosphereSnapshot {
   hemiIntensity: number;
   fillColor: THREE.Color;
   fillIntensity: number;
+  rimColor: THREE.Color;
+  rimIntensity: number;
   exposure: number;
   fogColor: THREE.Color;
+  /** Multipliers on board-derived fog near/far. */
+  fogNearMul: number;
+  fogFarMul: number;
+  /** 0..1 shadow opacity / darkness. */
+  shadowStrength: number;
 
   // Clouds
   cloudLit: THREE.Color;
   cloudShade: THREE.Color;
 
-  // Water atmosphere (tints style-crafted base colors)
+  // Water — scheme depth palette (docs/DAY_NIGHT.md)
+  waterDeep: THREE.Color;
+  waterOcean: THREE.Color;
+  waterLagoon: THREE.Color;
+  waterShallow: THREE.Color;
+  waterShelf: THREE.Color;
+  waterFoamColor: THREE.Color;
+
+  // Water scalars (compose with Style craft bases)
   waterBrightness: number;
   waterTint: THREE.Color;
   waterTintMix: number;
@@ -51,46 +92,100 @@ export interface AtmosphereSnapshot {
   waterSpecularIntensity: number;
   waterFresnelStrength: number;
   waterCausticIntensity: number;
+  /** Multiplier on craft band intensity. */
+  waveBandIntensity: number;
+  foamBrightness: number;
+  /** How strongly scheme palette overrides craft water colours (0 = craft only). */
+  waterPaletteMix: number;
   skyFresnelColor: THREE.Color;
+
+  /** Soft multiply/tint for hex skirts / props (geometry static). */
+  beachTint: THREE.Color;
+  /** 0 = no tile response, 1 = full beachTint pull. */
+  boardTintMix: number;
 }
 
 function c(hex: string): THREE.Color {
   return new THREE.Color(hex);
 }
 
-function snap(partial: {
-  skyZenith: string;
-  skyMid: string;
-  skyHorizon: string;
-  sunDiscColor: string;
-  sunDiscIntensity: number;
-  sunGlowIntensity: number;
-  sunDiscPower: number;
-  horizonHaze: number;
-  horizonHazeWidth: number;
-  starsIntensity: number;
-  sunAltitude: number;
-  sunAzimuth: number;
-  sunColor: string;
-  sunIntensity: number;
-  hemiSky: string;
-  hemiGround: string;
-  hemiIntensity: number;
-  fillColor: string;
-  fillIntensity: number;
-  exposure: number;
-  fogColor: string;
-  cloudLit: string;
-  cloudShade: string;
-  waterBrightness: number;
-  waterTint: string;
-  waterTintMix: number;
-  waterSunColor: string;
-  waterSpecularIntensity: number;
+function envExtras(scheme: EnvironmentScheme): {
+  waterDeep: string;
+  waterOcean: string;
+  waterLagoon: string;
+  waterShallow: string;
+  waterShelf: string;
+  waterFoamColor: string;
+  waveBandIntensity: number;
+  foamBrightness: number;
   waterFresnelStrength: number;
   waterCausticIntensity: number;
-  skyFresnelColor: string;
-}): AtmosphereSnapshot {
+  beachTint: string;
+  waterPaletteMix: number;
+  boardTintMix: number;
+  shadowStrength: number;
+  fogNearMul: number;
+  fogFarMul: number;
+} {
+  const p = WATER_DEPTH_PALETTES[scheme];
+  return {
+    waterDeep: p.deep,
+    waterOcean: p.ocean,
+    waterLagoon: p.lagoon,
+    // Shallow sits between lagoon and shelf for tropical readability.
+    waterShallow: scheme === 'day' ? '#8CF7EC' : scheme === 'sunset' ? '#7AD4CF' : '#1A466E',
+    waterShelf: p.shelf,
+    waterFoamColor: scheme === 'night' ? '#B8D0E8' : scheme === 'sunset' ? '#FFF0E0' : '#FFFFFF',
+    waveBandIntensity: WAVE_BAND_INTENSITY[scheme],
+    foamBrightness: scheme === 'night' ? 0.55 : scheme === 'sunset' ? 0.75 : 1,
+    waterFresnelStrength: FRESNEL_STRENGTH[scheme],
+    waterCausticIntensity: CAUSTIC_INTENSITY[scheme] * 0.08,
+    beachTint: BEACH_TINTS[scheme],
+    waterPaletteMix: scheme === 'day' ? 0.35 : scheme === 'sunset' ? 0.75 : 0.9,
+    boardTintMix: scheme === 'day' ? 0.08 : scheme === 'sunset' ? 0.22 : 0.32,
+    shadowStrength: scheme === 'night' ? 0.42 : scheme === 'sunset' ? 0.88 : 1,
+    fogNearMul: scheme === 'night' ? 0.85 : scheme === 'sunset' ? 0.95 : 1,
+    fogFarMul: scheme === 'night' ? 0.75 : scheme === 'sunset' ? 0.9 : 1,
+  };
+}
+
+function snap(
+  day: DayScheme,
+  partial: {
+    skyZenith: string;
+    skyMid: string;
+    skyHorizon: string;
+    sunDiscColor: string;
+    sunDiscIntensity: number;
+    sunGlowIntensity: number;
+    sunDiscPower: number;
+    horizonHaze: number;
+    horizonHazeWidth: number;
+    starsIntensity: number;
+    sunAltitude: number;
+    sunAzimuth: number;
+    sunColor: string;
+    sunIntensity: number;
+    hemiSky: string;
+    hemiGround: string;
+    hemiIntensity: number;
+    fillColor: string;
+    fillIntensity: number;
+    rimColor: string;
+    rimIntensity: number;
+    exposure: number;
+    fogColor: string;
+    cloudLit: string;
+    cloudShade: string;
+    waterBrightness: number;
+    waterTint: string;
+    waterTintMix: number;
+    waterSunColor: string;
+    waterSpecularIntensity: number;
+    skyFresnelColor: string;
+  },
+): AtmosphereSnapshot {
+  const env = envExtras(environmentSchemeFor(day));
   return {
     skyZenith: c(partial.skyZenith),
     skyMid: c(partial.skyMid),
@@ -111,24 +206,40 @@ function snap(partial: {
     hemiIntensity: partial.hemiIntensity,
     fillColor: c(partial.fillColor),
     fillIntensity: partial.fillIntensity,
+    rimColor: c(partial.rimColor),
+    rimIntensity: partial.rimIntensity,
     exposure: partial.exposure,
     fogColor: c(partial.fogColor),
+    fogNearMul: env.fogNearMul,
+    fogFarMul: env.fogFarMul,
+    shadowStrength: env.shadowStrength,
     cloudLit: c(partial.cloudLit),
     cloudShade: c(partial.cloudShade),
+    waterDeep: c(env.waterDeep),
+    waterOcean: c(env.waterOcean),
+    waterLagoon: c(env.waterLagoon),
+    waterShallow: c(env.waterShallow),
+    waterShelf: c(env.waterShelf),
+    waterFoamColor: c(env.waterFoamColor),
     waterBrightness: partial.waterBrightness,
     waterTint: c(partial.waterTint),
     waterTintMix: partial.waterTintMix,
     waterSunColor: c(partial.waterSunColor),
     waterSpecularIntensity: partial.waterSpecularIntensity,
-    waterFresnelStrength: partial.waterFresnelStrength,
-    waterCausticIntensity: partial.waterCausticIntensity,
+    waterFresnelStrength: env.waterFresnelStrength,
+    waterCausticIntensity: env.waterCausticIntensity,
+    waveBandIntensity: env.waveBandIntensity,
+    foamBrightness: env.foamBrightness,
+    waterPaletteMix: env.waterPaletteMix,
     skyFresnelColor: c(partial.skyFresnelColor),
+    beachTint: c(env.beachTint),
+    boardTintMix: env.boardTintMix,
   };
 }
 
-/** Authoritative look targets — tropical island day cycle. */
+/** Authoritative look targets — tropical hex-board day cycle. */
 export const ATMOSPHERE_PRESETS: Record<DayScheme, AtmosphereSnapshot> = {
-  morning: snap({
+  morning: snap('morning', {
     skyZenith: '#5aa8e0',
     skyMid: '#b0d8f5',
     skyHorizon: '#ffc090',
@@ -148,6 +259,8 @@ export const ATMOSPHERE_PRESETS: Record<DayScheme, AtmosphereSnapshot> = {
     hemiIntensity: 0.8,
     fillColor: '#a0c0e0',
     fillIntensity: 0.3,
+    rimColor: '#ffc090',
+    rimIntensity: 0.18,
     exposure: 1.0,
     fogColor: '#f0d8c0',
     cloudLit: '#fff6ec',
@@ -157,12 +270,10 @@ export const ATMOSPHERE_PRESETS: Record<DayScheme, AtmosphereSnapshot> = {
     waterTintMix: 0.18,
     waterSunColor: '#fff0d0',
     waterSpecularIntensity: 0.2,
-    waterFresnelStrength: 0.16,
-    waterCausticIntensity: 0.05,
     skyFresnelColor: '#d0c0a8',
   }),
 
-  afternoon: snap({
+  afternoon: snap('afternoon', {
     skyZenith: '#4aa8e0',
     skyMid: '#7ec8ea',
     skyHorizon: '#d8eef8',
@@ -182,6 +293,8 @@ export const ATMOSPHERE_PRESETS: Record<DayScheme, AtmosphereSnapshot> = {
     hemiIntensity: 0.95,
     fillColor: '#a8d4e8',
     fillIntensity: 0.35,
+    rimColor: '#c8e8f8',
+    rimIntensity: 0.12,
     exposure: 1.15,
     fogColor: '#d6e8f2',
     cloudLit: '#d4dde8',
@@ -191,12 +304,10 @@ export const ATMOSPHERE_PRESETS: Record<DayScheme, AtmosphereSnapshot> = {
     waterTintMix: 0,
     waterSunColor: '#fff6e8',
     waterSpecularIntensity: 0.28,
-    waterFresnelStrength: 0.12,
-    waterCausticIntensity: 0.08,
     skyFresnelColor: '#62e7e0',
   }),
 
-  evening: snap({
+  evening: snap('evening', {
     skyZenith: '#1e2a6e',
     skyMid: '#7a4a9a',
     skyHorizon: '#ff7a3a',
@@ -216,6 +327,8 @@ export const ATMOSPHERE_PRESETS: Record<DayScheme, AtmosphereSnapshot> = {
     hemiIntensity: 0.55,
     fillColor: '#5060a8',
     fillIntensity: 0.48,
+    rimColor: '#ff7a3a',
+    rimIntensity: 0.28,
     exposure: 0.88,
     fogColor: '#b88870',
     cloudLit: '#ffd0b8',
@@ -225,12 +338,10 @@ export const ATMOSPHERE_PRESETS: Record<DayScheme, AtmosphereSnapshot> = {
     waterTintMix: 0.35,
     waterSunColor: '#ffc080',
     waterSpecularIntensity: 0.42,
-    waterFresnelStrength: 0.24,
-    waterCausticIntensity: 0.015,
     skyFresnelColor: '#d07080',
   }),
 
-  night: snap({
+  night: snap('night', {
     skyZenith: '#050814',
     skyMid: '#121a42',
     skyHorizon: '#1a2048',
@@ -250,6 +361,8 @@ export const ATMOSPHERE_PRESETS: Record<DayScheme, AtmosphereSnapshot> = {
     hemiIntensity: 0.32,
     fillColor: '#304078',
     fillIntensity: 0.18,
+    rimColor: '#6a7ab8',
+    rimIntensity: 0.22,
     exposure: 0.58,
     fogColor: '#0c1430',
     cloudLit: '#c0c8e8',
@@ -259,8 +372,6 @@ export const ATMOSPHERE_PRESETS: Record<DayScheme, AtmosphereSnapshot> = {
     waterTintMix: 0.62,
     waterSunColor: '#c8d8ff',
     waterSpecularIntensity: 0.48,
-    waterFresnelStrength: 0.28,
-    waterCausticIntensity: 0,
     skyFresnelColor: '#283878',
   }),
 };
@@ -282,12 +393,20 @@ const COLOR_KEYS = [
   'hemiSky',
   'hemiGround',
   'fillColor',
+  'rimColor',
   'fogColor',
   'cloudLit',
   'cloudShade',
+  'waterDeep',
+  'waterOcean',
+  'waterLagoon',
+  'waterShallow',
+  'waterShelf',
+  'waterFoamColor',
   'waterTint',
   'waterSunColor',
   'skyFresnelColor',
+  'beachTint',
 ] as const;
 
 const NUMBER_KEYS = [
@@ -302,12 +421,20 @@ const NUMBER_KEYS = [
   'sunIntensity',
   'hemiIntensity',
   'fillIntensity',
+  'rimIntensity',
   'exposure',
+  'fogNearMul',
+  'fogFarMul',
+  'shadowStrength',
   'waterBrightness',
   'waterTintMix',
   'waterSpecularIntensity',
   'waterFresnelStrength',
   'waterCausticIntensity',
+  'waveBandIntensity',
+  'foamBrightness',
+  'waterPaletteMix',
+  'boardTintMix',
 ] as const;
 
 function cloneSnapshot(src: AtmosphereSnapshot): AtmosphereSnapshot {
