@@ -1,6 +1,6 @@
 /**
- * Coastline extraction from the island SDF.
- * Feeds beaches, foam, wave bands, and cliff placement.
+ * Coastline extraction from the island SDF (Marching Squares later).
+ * Polylines are optional helpers; runtime shading samples the SDF directly.
  */
 
 import type { IslandSdf } from './sdf';
@@ -15,8 +15,8 @@ export interface Coastline {
 }
 
 /**
- * Extract zero-crossing of the SDF on a grid (Marching Squares later).
- * Stub returns empty loops.
+ * Extract zero-crossing of the SDF on a grid.
+ * Stub returns empty loops until Marching Squares lands.
  */
 export function extractCoastline(
   _sdf: IslandSdf,
@@ -26,8 +26,8 @@ export function extractCoastline(
   return { loops: [] };
 }
 
-/** Distance to nearest coast sample — used by wave bands / foam. */
-export function distanceToCoast(
+/** Unsigned distance to nearest extracted coast sample (debug / tools). */
+export function unsignedDistanceToCoastline(
   coastline: Coastline,
   x: number,
   z: number,

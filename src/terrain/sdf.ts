@@ -1,34 +1,51 @@
 /**
- * Signed distance fields for island outline and region influence.
- * Shared by coastline, water colour, foam, beaches, wave bands, cliffs.
+ * Signed distance to coastline — the heart of the renderer.
+ *
+ * Convention (matches docs/TERRAIN.md):
+ *   d < 0  → ocean
+ *   d = 0  → coastline
+ *   d > 0  → land
+ *
+ * Every visual system samples this one field: height, water colour,
+ * beach, wave bands, foam, caustics, vegetation limits, rocks.
  */
 
 import type { IslandSeed } from './island';
 import { islandMask } from './island';
 import type { GraphPoint } from './graph';
 
+/** Alias used throughout shaders and CPU samplers. */
+export type DistanceToCoast = number;
+
 export interface IslandSdf {
-  /** Negative inside land, positive in water (or convention documented by sampler). */
-  sample(x: number, z: number): number;
+  /** Signed distance: ocean < 0, coast = 0, land > 0. */
+  sample(x: number, z: number): DistanceToCoast;
 }
 
 /**
- * Approximate SDF from island mask.
- * Stub: converts soft mask to a crude distance via threshold falloff.
+ * Approximate SDF from the island mask.
+ * Stub: maps soft mask so land is positive, water negative.
+ * Replace with a true distance transform from the zero contour.
  */
 export function buildIslandSdf(seed: IslandSeed): IslandSdf {
   return {
-    sample(x: number, z: number): number {
+    sample(x: number, z: number): DistanceToCoast {
       const m = islandMask(seed, x, z);
-      // Positive = water, negative = land (approx).
-      return 0.5 - m;
+      // Rough signed distance proxy until a real DT lands.
+      // m=1 ( inland ) → +; m=0 ( ocean ) → −; m=0.5 → coast.
+      return (m - 0.5) * seed.params.radius;
     },
   };
 }
 
+/** Convenience name — same as sdf.sample. */
+export function distanceToCoast(sdf: IslandSdf, x: number, z: number): DistanceToCoast {
+  return sdf.sample(x, z);
+}
+
 /**
- * Soft region field: distance to nearest site (for biome blur / cliffs).
- * Stub until true multi-region SDF / Voronoi distance.
+ * Soft region field: planar distance to nearest gameplay site.
+ * Used for biome blur only — does not redefine the coastline.
  */
 export function regionDistanceField(
   sites: GraphPoint[],
