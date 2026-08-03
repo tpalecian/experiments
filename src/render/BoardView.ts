@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { HEX_SIZE, axialToWorld, boardRadiusWorld } from '../game/board';
 import type { BoardState, PlayerId, Terrain } from '../game/types';
 import { boardToRegionGraph } from '../gameplay/regions';
-import { edgeRoadSamples } from '../gameplay/roads';
+import { PlacementCache } from '../gameplay/placement';
 import { generateIsland } from '../terrain/pipeline';
 import type { WorldData } from '../world/types';
 import { worldSampleBilinear } from '../world/types';
@@ -99,6 +99,7 @@ export class BoardView {
   private water = new WaterSurface();
   private island = new IslandTerrainView();
   private world: WorldData | null = null;
+  private placement: PlacementCache | null = null;
   private style: StyleConfig = { ...DEFAULT_STYLE_CONFIG };
   private lastBoard: BoardState | null = null;
 
@@ -147,8 +148,8 @@ export class BoardView {
   regenerateIsland(board?: BoardState): void {
     const b = board ?? this.lastBoard;
     if (!b) return;
-    this.buildIsland(b);
-    this.syncPieces(b);
+    // Full rebuild so markers / harbors / numbers follow new terrain
+    this.build(b);
   }
 
   applyAtmosphere(_atm: AtmosphereSnapshot): void {
@@ -184,26 +185,27 @@ export class BoardView {
     for (const hex of board.hexes.values()) {
       const { x, z } = axialToWorld(hex.q, hex.r);
       const terrain = hex.terrain as Terrain;
-      const groundY = this.heightAt(x, z);
+      const center = this.placement?.hex(x, z) ?? { x, y: this.heightAt(x, z), z, yaw: 0 };
+      const groundY = center.y;
 
       const mat = toonMat(STYLIZED_TERRAIN[terrain]);
       mat.transparent = true;
       mat.opacity = showHex ? 0.55 : 0.0;
       const mesh = new THREE.Mesh(geom, mat);
-      mesh.position.set(x, groundY, z);
+      mesh.position.set(center.x, groundY, center.z);
       mesh.castShadow = false;
       mesh.receiveShadow = false;
       mesh.userData = { kind: 'hex', id: hex.id, terrain };
       mesh.visible = showHex;
       this.hexMeshes.set(hex.id, mesh);
       this.hexGroup.add(mesh);
-      // Always pickable via invisible proxy at terrain height
+      // Always pickable via invisible proxy at terrain height (graph id, world pose)
       const proxy = new THREE.Mesh(
         new THREE.CircleGeometry(HEX_SIZE * 0.85, 6),
         new THREE.MeshBasicMaterial({ visible: false }),
       );
       proxy.rotation.x = -Math.PI / 2;
-      proxy.position.set(x, groundY + 0.04, z);
+      proxy.position.set(center.x, groundY + 0.04, center.z);
       proxy.userData = { kind: 'hex', id: hex.id, terrain };
       this.root.add(proxy);
       this.pickables.push(proxy);
@@ -213,7 +215,7 @@ export class BoardView {
           new THREE.CylinderGeometry(HEX_SIZE * 0.92, HEX_SIZE * 1.04, 0.08, 6),
           toonMat(STYLE.dirt),
         );
-        skirt.position.set(x, groundY - 0.02, z);
+        skirt.position.set(center.x, groundY - 0.02, center.z);
         this.propsGroup.add(skirt);
 
         const rim = new THREE.Mesh(
@@ -225,7 +227,7 @@ export class BoardView {
             opacity: 0.7,
           }),
         );
-        rim.position.set(x, groundY + TILE_HEIGHT + 0.002, z);
+        rim.position.set(center.x, groundY + TILE_HEIGHT + 0.002, center.z);
         this.propsGroup.add(rim);
       }
 
@@ -235,7 +237,7 @@ export class BoardView {
           new THREE.MeshBasicMaterial({ map: numberTexture(hex.number), transparent: true }),
         );
         disc.rotation.x = -Math.PI / 2;
-        disc.position.set(x, groundY + 0.06, z);
+        disc.position.set(center.x, groundY + 0.06, center.z);
         disc.userData = { kind: 'hex', id: hex.id };
         this.root.add(disc);
         this.pickables.push(disc);
@@ -243,7 +245,12 @@ export class BoardView {
     }
 
     for (const v of board.vertices.values()) {
-      const y = this.heightAt(v.x, v.z);
+      const pose = this.placement?.vertex(v.id) ?? {
+        x: v.x,
+        y: this.heightAt(v.x, v.z),
+        z: v.z,
+        yaw: 0,
+      };
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(0.14, 10, 8),
         new THREE.MeshToonMaterial({
@@ -253,7 +260,7 @@ export class BoardView {
           opacity: 0,
         }),
       );
-      m.position.set(v.x, y + 0.12, v.z);
+      m.position.set(pose.x, pose.y + 0.12, pose.z);
       m.userData = { kind: 'vertex', id: v.id };
       this.vertexMarkers.set(v.id, m);
       this.root.add(m);
@@ -261,7 +268,16 @@ export class BoardView {
     }
 
     for (const e of board.edges.values()) {
-      const y = this.heightAt(e.midX, e.midZ);
+      const samples = this.placement?.road(e.id);
+      const mid = samples
+        ? samples[Math.floor(samples.length / 2)]!
+        : { x: e.midX, y: this.heightAt(e.midX, e.midZ), z: e.midZ };
+      let yaw = -e.angle;
+      if (samples && samples.length >= 2) {
+        const a = samples[0]!;
+        const b = samples[samples.length - 1]!;
+        yaw = Math.atan2(b.x - a.x, b.z - a.z);
+      }
       const m = new THREE.Mesh(
         new THREE.BoxGeometry(0.9, 0.1, 0.18),
         new THREE.MeshToonMaterial({
@@ -271,8 +287,8 @@ export class BoardView {
           opacity: 0,
         }),
       );
-      m.position.set(e.midX, y + 0.1, e.midZ);
-      m.rotation.y = -e.angle;
+      m.position.set(mid.x, mid.y + 0.08, mid.z);
+      m.rotation.y = yaw;
       m.userData = { kind: 'edge', id: e.id };
       this.edgeMarkers.set(e.id, m);
       this.root.add(m);
@@ -296,6 +312,7 @@ export class BoardView {
       board,
       graph,
     );
+    this.placement = new PlacementCache(this.world, board);
     this.island.build(this.world, this.style.showSdfOverlay);
     this.island.setScatter(
       createTreeGroupInstances(this.world.trees),
@@ -312,25 +329,43 @@ export class BoardView {
   private drawHarbors(board: BoardState): void {
     this.harborGroup.clear();
     for (const h of board.harbors) {
-      const edge = board.edges.get(h.edgeId);
-      if (!edge) continue;
-      const outward = new THREE.Vector2(edge.midX, edge.midZ).normalize();
-      const px = edge.midX + outward.x * 0.7;
-      const pz = edge.midZ + outward.y * 0.7;
-      const y = this.heightAt(px, pz);
+      const pose = this.placement?.harbor(h);
+      if (!pose) continue;
+
+      // Wooden pier from shore footing toward ocean tip
+      const dx = pose.pierTip.x - pose.x;
+      const dz = pose.pierTip.z - pose.z;
+      const len = Math.max(0.55, Math.hypot(dx, dz));
+      const midX = (pose.x + pose.pierTip.x) * 0.5;
+      const midZ = (pose.z + pose.pierTip.z) * 0.5;
+      const midY = Math.max(0.05, (pose.y + pose.pierTip.y) * 0.5);
 
       const pier = new THREE.Mesh(
-        new THREE.BoxGeometry(0.35, 0.06, 0.18),
+        new THREE.BoxGeometry(len, 0.07, 0.22),
         toonMat(STYLE.woodTrim),
       );
-      pier.position.set(px, Math.max(y, 0.02), pz);
-      pier.rotation.y = -Math.atan2(outward.y, outward.x);
+      pier.position.set(midX, midY, midZ);
+      pier.rotation.y = Math.atan2(dx, dz);
       pier.castShadow = true;
       this.harborGroup.add(pier);
 
+      // Pilings at shore + tip
+      for (const p of [
+        { x: pose.x, z: pose.z, y: pose.y },
+        { x: pose.pierTip.x, z: pose.pierTip.z, y: pose.pierTip.y },
+      ]) {
+        const post = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.035, 0.04, 0.28, 5),
+          toonMat(0x5c3d2e),
+        );
+        post.position.set(p.x, p.y + 0.08, p.z);
+        post.castShadow = true;
+        this.harborGroup.add(post);
+      }
+
       const label = h.type === 'generic' ? '3:1' : `2:1 ${h.type[0]!.toUpperCase()}`;
       const sprite = this.makeLabelSprite(label, h.type === 'generic' ? '#ffe8c0' : '#fff0a8');
-      sprite.position.set(px, y + 0.45, pz);
+      sprite.position.set(pose.x, pose.y + 0.55, pose.z);
       this.harborGroup.add(sprite);
     }
   }
@@ -382,16 +417,12 @@ export class BoardView {
     this.roadMeshes.clear();
 
     for (const road of board.roads.values()) {
-      const samples = edgeRoadSamples(board, road.edgeId, 5);
-      if (samples.length < 2) continue;
+      const samples = this.placement?.road(road.edgeId);
+      if (!samples || samples.length < 2) continue;
       const e = board.edges.get(road.edgeId)!;
-      // Dirt path ribbon along Catmull-Rom samples, snapped to terrain
-      const curvePts = samples.map((p) => {
-        const y = this.heightAt(p.x, p.z) + 0.04;
-        return new THREE.Vector3(p.x, y, p.z);
-      });
+      const curvePts = samples.map((p) => new THREE.Vector3(p.x, p.y, p.z));
       const curve = new THREE.CatmullRomCurve3(curvePts);
-      const tube = new THREE.TubeGeometry(curve, 10, 0.07, 4, false);
+      const tube = new THREE.TubeGeometry(curve, 12, 0.075, 5, false);
       const mesh = new THREE.Mesh(tube, toonMat(STYLIZED_PLAYER[road.owner]));
       mesh.castShadow = true;
       mesh.userData = { edgeId: road.edgeId, angle: e.angle };
@@ -400,20 +431,38 @@ export class BoardView {
     }
 
     for (const b of board.buildings.values()) {
+      const pose = this.placement?.vertex(b.vertexId);
       const v = board.vertices.get(b.vertexId)!;
       const color = STYLIZED_PLAYER[b.owner as PlayerId];
       const piece = b.kind === 'city' ? this.makeCity(color) : this.makeSettlement(color);
-      const y = this.heightAt(v.x, v.z);
-      piece.position.set(v.x, y, v.z);
-      this.buildingMeshes.set(b.vertexId, piece);
-      this.root.add(piece);
+      const x = pose?.x ?? v.x;
+      const z = pose?.z ?? v.z;
+      const y = pose?.y ?? this.heightAt(v.x, v.z);
+
+      // Small dirt pad so buildings read as founded, not floating
+      const pad = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.28, 0.32, 0.06, 6),
+        toonMat(STYLE.dirt),
+      );
+      pad.position.set(x, y + 0.02, z);
+      pad.receiveShadow = true;
+      piece.position.set(x, y + 0.05, z);
+      const group = new THREE.Group();
+      group.add(pad, piece);
+      this.buildingMeshes.set(b.vertexId, group);
+      this.root.add(group);
     }
 
     const robberHex = board.hexes.get(board.robberHexId);
     if (robberHex) {
       const { x, z } = axialToWorld(robberHex.q, robberHex.r);
-      const y = this.heightAt(x + 0.35, z + 0.2);
-      this.robber.position.set(x + 0.35, y, z + 0.2);
+      const pose = this.placement?.hex(x + 0.25, z + 0.15) ?? {
+        x: x + 0.25,
+        y: this.heightAt(x + 0.35, z + 0.2),
+        z: z + 0.15,
+        yaw: 0,
+      };
+      this.robber.position.set(pose.x, pose.y, pose.z);
     }
   }
 
@@ -484,6 +533,8 @@ export class BoardView {
     this.edgeMarkers.clear();
     this.buildingMeshes.clear();
     this.roadMeshes.clear();
+    this.world = null;
+    this.placement = null;
     this.hexGroup = new THREE.Group();
     this.harborGroup = new THREE.Group();
     this.propsGroup = new THREE.Group();

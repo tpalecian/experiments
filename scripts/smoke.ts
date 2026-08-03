@@ -9,6 +9,7 @@ import { GameEngine } from '../src/game/engine';
 import { legalSetupRoads, legalSetupSettlements } from '../src/game/rules';
 import { boardToRegionGraph } from '../src/gameplay/regions';
 import { findRoadPath } from '../src/gameplay/roads';
+import { PlacementCache, resolveHarborPose, resolveVertexPose } from '../src/gameplay/placement';
 import { enumerateSettlementSites, snapSettlementToTerrain } from '../src/gameplay/settlements';
 import {
   ATMOSPHERE_PRESETS,
@@ -154,8 +155,28 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   const snapped = snapSettlementToTerrain(sites[0]!, world);
   assert(Number.isFinite(snapped.y), 'settlement snaps to height');
 
+  const placement = new PlacementCache(world, engine.board);
+  for (const v of engine.board.vertices.values()) {
+    const pose = placement.vertex(v.id);
+    const d = world.sdf.sample(pose.x, pose.z);
+    assert(d >= 0.2, `placed vertex ${v.id} should be on land (d=${d.toFixed(2)})`);
+    assert(pose.y >= 0, `placed vertex ${v.id} height`);
+  }
+  for (const h of engine.board.harbors) {
+    const pose = resolveHarborPose(world, engine.board, h);
+    const shoreD = world.sdf.sample(pose.x, pose.z);
+    const tipD = world.sdf.sample(pose.pierTip.x, pose.pierTip.z);
+    assert(shoreD > -0.5 && shoreD < 1.2, `harbor ${h.edgeId} footing near coast (d=${shoreD.toFixed(2)})`);
+    assert(tipD < shoreD, `harbor ${h.edgeId} pier tip should be more seaward`);
+  }
+  // Spot-check resolveVertexPose matches cache
+  const anyId = [...engine.board.vertices.keys()][0]!;
+  const a = resolveVertexPose(world, engine.board, anyId);
+  const b = placement.vertex(anyId);
+  assert(Math.hypot(a.x - b.x, a.z - b.z) < 1e-6, 'placement cache matches resolver');
+
   console.log(
-    `ok island pipeline (regions=${graph.regions.size}, trees=${world.trees.length}, rocks=${world.rocks.length}, coastLoops=${world.coastline.length})`,
+    `ok island pipeline (regions=${graph.regions.size}, trees=${world.trees.length}, rocks=${world.rocks.length}, coastLoops=${world.coastline.length}, harbors=${engine.board.harbors.length})`,
   );
 }
 
