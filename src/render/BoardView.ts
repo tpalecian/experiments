@@ -20,8 +20,10 @@ const TILE_HEIGHT = 0.28;
 const COAST_FLARE = 0.34;
 /** Bevel subdivisions on coastal sides — more segments = smoother ramp. */
 const COAST_BEVEL_SEGMENTS = 6;
-/** Outer lip sits a hair above the water to avoid z-fighting. */
-const COAST_SEA_Y = SEA_LEVEL + 0.012;
+/** Outer lip sits at the water plane (slightly submerged underside closes the blue gap). */
+const COAST_SEA_Y = SEA_LEVEL;
+/** Pull buildings/markers inward from the coastal rim onto the flat top. */
+const PIECE_INSET = 0.14;
 
 /** Pointy-top hex in the XY plane (matches board hexCorner angles). */
 function hexShape(size: number): THREE.Shape {
@@ -116,10 +118,12 @@ function hexTileGeometry(size: number, coastalEdges: boolean[]): THREE.BufferGeo
       const flare = cornerFlareDir(i);
       if (flare) {
         const y = TILE_HEIGHT + (COAST_SEA_Y - TILE_HEIGHT) * ease;
+        // Final ring sits a touch below the water plane so the lip is submerged.
+        const yOut = s === segments ? COAST_SEA_Y - 0.02 : y;
         ring.push(
           push(
             size * cx + flare.nx * COAST_FLARE * ease,
-            y,
+            yOut,
             size * cz + flare.nz * COAST_FLARE * ease,
           ),
         );
@@ -148,7 +152,7 @@ function hexTileGeometry(size: number, coastalEdges: boolean[]): THREE.BufferGeo
     }
   }
 
-  const botY = isCoastal ? COAST_SEA_Y : 0;
+  const botY = isCoastal ? COAST_SEA_Y - 0.02 : 0;
   const botCenter = push(0, botY, 0);
   const botRing = rings[segments];
   for (let i = 0; i < 6; i++) {
@@ -246,11 +250,72 @@ export class BoardView {
 
   /** Sample land surface Y at a world XZ by raycasting down onto hex meshes. */
   sampleGroundY(x: number, z: number, fallback = TILE_HEIGHT): number {
-    this.groundOrigin.set(x, TILE_HEIGHT + 5, z);
+    this.groundOrigin.set(x, Math.max(TILE_HEIGHT, fallback) + 5, z);
     this.groundRay.set(this.groundOrigin, this.groundDir);
-    const hits = this.groundRay.intersectObjects([...this.hexMeshes.values()], false);
+    const meshes = [...this.hexMeshes.values()];
+    const hits = this.groundRay.intersectObjects(meshes, false);
     if (hits.length > 0) return hits[0].point.y;
     return fallback;
+  }
+
+  /**
+   * World position for a settlement/city: nudge inland from the coastal rim
+   * onto the flat tile top, then sample the mesh height so it doesn't float.
+   */
+  private buildingAnchor(
+    board: BoardState,
+    vertexId: string,
+  ): { x: number; y: number; z: number } {
+    const v = board.vertices.get(vertexId)!;
+    let cx = 0;
+    let cz = 0;
+    let n = 0;
+    for (const hid of v.hexIds) {
+      const h = board.hexes.get(hid);
+      if (!h) continue;
+      const w = axialToWorld(h.q, h.r);
+      cx += w.x;
+      cz += w.z;
+      n++;
+    }
+    let x = v.x;
+    let z = v.z;
+    if (n > 0) {
+      cx /= n;
+      cz /= n;
+      const dx = cx - v.x;
+      const dz = cz - v.z;
+      const len = Math.hypot(dx, dz);
+      if (len > 1e-6) {
+        x = v.x + (dx / len) * PIECE_INSET;
+        z = v.z + (dz / len) * PIECE_INSET;
+      }
+    }
+    return { x, y: this.sampleGroundY(x, z), z };
+  }
+
+  /** Mid-edge anchor for roads — inset toward land when the edge is coastal. */
+  private roadAnchor(
+    board: BoardState,
+    edgeId: string,
+  ): { x: number; y: number; z: number; angle: number } {
+    const e = board.edges.get(edgeId)!;
+    let x = e.midX;
+    let z = e.midZ;
+    if (e.hexIds.length === 1) {
+      const h = board.hexes.get(e.hexIds[0]);
+      if (h) {
+        const c = axialToWorld(h.q, h.r);
+        const dx = c.x - e.midX;
+        const dz = c.z - e.midZ;
+        const len = Math.hypot(dx, dz);
+        if (len > 1e-6) {
+          x = e.midX + (dx / len) * (PIECE_INSET * 0.7);
+          z = e.midZ + (dz / len) * (PIECE_INSET * 0.7);
+        }
+      }
+    }
+    return { x, y: this.sampleGroundY(x, z), z, angle: e.angle };
   }
 
   build(board: BoardState): void {
@@ -262,7 +327,7 @@ export class BoardView {
     for (const hex of board.hexes.values()) {
       landCenters.push(axialToWorld(hex.q, hex.r));
     }
-    this.water.setLandHexes(landCenters, HEX_SIZE, COAST_FLARE);
+    this.water.setLandHexes(landCenters, HEX_SIZE, COAST_FLARE + 0.04);
     this.root.add(this.water.mesh);
 
     const hexIds = new Set(board.hexes.keys());
@@ -344,7 +409,34 @@ export class BoardView {
     this.grass.build(grassPatches, bladesPerHex);
 
     for (const v of board.vertices.values()) {
-      const gy = this.sampleGroundY(v.x, v.z);
+      // Match settlement anchors so pick targets sit on the flat top, not the rim.
+      let x = v.x;
+      let z = v.z;
+      if (v.hexIds.length > 0) {
+        let cx = 0;
+        let cz = 0;
+        let n = 0;
+        for (const hid of v.hexIds) {
+          const h = board.hexes.get(hid);
+          if (!h) continue;
+          const w = axialToWorld(h.q, h.r);
+          cx += w.x;
+          cz += w.z;
+          n++;
+        }
+        if (n > 0) {
+          cx /= n;
+          cz /= n;
+          const dx = cx - v.x;
+          const dz = cz - v.z;
+          const len = Math.hypot(dx, dz);
+          if (len > 1e-6) {
+            x = v.x + (dx / len) * PIECE_INSET;
+            z = v.z + (dz / len) * PIECE_INSET;
+          }
+        }
+      }
+      const gy = this.sampleGroundY(x, z);
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(0.14, 10, 8),
         new THREE.MeshToonMaterial({
@@ -354,7 +446,7 @@ export class BoardView {
           opacity: 0,
         }),
       );
-      m.position.set(v.x, gy + 0.1, v.z);
+      m.position.set(x, gy + 0.1, z);
       m.userData = { kind: 'vertex', id: v.id };
       this.vertexMarkers.set(v.id, m);
       this.root.add(m);
@@ -362,7 +454,7 @@ export class BoardView {
     }
 
     for (const e of board.edges.values()) {
-      const gy = this.sampleGroundY(e.midX, e.midZ);
+      const a = this.roadAnchor(board, e.id);
       const m = new THREE.Mesh(
         new THREE.BoxGeometry(0.9, 0.1, 0.18),
         new THREE.MeshToonMaterial({
@@ -372,8 +464,8 @@ export class BoardView {
           opacity: 0,
         }),
       );
-      m.position.set(e.midX, gy + 0.08, e.midZ);
-      m.rotation.y = -e.angle;
+      m.position.set(a.x, a.y + 0.08, a.z);
+      m.rotation.y = -a.angle;
       m.userData = { kind: 'edge', id: e.id };
       this.edgeMarkers.set(e.id, m);
       this.root.add(m);
@@ -536,25 +628,24 @@ export class BoardView {
     this.root.updateMatrixWorld(true);
 
     for (const road of board.roads.values()) {
-      const e = board.edges.get(road.edgeId)!;
-      const gy = this.sampleGroundY(e.midX, e.midZ);
+      const a = this.roadAnchor(board, road.edgeId);
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(0.92, 0.12, 0.2),
         toonMat(STYLIZED_PLAYER[road.owner]),
       );
-      mesh.position.set(e.midX, gy + 0.09, e.midZ);
-      mesh.rotation.y = -e.angle;
+      // Box is centered; lift by half-height so the underside sits on the ground.
+      mesh.position.set(a.x, a.y + 0.06, a.z);
+      mesh.rotation.y = -a.angle;
       mesh.castShadow = true;
       this.roadMeshes.set(road.edgeId, mesh);
       this.root.add(mesh);
     }
 
     for (const b of board.buildings.values()) {
-      const v = board.vertices.get(b.vertexId)!;
       const color = STYLIZED_PLAYER[b.owner as PlayerId];
       const piece = b.kind === 'city' ? this.makeCity(color) : this.makeSettlement(color);
-      const gy = this.sampleGroundY(v.x, v.z);
-      piece.position.set(v.x, gy, v.z);
+      const a = this.buildingAnchor(board, b.vertexId);
+      piece.position.set(a.x, a.y, a.z);
       this.buildingMeshes.set(b.vertexId, piece);
       this.root.add(piece);
     }
@@ -562,22 +653,25 @@ export class BoardView {
     const robberHex = board.hexes.get(board.robberHexId);
     if (robberHex) {
       const { x, z } = axialToWorld(robberHex.q, robberHex.r);
-      const gy = this.sampleGroundY(x + 0.35, z + 0.2);
-      this.robber.position.set(x + 0.35, gy, z + 0.2);
+      const gx = x + 0.35;
+      const gz = z + 0.2;
+      const gy = this.sampleGroundY(gx, gz);
+      this.robber.position.set(gx, gy, gz);
     }
   }
 
   private makeSettlement(color: number): THREE.Object3D {
     const g = new THREE.Group();
     const base = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.26, 0.32), toonMat(color));
-    base.position.y = 0.16;
+    // Bottom of the house sits on y=0 (group origin = ground contact).
+    base.position.y = 0.13;
     base.castShadow = true;
     const roof = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.26, 4), toonMat(STYLE.roof));
-    roof.position.y = 0.4;
+    roof.position.y = 0.39;
     roof.rotation.y = Math.PI / 4;
     roof.castShadow = true;
     const door = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.02), toonMat(STYLE.woodTrim));
-    door.position.set(0, 0.12, 0.17);
+    door.position.set(0, 0.06, 0.17);
     g.add(base, roof, door);
     g.scale.setScalar(1.15);
     return g;
@@ -586,10 +680,10 @@ export class BoardView {
   private makeCity(color: number): THREE.Object3D {
     const g = new THREE.Group();
     const keep = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.42, 0.36), toonMat(color));
-    keep.position.y = 0.24;
+    keep.position.y = 0.21;
     keep.castShadow = true;
     const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.55, 6), toonMat(color));
-    tower.position.set(0.2, 0.3, 0.05);
+    tower.position.set(0.2, 0.275, 0.05);
     tower.castShadow = true;
     const roof = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.18, 6), toonMat(STYLE.roof));
     roof.position.set(0.2, 0.64, 0.05);
@@ -617,7 +711,7 @@ export class BoardView {
       m.visible = on;
     }
     for (const [id, m] of this.hexMeshes) {
-      const mat = m.material as THREE.MeshToonMaterial;
+      const mat = m.material as THREE.MeshStandardMaterial;
       const on = hexes.includes(id);
       mat.emissive.set(on ? 0x665522 : 0x000000);
       mat.emissiveIntensity = on ? 0.45 : 0;
