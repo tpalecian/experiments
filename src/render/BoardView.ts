@@ -15,8 +15,12 @@ import type { StyleConfig } from './styleConfig';
 import { SEA_LEVEL, WaterSurface } from './water';
 
 const TILE_HEIGHT = 0.28;
-/** How far coastal hex sides flare outward as they slope down to the sea. */
-const COAST_FLARE = 0.38;
+/** How far coastal hex sides flare outward as they meet the sea. */
+const COAST_FLARE = 0.34;
+/** Bevel subdivisions on coastal sides — more segments = smoother ramp. */
+const COAST_BEVEL_SEGMENTS = 5;
+/** Outer lip sits a hair above the water to avoid z-fighting. */
+const COAST_SEA_Y = SEA_LEVEL + 0.012;
 
 /** Pointy-top hex in the XY plane (matches board hexCorner angles). */
 function hexShape(size: number): THREE.Shape {
@@ -54,10 +58,15 @@ function hexRimGeometry(inner: number, outer: number): THREE.BufferGeometry {
   return geom;
 }
 
+function smoothstep(t: number): number {
+  const x = Math.min(1, Math.max(0, t));
+  return x * x * (3 - 2 * x);
+}
+
 /**
- * Hex tile solid. Inland sides stay vertical; water-facing sides flare outward
- * and slope smoothly down to SEA_LEVEL so the coastline meets the water.
- * `coastalEdges[i]` is true when edge i (between corners i and i+1) faces water.
+ * Hex tile solid (approach B): one mesh, no layered skirts on the coast.
+ * Inland sides stay vertical. Water-facing sides use a multi-segment bevel
+ * that flares out and eases down to sea level as one continuous ramp.
  */
 function hexTileGeometry(size: number, coastalEdges: boolean[]): THREE.BufferGeometry {
   const positions: number[] = [];
@@ -69,68 +78,80 @@ function hexTileGeometry(size: number, coastalEdges: boolean[]): THREE.BufferGeo
   };
 
   const cornerAngle = (i: number) => (Math.PI / 180) * (60 * i - 30);
-  // Pointy-top edge i midpoint faces this world angle (outward normal in XZ).
   const edgeOutAngle = (i: number) => (Math.PI / 180) * (60 * i);
+  const isCoastal = coastalEdges.some(Boolean);
+  const segments = isCoastal ? COAST_BEVEL_SEGMENTS : 1;
 
-  const topCenter = push(0, TILE_HEIGHT, 0);
-  const tops: number[] = [];
-  for (let i = 0; i < 6; i++) {
-    const a = cornerAngle(i);
-    tops.push(push(size * Math.cos(a), TILE_HEIGHT, size * Math.sin(a)));
-  }
-  for (let i = 0; i < 6; i++) {
-    indices.push(topCenter, tops[i], tops[(i + 1) % 6]);
-  }
-
-  // Shared bottom corners keep the solid watertight at coast/inland transitions.
-  const bots: number[] = [];
-  for (let i = 0; i < 6; i++) {
-    const a = cornerAngle(i);
-    const cx = Math.cos(a);
-    const cz = Math.sin(a);
+  const cornerFlareDir = (i: number): { nx: number; nz: number } | null => {
     const prevCoast = coastalEdges[(i + 5) % 6];
     const nextCoast = coastalEdges[i];
+    if (!prevCoast && !nextCoast) return null;
+    let nx = 0;
+    let nz = 0;
+    if (nextCoast) {
+      const ea = edgeOutAngle(i);
+      nx += Math.cos(ea);
+      nz += Math.sin(ea);
+    }
+    if (prevCoast) {
+      const ea = edgeOutAngle((i + 5) % 6);
+      nx += Math.cos(ea);
+      nz += Math.sin(ea);
+    }
+    const nlen = Math.hypot(nx, nz) || 1;
+    return { nx: nx / nlen, nz: nz / nlen };
+  };
 
-    if (prevCoast || nextCoast) {
-      let nx = 0;
-      let nz = 0;
-      if (nextCoast) {
-        const ea = edgeOutAngle(i);
-        nx += Math.cos(ea);
-        nz += Math.sin(ea);
+  // Ring 0 = flat top; ring `segments` = bottom (sea lip or inland floor).
+  const rings: number[][] = [];
+  for (let s = 0; s <= segments; s++) {
+    const t = s / segments;
+    const ease = smoothstep(t);
+    const ring: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const a = cornerAngle(i);
+      const cx = Math.cos(a);
+      const cz = Math.sin(a);
+      const flare = cornerFlareDir(i);
+      if (flare) {
+        const y = TILE_HEIGHT + (COAST_SEA_Y - TILE_HEIGHT) * ease;
+        ring.push(
+          push(
+            size * cx + flare.nx * COAST_FLARE * ease,
+            y,
+            size * cz + flare.nz * COAST_FLARE * ease,
+          ),
+        );
+      } else {
+        // Vertical inland wall — keep neighbor seams flush.
+        ring.push(push(size * cx, TILE_HEIGHT * (1 - t), size * cz));
       }
-      if (prevCoast) {
-        const ea = edgeOutAngle((i + 5) % 6);
-        nx += Math.cos(ea);
-        nz += Math.sin(ea);
-      }
-      const nlen = Math.hypot(nx, nz) || 1;
-      nx /= nlen;
-      nz /= nlen;
-      bots.push(
-        push(
-          size * cx + nx * COAST_FLARE,
-          SEA_LEVEL + 0.02,
-          size * cz + nz * COAST_FLARE,
-        ),
-      );
-    } else {
-      bots.push(push(size * cx, 0, size * cz));
+    }
+    rings.push(ring);
+  }
+
+  const topCenter = push(0, TILE_HEIGHT, 0);
+  for (let i = 0; i < 6; i++) {
+    indices.push(topCenter, rings[0][i], rings[0][(i + 1) % 6]);
+  }
+
+  for (let s = 0; s < segments; s++) {
+    for (let i = 0; i < 6; i++) {
+      const j = (i + 1) % 6;
+      const a = rings[s][i];
+      const b = rings[s][j];
+      const c = rings[s + 1][j];
+      const d = rings[s + 1][i];
+      indices.push(a, d, c);
+      indices.push(a, c, b);
     }
   }
 
-  // Side faces. Coastal edges slope out and down to the sea; inland stay vertical.
+  const botY = isCoastal ? COAST_SEA_Y : 0;
+  const botCenter = push(0, botY, 0);
+  const botRing = rings[segments];
   for (let i = 0; i < 6; i++) {
-    const j = (i + 1) % 6;
-    // Outward-facing winding (viewed from outside the hex).
-    indices.push(tops[i], bots[i], bots[j]);
-    indices.push(tops[i], bots[j], tops[j]);
-  }
-
-  const botCenterY = coastalEdges.some(Boolean) ? SEA_LEVEL : 0;
-  const botCenter = push(0, botCenterY, 0);
-  for (let i = 0; i < 6; i++) {
-    indices.push(botCenter, bots[(i + 1) % 6], bots[i]);
+    indices.push(botCenter, botRing[(i + 1) % 6], botRing[i]);
   }
 
   const geom = new THREE.BufferGeometry();
@@ -188,6 +209,9 @@ export class BoardView {
   private pickables: THREE.Object3D[] = [];
   private grass = new GrassField();
   private water = new WaterSurface();
+  private readonly groundRay = new THREE.Raycaster();
+  private readonly groundOrigin = new THREE.Vector3();
+  private readonly groundDir = new THREE.Vector3(0, -1, 0);
 
   constructor() {
     this.robber = this.makeRobber();
@@ -217,6 +241,15 @@ export class BoardView {
 
   applyAtmosphere(atm: AtmosphereSnapshot): void {
     this.water.applyAtmosphere(atm);
+  }
+
+  /** Sample land surface Y at a world XZ by raycasting down onto hex meshes. */
+  sampleGroundY(x: number, z: number, fallback = TILE_HEIGHT): number {
+    this.groundOrigin.set(x, TILE_HEIGHT + 5, z);
+    this.groundRay.set(this.groundOrigin, this.groundDir);
+    const hits = this.groundRay.intersectObjects([...this.hexMeshes.values()], false);
+    if (hits.length > 0) return hits[0].point.y;
+    return fallback;
   }
 
   build(board: BoardState): void {
@@ -261,14 +294,16 @@ export class BoardView {
       this.root.add(mesh);
       this.pickables.push(mesh);
 
-      // Dirt skirt under the tile (kept inside the footprint so coastal slopes stay clear).
-      const skirt = new THREE.Mesh(
-        new THREE.CylinderGeometry(HEX_SIZE * 0.85, HEX_SIZE * 0.88, 0.06, 6),
-        toonMat(STYLE.dirt),
-      );
-      skirt.position.set(x, coastDirs.length > 0 ? SEA_LEVEL + 0.04 : -0.01, z);
-      skirt.receiveShadow = true;
-      this.propsGroup.add(skirt);
+      // Dirt skirt only under fully inland tiles — coastal bevels are the shoreline.
+      if (coastDirs.length === 0) {
+        const skirt = new THREE.Mesh(
+          new THREE.CylinderGeometry(HEX_SIZE * 0.88, HEX_SIZE * 0.9, 0.06, 6),
+          toonMat(STYLE.dirt),
+        );
+        skirt.position.set(x, -0.01, z);
+        skirt.receiveShadow = true;
+        this.propsGroup.add(skirt);
+      }
 
       // Slightly darker rim on top edge (same pointy-top hex as the tile mesh)
       const rim = new THREE.Mesh(
@@ -300,10 +335,14 @@ export class BoardView {
       }
     }
 
+    // Matrices must be current before ground sampling for markers / pieces.
+    this.root.updateMatrixWorld(true);
+
     const bladesPerHex = board.rings <= 2 ? 420 : board.rings === 3 ? 300 : 200;
     this.grass.build(grassPatches, bladesPerHex);
 
     for (const v of board.vertices.values()) {
+      const gy = this.sampleGroundY(v.x, v.z);
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(0.14, 10, 8),
         new THREE.MeshToonMaterial({
@@ -313,7 +352,7 @@ export class BoardView {
           opacity: 0,
         }),
       );
-      m.position.set(v.x, TILE_HEIGHT + 0.1, v.z);
+      m.position.set(v.x, gy + 0.1, v.z);
       m.userData = { kind: 'vertex', id: v.id };
       this.vertexMarkers.set(v.id, m);
       this.root.add(m);
@@ -321,6 +360,7 @@ export class BoardView {
     }
 
     for (const e of board.edges.values()) {
+      const gy = this.sampleGroundY(e.midX, e.midZ);
       const m = new THREE.Mesh(
         new THREE.BoxGeometry(0.9, 0.1, 0.18),
         new THREE.MeshToonMaterial({
@@ -330,7 +370,7 @@ export class BoardView {
           opacity: 0,
         }),
       );
-      m.position.set(e.midX, TILE_HEIGHT + 0.08, e.midZ);
+      m.position.set(e.midX, gy + 0.08, e.midZ);
       m.rotation.y = -e.angle;
       m.userData = { kind: 'edge', id: e.id };
       this.edgeMarkers.set(e.id, m);
@@ -491,13 +531,16 @@ export class BoardView {
     for (const mesh of this.roadMeshes.values()) this.root.remove(mesh);
     this.roadMeshes.clear();
 
+    this.root.updateMatrixWorld(true);
+
     for (const road of board.roads.values()) {
       const e = board.edges.get(road.edgeId)!;
+      const gy = this.sampleGroundY(e.midX, e.midZ);
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(0.92, 0.12, 0.2),
         toonMat(STYLIZED_PLAYER[road.owner]),
       );
-      mesh.position.set(e.midX, TILE_HEIGHT + 0.09, e.midZ);
+      mesh.position.set(e.midX, gy + 0.09, e.midZ);
       mesh.rotation.y = -e.angle;
       mesh.castShadow = true;
       this.roadMeshes.set(road.edgeId, mesh);
@@ -508,7 +551,8 @@ export class BoardView {
       const v = board.vertices.get(b.vertexId)!;
       const color = STYLIZED_PLAYER[b.owner as PlayerId];
       const piece = b.kind === 'city' ? this.makeCity(color) : this.makeSettlement(color);
-      piece.position.set(v.x, TILE_HEIGHT, v.z);
+      const gy = this.sampleGroundY(v.x, v.z);
+      piece.position.set(v.x, gy, v.z);
       this.buildingMeshes.set(b.vertexId, piece);
       this.root.add(piece);
     }
@@ -516,7 +560,8 @@ export class BoardView {
     const robberHex = board.hexes.get(board.robberHexId);
     if (robberHex) {
       const { x, z } = axialToWorld(robberHex.q, robberHex.r);
-      this.robber.position.set(x + 0.35, TILE_HEIGHT, z + 0.2);
+      const gy = this.sampleGroundY(x + 0.35, z + 0.2);
+      this.robber.position.set(x + 0.35, gy, z + 0.2);
     }
   }
 
