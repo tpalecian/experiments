@@ -74,6 +74,7 @@ uniform float uDeepFade;
 uniform float uSeaRadius;
 uniform float uEdgeSoft;
 uniform vec3 uHorizon;
+uniform float uHorizonHaze;
 uniform float uBandIntensity;
 uniform float uBandScale;
 uniform float uBandSpeed;
@@ -189,60 +190,59 @@ void main() {
   vec3 V = normalize(vViewDir);
   vec3 L = normalize(uSunDir);
 
-  // 5. Subtle Fresnel — tinted by sky atmosphere
-  float fres = pow(1.0 - max(dot(N, V), 0.0), uFresnelPower);
-  fres *= uFresnelStrength;
-  col = mix(col, uSkyFresnel, fres * 0.35);
-
-  // 6. Satin specular
-  vec3 H = normalize(L + V);
-  float spec = pow(max(dot(N, H), 0.0), uSpecularPower);
-  spec = smoothstep(0.0, 1.0, spec);
-  spec *= 0.85 + 0.15 * wave;
-  col += uSunColor * spec * uSpecularIntensity;
-
-  // 7. Soft caustics in shallow water
-  float shallowMask = 1.0 - smoothstep(0.0, shore * 0.95, shoreDist);
-  shallowMask = pow(max(shallowMask, 0.0), 0.85);
-  float cau = softCaustic(vWorldPos.xz * uCausticScale, uTime * uCausticSpeed);
-  col += mix(uBeachEdge, uShallow, 0.4) * cau * uCausticIntensity * shallowMask;
-
-  // 8. Thin foam exactly where water meets each land hex edge
-  float foam = smoothstep(-uFoamWidth * 0.2, uFoamWidth * 0.15, shoreDist);
-  foam *= 1.0 - smoothstep(uFoamWidth * 0.2, uFoamWidth, shoreDist);
-  float foamPulse = 0.78 + 0.22 * sin(uTime * 0.7 + shoreDist * 2.0 + wave * 2.5);
-  foam = pow(max(foam, 0.0), 1.15) * foamPulse * uShoreFoam;
-  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.85));
-
-  // 9. Horizon dissolve.
-  // Grazing views foreshorten a world-space rim into a hard screen line, so also
-  // fade by camera distance and by how horizontally we look at each fragment.
-  // Alpha goes to 0 so the sky (and its TOD horizon band) shows through.
+  // Horizon dissolve weight — computed early so lighting can't draw a bright rim.
   float seaR = max(uSeaRadius, 1.0);
   float soft = max(uEdgeSoft, seaR * 0.55);
   float radialDist = length(vWorldPos.xz);
   float edgeFade = smoothstep(seaR - soft, seaR, radialDist);
 
   float camDist = length(cameraPosition - vWorldPos);
-  float distFade = smoothstep(16.0, 52.0, camDist);
+  float distFade = smoothstep(14.0, 48.0, camDist);
 
   vec3 fromCam = normalize(vWorldPos - cameraPosition);
-  float horizonFade = smoothstep(-0.22, -0.015, fromCam.y);
-  horizonFade *= smoothstep(12.0, 40.0, camDist);
+  float horizonFade = smoothstep(-0.28, -0.01, fromCam.y);
+  horizonFade *= smoothstep(10.0, 36.0, camDist);
 
-  float ndotv = max(dot(N, V), 0.0);
-  float graze = pow(1.0 - ndotv, 1.8) * distFade;
+  float ndotvEarly = max(dot(N, V), 0.0);
+  float graze = pow(1.0 - ndotvEarly, 1.6) * distFade;
 
-  float haze = max(edgeFade, max(distFade * 0.9, max(horizonFade, graze)));
+  float haze = max(edgeFade, max(distFade * 0.92, max(horizonFade, graze)));
   haze = clamp(haze, 0.0, 1.0);
   haze = haze * haze * (3.0 - 2.0 * haze);
+  float keep = 1.0 - haze;
 
-  vec3 fadeCol = mix(uDeepOcean, uHorizon, 0.45);
+  // 5. Subtle Fresnel — tinted by sky atmosphere (killed toward the rim)
+  float fres = pow(1.0 - max(dot(N, V), 0.0), uFresnelPower);
+  fres *= uFresnelStrength * keep;
+  col = mix(col, uSkyFresnel, fres * 0.35);
+
+  // 6. Satin specular — no grazing hotspot line at the horizon
+  vec3 H = normalize(L + V);
+  float spec = pow(max(dot(N, H), 0.0), uSpecularPower);
+  spec = smoothstep(0.0, 1.0, spec);
+  spec *= 0.85 + 0.15 * wave;
+  col += uSunColor * spec * uSpecularIntensity * keep;
+
+  // 7. Soft caustics in shallow water
+  float shallowMask = 1.0 - smoothstep(0.0, shore * 0.95, shoreDist);
+  shallowMask = pow(max(shallowMask, 0.0), 0.85);
+  float cau = softCaustic(vWorldPos.xz * uCausticScale, uTime * uCausticSpeed);
+  col += mix(uBeachEdge, uShallow, 0.4) * cau * uCausticIntensity * shallowMask * keep;
+
+  // 8. Thin foam exactly where water meets each land hex edge
+  float foam = smoothstep(-uFoamWidth * 0.2, uFoamWidth * 0.15, shoreDist);
+  foam *= 1.0 - smoothstep(uFoamWidth * 0.2, uFoamWidth, shoreDist);
+  float foamPulse = 0.78 + 0.22 * sin(uTime * 0.7 + shoreDist * 2.0 + wave * 2.5);
+  foam = pow(max(foam, 0.0), 1.15) * foamPulse * uShoreFoam;
+  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.85) * keep);
+
+  // 9. Dissolve into the live sky horizon (incl. bloom) so morning/evening/night match.
+  // Avoid mixing deep-ocean cyan here — that fringe is what reads as a TOD-dependent line.
+  vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);
   col = mix(col, fadeCol, haze);
-  float alpha = 1.0 - haze;
-  if (alpha < 0.04) discard;
+  if (keep < 0.04) discard;
 
-  gl_FragColor = vec4(col, alpha);
+  gl_FragColor = vec4(col, keep);
 }
 `;
 
@@ -278,6 +278,7 @@ export class WaterSurface {
         uSeaRadius: { value: 180 * 0.94 },
         uEdgeSoft: { value: this.config.waterEdgeSoft },
         uHorizon: { value: new THREE.Color(this.config.skyHorizon) },
+        uHorizonHaze: { value: 0.22 },
         uBandIntensity: { value: this.config.waterBandIntensity },
         uBandScale: { value: this.config.waterBandScale },
         uBandSpeed: { value: this.config.waterBandSpeed },
@@ -371,8 +372,9 @@ export class WaterSurface {
 
     u.uSunColor.value.copy(atm.waterSunColor);
     u.uSkyFresnel.value.copy(atm.skyFresnelColor);
-    // Dissolve target tracks the live sky/fog horizon across time-of-day schemes.
-    u.uHorizon.value.copy(atm.skyHorizon).lerp(atm.fogColor, 0.35);
+    // Dissolve into the same horizon the sky shader blooms — no leftover ocean fringe.
+    u.uHorizon.value.copy(atm.skyHorizon);
+    u.uHorizonHaze.value = atm.horizonHaze;
     u.uSpecularIntensity.value = atm.waterSpecularIntensity;
     u.uFresnelStrength.value = atm.waterFresnelStrength;
     u.uCausticIntensity.value = atm.waterCausticIntensity;
