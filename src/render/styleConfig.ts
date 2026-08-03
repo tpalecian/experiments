@@ -73,7 +73,7 @@ export interface StyleConfig {
 export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   timeOfDay: 'afternoon',
   dayLengthSec: 180,
-  dayTransitionSec: 8,
+  dayTransitionSec: 4,
 
   cloudCount: 6,
   cloudScale: 2.5,
