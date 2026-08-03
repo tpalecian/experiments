@@ -4,10 +4,11 @@ Local hotseat Settlers of Catan built with Vite, TypeScript, and Three.js.
 
 ## Vision
 
-The look is a **handcrafted organic island**, not a board of tiles.
+The look is a **handcrafted organic archipelago**, not a board of tiles.
 
 - Gameplay runs on a **hidden region graph** (resources + adjacency; hex board is the rules compat layer).
 - **Coastline first:** one field `distanceToCoast` drives height, water colour, beaches, wave bands, foam, vegetation, and rocks.
+- **Multiple landmasses** by default (2–4 from map size) with soft sea channels; Craft → World → Islands / Channel spread.
 - **Day-night is render-only:** world data stays static; an Environment State retints lighting, water, sky, and fog.
 - **Deep configurator:** edit everything via a categorised craft panel (search, Generate vs Look, Apply regenerate).
 - Architecture & milestones: **[docs/VISION.md](docs/VISION.md)**  

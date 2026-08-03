@@ -163,10 +163,7 @@ export function buildArchipelagoBlobs(
     }
   }
 
-  // Don't pull centroids away from their sites — that dumps hexes into channels.
-  // Channel clarity comes from carveArchipelagoChannels instead.
-  const spread = Math.max(0, Math.min(1, params.archipelagoSpread));
-  void spread;
+  // Channel clarity comes from carveArchipelagoChannels (uses archipelagoSpread).
 
   // Assign sites → blob radii
   const members: GraphPoint[][] = centroids.map(() => []);
