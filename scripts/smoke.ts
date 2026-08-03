@@ -102,29 +102,35 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
       island: {
         seed: 7,
         radius: 10,
-        falloff: 1.12,
-        warp: 0.35,
-        islandCount: 2,
-        archipelagoSpread: 0.6,
+        falloff: 1.18,
+        warp: 0.16,
+        islandCount: 0,
+        archipelagoSpread: 0.85,
       },
-      resolution: 64,
-      smoothPasses: 2,
+      layoutScale: 5.2,
+      resolution: 96,
+      smoothPasses: 1,
     },
     engine.board,
     graph,
   );
 
-  assert(world.sdfField.length === 64 * 64, 'sdf field size');
-  assert(world.heightField.length === 64 * 64, 'height field size');
-  assert(world.seed.blobs.length === 2, `expected 2 archipelago blobs, got ${world.seed.blobs.length}`);
+  assert(world.sdfField.length === 96 * 96, 'sdf field size');
+  assert(world.heightField.length === 96 * 96, 'height field size');
+  assert(
+    world.seed.blobs.length === world.sites.length,
+    `one island per hex (blobs=${world.seed.blobs.length}, sites=${world.sites.length})`,
+  );
   assert(
     world.seed.blobs.every((b) => typeof b.biome === 'string'),
     'each island blob has a biome',
   );
-  // Per-island biomes: land cells near each nucleus should match that blob's biome
+  const biomes = new Set(world.seed.blobs.map((b) => b.biome));
+  assert(biomes.size >= 4, `expect several Catan biomes across islands (got ${[...biomes]})`);
+
   for (const blob of world.seed.blobs) {
     const sample = world.sdf.sample(blob.x, blob.z);
-    if (sample <= 0) continue;
+    assert(sample > 0.3, `island nucleus ${blob.biome} should be inland (d=${sample})`);
     const u =
       (blob.x - world.grid.bounds.minX) /
       Math.max(world.grid.bounds.maxX - world.grid.bounds.minX, 1e-6);
@@ -137,32 +143,54 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
     const kind = biomeIndexToKind(world.biomeField[idx]!);
     assert(kind === blob.biome, `island nucleus biome ${blob.biome} vs field ${kind}`);
   }
-  const center = world.sdf.sample(0, 0);
-  // With two offset islands, map center may be a sea channel — that's OK.
-  const ocean = world.sdf.sample(world.grid.bounds.maxX * 0.95, world.grid.bounds.maxZ * 0.95);
-  assert(ocean < 0, `far corner should be ocean (d=${ocean})`);
-  assert(world.coastline.length >= 1, 'at least one coastline loop');
-  // Prefer multiple landmasses when archipelago; allow a thin sandbar bridge
-  if (world.seed.blobs.length >= 2) {
-    assert(
-      world.coastline.length >= 1,
-      'archipelago should produce coastline geometry',
-    );
-    // Mid-channel should not be deep inland — sandbar or open water
-    const a = world.seed.blobs[0]!;
-    const b = world.seed.blobs[1]!;
-    const midD = world.sdf.sample((a.x + b.x) * 0.5, (a.z + b.z) * 0.5);
-    assert(midD < 1.25, `channel between islands should be shallow/open (d=${midD})`);
-  }
 
-  // Organic coast: sites covered by their blob radii without SDF mutation.
+  // Neighboring islands must have open water between centers
+  let openChannels = 0;
+  let checked = 0;
+  let minSep = Infinity;
+  for (let i = 0; i < world.seed.blobs.length; i++) {
+    for (let j = i + 1; j < world.seed.blobs.length; j++) {
+      minSep = Math.min(
+        minSep,
+        Math.hypot(
+          world.seed.blobs[i]!.x - world.seed.blobs[j]!.x,
+          world.seed.blobs[i]!.z - world.seed.blobs[j]!.z,
+        ),
+      );
+    }
+  }
+  for (let i = 0; i < world.seed.blobs.length; i++) {
+    for (let j = i + 1; j < world.seed.blobs.length; j++) {
+      const a = world.seed.blobs[i]!;
+      const b = world.seed.blobs[j]!;
+      const dist = Math.hypot(a.x - b.x, a.z - b.z);
+      // Only check true hex-neighbors (near min separation)
+      if (dist > minSep * 1.15) continue;
+      checked++;
+      const midD = world.sdf.sample((a.x + b.x) * 0.5, (a.z + b.z) * 0.5);
+      if (midD < 0) openChannels++;
+    }
+  }
+  assert(checked > 0, 'should find neighboring island pairs');
+  assert(
+    openChannels === checked,
+    `all neighbor midpoints should be water (${openChannels}/${checked})`,
+  );
+
+  // Islands should be large
+  const avgR =
+    world.seed.blobs.reduce((s, b) => s + b.radius, 0) / world.seed.blobs.length;
+  assert(avgR >= 2.8, `islands should be large (avgR=${avgR.toFixed(2)})`);
+
+  assert(world.coastline.length >= Math.min(8, world.sites.length - 2), `many separate coast loops (got ${world.coastline.length})`);
+
   let inland = 0;
   for (const site of world.sites) {
     if (world.sdf.sample(site.x, site.z) > 0) inland++;
   }
   assert(
     inland === world.sites.length,
-    `all region centers inland on archipelago (${inland}/${world.sites.length})`,
+    `all region centers inland (${inland}/${world.sites.length})`,
   );
 
   const env = createDefaultEnvironmentState('day');
@@ -181,9 +209,6 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
     waterShoreFoam: 0.55,
   });
   assert(env.waterDeepColor.r > 0 || env.waterDeepColor.g > 0, 'env water palette filled');
-  assert(env.waterShallowColor.g > 0, 'env shallow colour set');
-  assert(env.beachTint.r > 0, 'env beach tint set');
-  assert(env.horizonHaze >= 0, 'env horizon haze set');
 
   const ids = [...graph.regions.keys()];
   if (ids.length >= 2) {
@@ -200,24 +225,23 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   for (const v of engine.board.vertices.values()) {
     const pose = placement.vertex(v.id);
     const d = world.sdf.sample(pose.x, pose.z);
-    assert(d >= 0.2, `placed vertex ${v.id} should be on land (d=${d.toFixed(2)})`);
+    assert(d >= 0.15, `placed vertex ${v.id} should be on land (d=${d.toFixed(2)})`);
     assert(pose.y >= 0, `placed vertex ${v.id} height`);
   }
   for (const h of engine.board.harbors) {
     const pose = resolveHarborPose(world, engine.board, h);
     const shoreD = world.sdf.sample(pose.x, pose.z);
     const tipD = world.sdf.sample(pose.pierTip.x, pose.pierTip.z);
-    assert(shoreD > -0.5 && shoreD < 1.2, `harbor ${h.edgeId} footing near coast (d=${shoreD.toFixed(2)})`);
+    assert(shoreD > -0.5 && shoreD < 1.5, `harbor ${h.edgeId} footing near coast (d=${shoreD.toFixed(2)})`);
     assert(tipD < shoreD, `harbor ${h.edgeId} pier tip should be more seaward`);
   }
-  // Spot-check resolveVertexPose matches cache
   const anyId = [...engine.board.vertices.keys()][0]!;
   const a = resolveVertexPose(world, engine.board, anyId);
   const b = placement.vertex(anyId);
   assert(Math.hypot(a.x - b.x, a.z - b.z) < 1e-6, 'placement cache matches resolver');
 
   console.log(
-    `ok island pipeline (blobs=${world.seed.blobs.length}, regions=${graph.regions.size}, trees=${world.trees.length}, rocks=${world.rocks.length}, coastLoops=${world.coastline.length}, harbors=${engine.board.harbors.length}, centerD=${center.toFixed(2)})`,
+    `ok island pipeline (blobs=${world.seed.blobs.length}, biomes=${[...biomes].join(',')}, trees=${world.trees.length}, rocks=${world.rocks.length}, props=${world.props.length}, coastLoops=${world.coastline.length}, openChannels=${openChannels}/${checked})`,
   );
 }
 

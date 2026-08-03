@@ -13,8 +13,8 @@ export interface RockGate {
 }
 
 export const DEFAULT_ROCK_GATE: RockGate = {
-  minHeight: 0.15,
-  minSlope: 0.08,
+  minHeight: 0.05,
+  minSlope: 0.02,
 };
 
 export function canSpawnRock(
@@ -84,8 +84,8 @@ export function createRockScatterGroup(rocks: ScatterInstance[]): THREE.Group {
 
   if (pillars.length > 0) {
     // Tall jagged pillars — reference tropical rock clusters
-    const geom = new THREE.CylinderGeometry(0.12, 0.18, 0.55, 5);
-    const mat = new THREE.MeshToonMaterial({ color: 0x5c6370 });
+    const geom = new THREE.CylinderGeometry(0.16, 0.24, 0.7, 5);
+    const mat = new THREE.MeshToonMaterial({ color: 0x5a616e });
     const mesh = new THREE.InstancedMesh(geom, mat, pillars.length);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
@@ -97,8 +97,8 @@ export function createRockScatterGroup(rocks: ScatterInstance[]): THREE.Group {
       const sy = r.scaleY ?? 2.5;
       e.set(0, r.yaw, ((r.yaw * 7) % 0.16) - 0.08);
       q.setFromEuler(e);
-      s.set(r.scale * 0.85, sy * 0.55, r.scale * 0.85);
-      p.set(r.x, r.y + sy * 0.22, r.z);
+      s.set(r.scale * 1.05, sy * 0.65, r.scale * 1.05);
+      p.set(r.x, r.y + sy * 0.28, r.z);
       m.compose(p, q, s);
       mesh.setMatrixAt(i, m);
     }

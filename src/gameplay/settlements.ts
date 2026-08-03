@@ -69,8 +69,9 @@ export function snapSettlementToTerrain(
   world: WorldData,
   lift = 0.02,
 ): SettlementSite {
-  const y = worldSampleBilinear(world.heightField, world.grid, site.x, site.z);
-  return { ...site, y: y + lift };
+  const s = Math.max(0.5, world.params.layoutScale ?? 1);
+  const y = worldSampleBilinear(world.heightField, world.grid, site.x * s, site.z * s);
+  return { ...site, x: site.x * s, z: site.z * s, y: y + lift };
 }
 
 export function snapBoardVertexHeight(

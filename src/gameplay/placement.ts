@@ -21,6 +21,16 @@ export interface WorldPose {
 
 const EPS = 1e-4;
 
+/** Hex-board → organic world scale (bigger islands with channels between). */
+export function layoutScaleOf(world: WorldData): number {
+  return Math.max(0.5, world.params.layoutScale ?? 1);
+}
+
+export function toWorldXZ(world: WorldData, x: number, z: number): { x: number; z: number } {
+  const s = layoutScaleOf(world);
+  return { x: x * s, z: z * s };
+}
+
 function sdfAt(world: WorldData, x: number, z: number): number {
   return world.sdf.sample(x, z);
 }
@@ -92,17 +102,46 @@ export function resolveVertexPose(world: WorldData, board: BoardState, vertexId:
   const v = board.vertices.get(vertexId);
   if (!v) return { x: 0, y: 0, z: 0, yaw: 0 };
 
-  let x = v.x;
-  let z = v.z;
+  const scaled = toWorldXZ(world, v.x, v.z);
+  let x = scaled.x;
+  let z = scaled.z;
   let d = sdfAt(world, x, z);
 
   // Prefer a little inland so foundations clear wet sand / foam
-  const targetLand = 0.55;
+  const targetLand = 0.65;
   if (d < targetLand) {
     const hit = walkSdf(world, x, z, 1, targetLand);
     x = hit.x;
     z = hit.z;
     d = hit.d;
+  }
+
+  // If still in a sea channel, snap toward nearest island nucleus
+  if (d < 0.25) {
+    let bestX = x;
+    let bestZ = z;
+    let bestD = d;
+    for (const b of world.seed.blobs) {
+      for (let t = 0.35; t <= 0.85; t += 0.1) {
+        const sx = x + (b.x - x) * t;
+        const sz = z + (b.z - z) * t;
+        const sd = sdfAt(world, sx, sz);
+        if (sd > bestD) {
+          bestD = sd;
+          bestX = sx;
+          bestZ = sz;
+        }
+      }
+    }
+    x = bestX;
+    z = bestZ;
+    d = bestD;
+    if (d < targetLand) {
+      const hit = walkSdf(world, x, z, 1, targetLand, 64, 0.25);
+      x = hit.x;
+      z = hit.z;
+      d = hit.d;
+    }
   }
 
   // Soften steep slopes: if slope is harsh, nudge toward flatter neighbor samples
@@ -228,11 +267,12 @@ export function resolveHexCenterPose(
   x: number,
   z: number,
 ): WorldPose {
-  let px = x;
-  let pz = z;
+  const scaled = toWorldXZ(world, x, z);
+  let px = scaled.x;
+  let pz = scaled.z;
   const d = sdfAt(world, px, pz);
-  if (d < 0.35) {
-    const hit = walkSdf(world, px, pz, 1, 0.6);
+  if (d < 0.45) {
+    const hit = walkSdf(world, px, pz, 1, 0.7);
     px = hit.x;
     pz = hit.z;
   }

@@ -7,7 +7,7 @@ import { generateIsland } from '../terrain/pipeline';
 import type { WorldData } from '../world/types';
 import { worldSampleBilinear } from '../world/types';
 import { createRockScatterGroup } from '../world/rocks';
-import { createTreeGroupInstances } from '../world/vegetation';
+import { createBiomePropGroup, createTreeGroupInstances } from '../world/vegetation';
 import { GrassField } from './grass';
 import {
   STYLE,
@@ -233,11 +233,11 @@ export class BoardView {
 
       if (hex.number !== null) {
         const disc = new THREE.Mesh(
-          new THREE.CircleGeometry(0.28, 6),
+          new THREE.CircleGeometry(0.38, 6),
           new THREE.MeshBasicMaterial({ map: numberTexture(hex.number), transparent: true }),
         );
         disc.rotation.x = -Math.PI / 2;
-        disc.position.set(center.x, groundY + 0.06, center.z);
+        disc.position.set(center.x, groundY + 0.08, center.z);
         disc.userData = { kind: 'hex', id: hex.id };
         this.root.add(disc);
         this.pickables.push(disc);
@@ -302,7 +302,8 @@ export class BoardView {
 
   private buildIsland(board: BoardState): void {
     const partial = styleToWorldPartial(this.style);
-    const r = boardRadiusWorld(board.rings) * this.style.islandRadiusScale;
+    const layoutScale = partial.layoutScale ?? 5.2;
+    const r = boardRadiusWorld(board.rings) * this.style.islandRadiusScale * layoutScale;
     const graph = boardToRegionGraph(board, this.style.islandSeed);
     this.world = generateIsland(
       {
@@ -314,10 +315,11 @@ export class BoardView {
     );
     this.placement = new PlacementCache(this.world, board);
     this.island.build(this.world, this.style.showSdfOverlay);
-    this.island.setScatter(
-      createTreeGroupInstances(this.world.trees),
-      createRockScatterGroup(this.world.rocks),
-    );
+    const scatter = new THREE.Group();
+    scatter.add(createTreeGroupInstances(this.world.trees));
+    scatter.add(createRockScatterGroup(this.world.rocks));
+    scatter.add(createBiomePropGroup(this.world.props));
+    this.island.setScatter(scatter, new THREE.Group());
     this.water.setIslandSdf(this.world);
   }
 

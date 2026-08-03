@@ -18,6 +18,55 @@ function nearestSiteDist(sites: GraphPoint[], x: number, z: number): number {
 }
 
 /**
+ * Hard-cap each island to its blob radius so soft skirts never bridge neighbors.
+ * Cells beyond the owning blob (and not near a site) become ocean.
+ */
+export function enforceIslandSeparation(
+  mask: Float32Array,
+  grid: WorldGrid,
+  blobs: IslandBlob[],
+  sites: GraphPoint[],
+  protectRadius = 0.9,
+): Float32Array {
+  if (blobs.length < 2) return mask;
+  const out = mask.slice();
+  const { width, depth } = grid;
+  for (let iz = 0; iz < depth; iz++) {
+    for (let ix = 0; ix < width; ix++) {
+      const p = worldXZ(grid, ix, iz);
+      if (nearestSiteDist(sites, p.x, p.z) < protectRadius) continue;
+
+      let bestBlob = blobs[0]!;
+      let bestN = Infinity;
+      let secondN = Infinity;
+      for (const b of blobs) {
+        const n = Math.hypot(p.x - b.x, p.z - b.z) / Math.max(b.radius, 1e-3);
+        if (n < bestN) {
+          secondN = bestN;
+          bestN = n;
+          bestBlob = b;
+        } else if (n < secondN) {
+          secondN = n;
+        }
+      }
+
+      const idx = iz * width + ix;
+      // Outside the hard island disk → ocean
+      if (bestN > 0.98) {
+        out[idx] = Math.min(out[idx]!, 0.28);
+        continue;
+      }
+      // Contested gap between two islands → force channel
+      if (bestN > 0.55 && secondN < 1.15 && Math.abs(bestN - secondN) < 0.45) {
+        out[idx] = Math.min(out[idx]!, 0.2);
+      }
+      void bestBlob;
+    }
+  }
+  return out;
+}
+
+/**
  * Carve soft water channels between every blob pair.
  * `strength` 0–1 from archipelagoSpread; sites within `protectRadius` stay land.
  * Midline stamps + saddle pass so overlapping soft masks actually split.
@@ -33,8 +82,11 @@ export function carveArchipelagoChannels(
   if (blobs.length < 2 || strength <= 0.02) return mask;
   const out = mask.slice();
   const { width, depth } = grid;
-  const carve = 0.95 + strength * 0.55;
-  const halfWidth = 1.25 + strength * 1.65;
+  const carve = 0.98 + strength * 0.55;
+  // Scale channel width with typical blob size so gaps stay open on large islands
+  const avgR =
+    blobs.reduce((s, b) => s + b.radius, 0) / Math.max(blobs.length, 1);
+  const halfWidth = avgR * (0.22 + strength * 0.18);
 
   for (let i = 0; i < blobs.length; i++) {
     for (let j = i + 1; j < blobs.length; j++) {

@@ -2,6 +2,8 @@
  * Coastline-first island pipeline.
  *
  *   mask → smooth → SDF (distanceToCoast) → height → biomes → scatter
+ *
+ * Default: one large island per hex / number token, spaced by layoutScale.
  */
 
 import { boardRadiusWorld } from '../game/board';
@@ -30,6 +32,7 @@ import { distanceTransformSoften, smoothIslandMask } from './mask';
 import { mulberry32 } from './noise';
 import {
   carveArchipelagoChannels,
+  enforceIslandSeparation,
   keepSiteLandComponents,
   protectSiteFootprints,
   shallowSandbarShelf,
@@ -75,7 +78,7 @@ function mergeParams(
     beach: { ...DEFAULT_WORLD_GENERATION.beach, ...partial.beach },
   };
   if (board) {
-    const r = boardRadiusWorld(board.rings);
+    const r = boardRadiusWorld(board.rings) * base.layoutScale;
     base.island = {
       ...base.island,
       radius: partial.island?.radius ?? r * 1.05,
@@ -93,23 +96,33 @@ function mergeParams(
   return base;
 }
 
-function scatterProps(world: Omit<WorldData, 'trees' | 'rocks'>, params: WorldGenerationParams): {
+function scaleSites(sites: GraphPoint[], scale: number): GraphPoint[] {
+  if (Math.abs(scale - 1) < 1e-6) return sites;
+  return sites.map((s) => ({ ...s, x: s.x * scale, z: s.z * scale }));
+}
+
+function scatterProps(
+  world: Omit<WorldData, 'trees' | 'rocks' | 'props'>,
+  params: WorldGenerationParams,
+): {
   trees: ScatterInstance[];
   rocks: ScatterInstance[];
+  props: ScatterInstance[];
 } {
   const rng = mulberry32(params.island.seed ^ 0x9e3779b9);
   const trees: ScatterInstance[] = [];
   const rocks: ScatterInstance[] = [];
+  const props: ScatterInstance[] = [];
   const { width, depth } = world.grid;
-  const step = Math.max(1, Math.floor(128 / Math.max(params.resolution, 32)));
+  const step = Math.max(1, Math.floor(96 / Math.max(params.resolution, 32)));
   const blobs = world.seed.blobs;
+  const beachKeep = params.beach.dryEnd + 0.08;
 
   for (let iz = 2; iz < depth - 2; iz += step) {
     for (let ix = 2; ix < width - 2; ix += step) {
       const i = iz * width + ix;
       const d = world.sdfField[i]!;
-      // Keep scatter inland of the beach ring
-      if (d < params.beach.dryEnd + 0.2) continue;
+      if (d < beachKeep) continue;
       const h = world.heightField[i]!;
       const slope = sampleSlope(world.heightField, world.grid, ix, iz);
       const x =
@@ -118,62 +131,226 @@ function scatterProps(world: Omit<WorldData, 'trees' | 'rocks'>, params: WorldGe
       const z =
         world.grid.bounds.minZ +
         (iz / (depth - 1)) * (world.grid.bounds.maxZ - world.grid.bounds.minZ);
-      const jx = x + (rng() - 0.5) * step * 0.35;
-      const jz = z + (rng() - 0.5) * step * 0.35;
+      const jx = x + (rng() - 0.5) * step * 0.4;
+      const jz = z + (rng() - 0.5) * step * 0.4;
       const weights = sampleIslandBiome(blobs, jx, jz);
       const biome = dominantBiome(weights);
 
-      if (
-        biome === 'forest' &&
-        rng() < params.treeDensity &&
-        canSpawnTree(slope, h, weights, DEFAULT_TREE_GATE)
-      ) {
-        trees.push({
-          x: jx,
-          y: h,
-          z: jz,
-          scale: 0.75 + rng() * 0.55,
-          yaw: rng() * Math.PI * 2,
-        });
+      // Find owning blob for clustering props toward landmarks
+      let bx = jx;
+      let bz = jz;
+      let best = Infinity;
+      for (const b of blobs) {
+        const dd = Math.hypot(jx - b.x, jz - b.z);
+        if (dd < best) {
+          best = dd;
+          bx = b.x;
+          bz = b.z;
+        }
       }
 
-      const wantsPillars = biome === 'ore' || biome === 'brick';
-      const rockChance = wantsPillars ? Math.min(1, params.rockDensity * 1.8) : params.rockDensity * 0.35;
-      if (rng() < rockChance) {
-        if (wantsPillars && d > params.beach.dryEnd + 0.35) {
-          let bx = jx;
-          let bz = jz;
-          let best = Infinity;
-          for (const b of blobs) {
-            const dd = Math.hypot(jx - b.x, jz - b.z);
-            if (dd < best) {
-              best = dd;
-              bx = b.x;
-              bz = b.z;
-            }
+      switch (biome) {
+        case 'forest': {
+          if (
+            rng() < params.treeDensity * 1.15 &&
+            canSpawnTree(slope, h, weights, { ...DEFAULT_TREE_GATE, minForestWeight: 0.5 })
+          ) {
+            trees.push({
+              x: jx,
+              y: h,
+              z: jz,
+              scale: 0.85 + rng() * 0.7,
+              yaw: rng() * Math.PI * 2,
+            });
           }
-          const toward = 0.35 + rng() * 0.45;
-          rocks.push({
-            x: jx + (bx - jx) * toward * 0.25 + (rng() - 0.5) * 0.35,
-            y: h,
-            z: jz + (bz - jz) * toward * 0.25 + (rng() - 0.5) * 0.35,
-            scale: 0.45 + rng() * 0.55,
-            scaleY: 2.4 + rng() * 3.2,
-            yaw: rng() * Math.PI * 2,
-          });
-        } else if (canSpawnRock(slope, h, DEFAULT_ROCK_GATE)) {
-          rocks.push({
-            x: jx,
-            y: h,
-            z: jz,
-            scale: 0.55 + rng() * 0.7,
-            yaw: rng() * Math.PI * 2,
-          });
+          if (rng() < 0.2) {
+            props.push({
+              x: jx,
+              y: h,
+              z: jz,
+              scale: 0.35 + rng() * 0.25,
+              yaw: rng() * Math.PI * 2,
+              kind: 'bush',
+            });
+          }
+          break;
+        }
+        case 'pasture': {
+          if (rng() < 0.22) {
+            props.push({
+              x: jx,
+              y: h,
+              z: jz,
+              scale: 0.28 + rng() * 0.22,
+              yaw: rng() * Math.PI * 2,
+              kind: 'bush',
+            });
+          }
+          break;
+        }
+        case 'wheat': {
+          if (rng() < params.treeDensity * 0.95) {
+            props.push({
+              x: jx,
+              y: h,
+              z: jz,
+              scale: 0.55 + rng() * 0.45,
+              yaw: rng() * Math.PI * 2,
+              kind: 'wheat',
+            });
+          }
+          break;
+        }
+        case 'ore':
+        case 'brick': {
+          if (rng() < params.rockDensity * 1.6 && d > beachKeep + 0.2) {
+            const toward = 0.4 + rng() * 0.45;
+            rocks.push({
+              x: jx + (bx - jx) * toward * 0.35 + (rng() - 0.5) * 0.4,
+              y: h,
+              z: jz + (bz - jz) * toward * 0.35 + (rng() - 0.5) * 0.4,
+              scale: biome === 'ore' ? 0.55 + rng() * 0.65 : 0.45 + rng() * 0.5,
+              scaleY: biome === 'ore' ? 3.2 + rng() * 4.2 : 2.2 + rng() * 2.8,
+              yaw: rng() * Math.PI * 2,
+              kind: 'pillar',
+            });
+          }
+          break;
+        }
+        case 'desert': {
+          if (rng() < params.rockDensity * 0.35 && canSpawnRock(slope, h, DEFAULT_ROCK_GATE)) {
+            rocks.push({
+              x: jx,
+              y: h,
+              z: jz,
+              scale: 0.4 + rng() * 0.5,
+              yaw: rng() * Math.PI * 2,
+              kind: 'rock',
+            });
+          }
+          break;
+        }
+        default: {
+          const _exhaustive: never = biome;
+          void _exhaustive;
+          break;
         }
       }
     }
   }
-  return { trees, rocks };
+  // Guaranteed landmark props at each island nucleus (every biome looks detailed)
+  for (const b of blobs) {
+    const nucleusH = (() => {
+      const { width, depth, bounds } = world.grid;
+      const u = (b.x - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 1e-6);
+      const v = (b.z - bounds.minZ) / Math.max(bounds.maxZ - bounds.minZ, 1e-6);
+      const ix = Math.max(0, Math.min(width - 1, Math.round(u * (width - 1))));
+      const iz = Math.max(0, Math.min(depth - 1, Math.round(v * (depth - 1))));
+      return world.heightField[iz * width + ix]!;
+    })();
+
+    const ring = b.radius * 0.35;
+    switch (b.biome) {
+      case 'forest': {
+        for (let n = 0; n < 7; n++) {
+          const ang = (n / 7) * Math.PI * 2 + rng() * 0.4;
+          const rad = ring * (0.35 + rng() * 0.65);
+          trees.push({
+            x: b.x + Math.cos(ang) * rad,
+            y: nucleusH,
+            z: b.z + Math.sin(ang) * rad,
+            scale: 0.9 + rng() * 0.7,
+            yaw: rng() * Math.PI * 2,
+          });
+        }
+        break;
+      }
+      case 'wheat': {
+        for (let n = 0; n < 10; n++) {
+          const ang = rng() * Math.PI * 2;
+          const rad = ring * (0.2 + rng() * 0.8);
+          props.push({
+            x: b.x + Math.cos(ang) * rad,
+            y: nucleusH,
+            z: b.z + Math.sin(ang) * rad,
+            scale: 0.6 + rng() * 0.5,
+            yaw: rng() * Math.PI * 2,
+            kind: 'wheat',
+          });
+        }
+        break;
+      }
+      case 'pasture': {
+        for (let n = 0; n < 5; n++) {
+          const ang = rng() * Math.PI * 2;
+          const rad = ring * (0.3 + rng() * 0.7);
+          props.push({
+            x: b.x + Math.cos(ang) * rad,
+            y: nucleusH,
+            z: b.z + Math.sin(ang) * rad,
+            scale: 0.35 + rng() * 0.3,
+            yaw: rng() * Math.PI * 2,
+            kind: 'bush',
+          });
+        }
+        break;
+      }
+      case 'ore': {
+        for (let n = 0; n < 6; n++) {
+          const ang = -0.4 + n * 0.35 + rng() * 0.15;
+          const rad = ring * (0.15 + rng() * 0.45);
+          rocks.push({
+            x: b.x + Math.cos(ang) * rad,
+            y: nucleusH,
+            z: b.z + Math.sin(ang) * rad,
+            scale: 0.7 + rng() * 0.6,
+            scaleY: 3.5 + rng() * 4.5,
+            yaw: rng() * Math.PI * 2,
+            kind: 'pillar',
+          });
+        }
+        break;
+      }
+      case 'brick': {
+        for (let n = 0; n < 5; n++) {
+          const ang = rng() * Math.PI * 2;
+          const rad = ring * (0.2 + rng() * 0.5);
+          rocks.push({
+            x: b.x + Math.cos(ang) * rad,
+            y: nucleusH,
+            z: b.z + Math.sin(ang) * rad,
+            scale: 0.55 + rng() * 0.5,
+            scaleY: 2.4 + rng() * 3.0,
+            yaw: rng() * Math.PI * 2,
+            kind: 'pillar',
+          });
+        }
+        break;
+      }
+      case 'desert': {
+        for (let n = 0; n < 4; n++) {
+          const ang = rng() * Math.PI * 2;
+          const rad = ring * (0.25 + rng() * 0.6);
+          rocks.push({
+            x: b.x + Math.cos(ang) * rad,
+            y: nucleusH,
+            z: b.z + Math.sin(ang) * rad,
+            scale: 0.45 + rng() * 0.45,
+            yaw: rng() * Math.PI * 2,
+            kind: 'rock',
+          });
+        }
+        break;
+      }
+      default: {
+        const _exhaustive: never = b.biome;
+        void _exhaustive;
+        break;
+      }
+    }
+  }
+
+  return { trees, rocks, props };
 }
 
 /**
@@ -186,18 +363,28 @@ export function generateIsland(
 ): WorldData {
   const params = mergeParams(partial, board);
   let seed = createIslandSeed(params.island);
-  const g = graph ?? (board ? boardToRegionGraph(board, seed.params.seed) : createEmptyGraph(seed.params.seed));
-  const sites = regionCenters(g);
+  const g =
+    graph ??
+    (board
+      ? boardToRegionGraph(board, seed.params.seed)
+      : createEmptyGraph(seed.params.seed));
+
+  // Spread hex centers so each island can be large with water between
+  const rawSites = regionCenters(g);
+  const sites = scaleSites(rawSites, params.layoutScale);
+  for (const s of sites) {
+    const r = g.regions.get(s.id);
+    if (r) r.position = { x: s.x, z: s.z };
+  }
   seed = withArchipelagoBlobs(seed, sites, board?.rings);
 
-  // Frame bounds from outermost blob extents (archipelago can be wider than radius)
   let extent = seed.params.radius * params.extentScale;
   for (const b of seed.blobs) {
     extent = Math.max(
       extent,
-      Math.hypot(b.x, b.z) + b.radius * 1.35,
-      Math.abs(b.x) + b.radius * 1.2,
-      Math.abs(b.z) + b.radius * 1.2,
+      Math.hypot(b.x, b.z) + b.radius * 1.45,
+      Math.abs(b.x) + b.radius * 1.25,
+      Math.abs(b.z) + b.radius * 1.25,
     );
   }
   const grid = {
@@ -207,52 +394,72 @@ export function generateIsland(
   };
 
   let mask = fillIslandMaskGrid(seed, grid.width, grid.depth, grid.bounds);
-  mask = smoothIslandMask(mask, grid.width, grid.depth, Math.max(0, params.smoothPasses - 1));
-  mask = distanceTransformSoften(mask, grid.width, grid.depth);
-  // Carve after soften so channels aren't blurred shut again
-  mask = carveArchipelagoChannels(
-    mask,
-    grid,
-    seed.blobs,
-    sites,
-    Math.max(seed.params.archipelagoSpread, seed.blobs.length > 1 ? 0.62 : 0),
-    0.58,
-  );
-  // Small rescue disks only — large protect radii bridge adjacent island hexes
-  mask = protectSiteFootprints(mask, grid, sites, 0.55, 0.72);
-  // Drop carve speckles that don't hold gameplay sites
-  mask = keepSiteLandComponents(mask, grid, sites, 0.5);
-  // Archipelago: skip post-carve blur (it reseals thin sandbar channels)
-  if (params.smoothPasses > 0 && seed.blobs.length < 2) {
-    mask = smoothIslandMask(mask, grid.width, grid.depth, 1);
-    mask = protectSiteFootprints(mask, grid, sites, 0.7, 0.7);
+  // Soften expands land and bridges gaps — only for single landmass
+  if (seed.blobs.length < 2) {
+    mask = smoothIslandMask(mask, grid.width, grid.depth, Math.max(0, params.smoothPasses));
+    mask = distanceTransformSoften(mask, grid.width, grid.depth);
   } else {
-    mask = protectSiteFootprints(mask, grid, sites, 0.5, 0.75);
+    // Light edge soften only (1 pass), then hard-separate
+    if (params.smoothPasses > 0) {
+      mask = smoothIslandMask(mask, grid.width, grid.depth, 1);
+    }
+    mask = enforceIslandSeparation(mask, grid, seed.blobs, sites, 1.05);
+    mask = carveArchipelagoChannels(
+      mask,
+      grid,
+      seed.blobs,
+      sites,
+      Math.max(seed.params.archipelagoSpread, 0.8),
+      1.05,
+    );
+    mask = protectSiteFootprints(mask, grid, sites, 1.0, 0.78);
+    mask = enforceIslandSeparation(mask, grid, seed.blobs, sites, 1.0);
     mask = keepSiteLandComponents(mask, grid, sites, 0.5);
+    mask = protectSiteFootprints(mask, grid, sites, 0.95, 0.8);
   }
 
-  // Organic multi-island coastline — blobs sized to cover gameplay sites.
+  if (seed.blobs.length < 2) {
+    mask = protectSiteFootprints(mask, grid, sites, 0.9, 0.72);
+  }
+
   const sdfField = computeSignedDistanceField(mask, grid);
-  shallowSandbarShelf(sdfField, grid, seed.blobs, -0.38);
+  shallowSandbarShelf(sdfField, grid, seed.blobs, -0.32);
   const sdf = buildGridSdf(sdfField, grid);
 
   const heightParams = { ...params.height, verticalScale: params.verticalScale };
   const heightField = fillHeightField(sdf, grid, heightParams, seed.params.seed);
-  // Flatten underwater to slightly below sea for mesh / water discard
   for (let i = 0; i < heightField.length; i++) {
     if (sdfField[i]! < 0) {
-      // Sandbar shallows sit just under the surface
-      const shelf = sdfField[i]! > -0.5 ? -0.02 : -0.08;
+      const shelf = sdfField[i]! > -0.55 ? -0.015 : -0.07;
       heightField[i] = Math.min(heightField[i]!, shelf);
+    }
+  }
+
+  // Biome micro-relief: ore/brick rise; desert slightly dune-y
+  for (let iz = 0; iz < grid.depth; iz++) {
+    for (let ix = 0; ix < grid.width; ix++) {
+      const i = iz * grid.width + ix;
+      if (sdfField[i]! < params.beach.dryEnd) continue;
+      const { x, z } = {
+        x:
+          grid.bounds.minX +
+          (ix / (grid.width - 1)) * (grid.bounds.maxX - grid.bounds.minX),
+        z:
+          grid.bounds.minZ +
+          (iz / (grid.depth - 1)) * (grid.bounds.maxZ - grid.bounds.minZ),
+      };
+      const biome = dominantBiome(sampleIslandBiome(seed.blobs, x, z));
+      if (biome === 'ore') heightField[i]! += 0.06;
+      else if (biome === 'brick') heightField[i]! += 0.035;
+      else if (biome === 'desert') heightField[i]! += 0.02;
     }
   }
 
   const biomeField = fillIslandBiomeField(seed.blobs, grid, sdfField);
   const coast = extractCoastlineFromField(sdfField, grid);
-  // Drop speckles from noisy channel carving (keep real island outlines)
-  coast.loops = coast.loops.filter((l) => l.points.length >= 24);
+  coast.loops = coast.loops.filter((l) => l.points.length >= 20);
 
-  const partialWorld: Omit<WorldData, 'trees' | 'rocks'> = {
+  const partialWorld: Omit<WorldData, 'trees' | 'rocks' | 'props'> = {
     seed,
     graph: g,
     sites,
@@ -265,7 +472,7 @@ export function generateIsland(
     coastline: coast.loops.map((l) => l.points),
     params: { ...params, height: heightParams },
   };
-  const { trees, rocks } = scatterProps(partialWorld, params);
+  const { trees, rocks, props } = scatterProps(partialWorld, params);
 
-  return { ...partialWorld, trees, rocks };
+  return { ...partialWorld, trees, rocks, props };
 }

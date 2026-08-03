@@ -9,7 +9,7 @@ import { environmentFromAtmosphere, createDefaultEnvironmentState } from './atmo
 import { BoardView } from './render/BoardView';
 import { SkyDome } from './render/sky';
 import { STYLE } from './render/style';
-import type { StyleConfig } from './render/styleConfig';
+import { loadStyleConfig, type StyleConfig } from './render/styleConfig';
 import { StyleConfigurator } from './ui/configurator';
 import { Hud } from './ui/hud';
 
@@ -165,14 +165,15 @@ function queueStyleApply(config: StyleConfig, meta?: { rebuildWorld?: boolean })
 configurator.subscribe(queueStyleApply);
 
 function frameCamera(rings: number): void {
-  const r = boardRadiusWorld(rings);
-  const dist = Math.max(12, r * 2.35);
-  const height = Math.max(10, r * 1.85);
+  const layoutScale = loadStyleConfig().layoutScale ?? 5.2;
+  const r = boardRadiusWorld(rings) * layoutScale;
+  const dist = Math.max(18, r * 2.1);
+  const height = Math.max(14, r * 1.65);
   camera.position.set(0, height, dist);
-  camera.far = Math.max(200, dist * 12);
+  camera.far = Math.max(400, dist * 14);
   camera.updateProjectionMatrix();
-  controls.minDistance = Math.max(6, r * 0.9);
-  controls.maxDistance = Math.max(24, r * 4.2);
+  controls.minDistance = Math.max(8, r * 0.7);
+  controls.maxDistance = Math.max(40, r * 4.5);
   controls.target.set(0, 0, 0);
   controls.update();
 
@@ -181,8 +182,8 @@ function frameCamera(rings: number): void {
   scene.fog = new THREE.Fog(dayCycle.getSnapshot().fogColor, fogNear, fogFar);
   sky.resize(r);
 
-  sunAnchor = Math.max(8, r * 1.1);
-  const shadowSpan = r + 4;
+  sunAnchor = Math.max(10, r * 1.05);
+  const shadowSpan = r + 6;
   sun.shadow.camera.far = shadowSpan * 4;
   sun.shadow.camera.left = -shadowSpan;
   sun.shadow.camera.right = shadowSpan;

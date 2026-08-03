@@ -13,16 +13,17 @@ import { worldXZ } from '../world/types';
 import type { StyleConfig } from '../render/styleConfig';
 
 const BIOME_COLORS: Record<string, THREE.Color> = {
-  forest: new THREE.Color(0x3a9a45),
-  wheat: new THREE.Color(0xd4c04a),
-  ore: new THREE.Color(0x6a7180),
-  brick: new THREE.Color(0xb86a48),
-  pasture: new THREE.Color(0x5cb84a),
-  desert: new THREE.Color(0xe8d9a0),
+  // Reference tropical: saturated grass plateau
+  forest: new THREE.Color(0x2f8a38),
+  wheat: new THREE.Color(0xe0c84a),
+  ore: new THREE.Color(0x6a707c),
+  brick: new THREE.Color(0xc4784e),
+  pasture: new THREE.Color(0x4eb83c),
+  desert: new THREE.Color(0xeddfa8),
 };
 
-const WET_SAND = new THREE.Color(0xe8d9b8);
-const DRY_SAND = new THREE.Color(0xf7f2e4);
+const WET_SAND = new THREE.Color(0xf0e6d0);
+const DRY_SAND = new THREE.Color(0xfff8ec);
 
 export class IslandTerrainView {
   readonly group = new THREE.Group();

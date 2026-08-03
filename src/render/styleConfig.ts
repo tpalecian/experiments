@@ -76,10 +76,12 @@ export interface StyleConfig {
   islandRadiusScale: number;
   islandFalloff: number;
   islandWarp: number;
-  /** 0 = auto from map size (2–4 landmasses). */
+  /** 0 = one island per hex / number. 1 = single landmass. */
   islandCount: number;
   /** Pull nuclei apart for clearer sea channels (0–1). */
   archipelagoSpread: number;
+  /** Spreads hex centers in world space so each island is larger. */
+  layoutScale: number;
   islandSmoothPasses: number;
   islandResolution: number;
   islandVerticalScale: number;
@@ -152,21 +154,22 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   hemiIntensity: 0.95,
 
   islandSeed: 42,
-  islandRadiusScale: 1.28,
-  islandFalloff: 1.12,
-  islandWarp: 0.42,
+  islandRadiusScale: 1.15,
+  islandFalloff: 1.18,
+  islandWarp: 0.16,
   islandCount: 0,
-  archipelagoSpread: 0.68,
-  islandSmoothPasses: 2,
-  islandResolution: 128,
-  islandVerticalScale: 0.048,
-  islandLargeNoise: 0.12,
-  islandSmallNoise: 0.035,
-  beachWetEnd: 0.62,
-  beachDryEnd: 1.55,
+  archipelagoSpread: 0.85,
+  layoutScale: 5.2,
+  islandSmoothPasses: 1,
+  islandResolution: 192,
+  islandVerticalScale: 0.055,
+  islandLargeNoise: 0.08,
+  islandSmallNoise: 0.025,
+  beachWetEnd: 0.55,
+  beachDryEnd: 1.2,
   biomeBlur: 1.4,
-  treeDensity: 0.55,
-  rockDensity: 0.55,
+  treeDensity: 0.95,
+  rockDensity: 0.85,
 
   showHexOverlay: false,
   showSdfOverlay: false,
@@ -180,6 +183,7 @@ export const WORLD_REBUILD_KEYS: (keyof StyleConfig)[] = [
   'islandWarp',
   'islandCount',
   'archipelagoSpread',
+  'layoutScale',
   'islandSmoothPasses',
   'islandResolution',
   'islandVerticalScale',
@@ -196,7 +200,7 @@ export const TERRAIN_LOOK_KEYS: (keyof StyleConfig)[] = [
   'beachDryEnd',
 ];
 
-const STORAGE_KEY = 'catan-style-config-v8';
+const STORAGE_KEY = 'catan-style-config-v9';
 
 export function loadStyleConfig(): StyleConfig {
   try {
@@ -229,6 +233,7 @@ export function styleToWorldPartial(config: StyleConfig): {
   };
   smoothPasses: number;
   resolution: number;
+  layoutScale: number;
   verticalScale: number;
   height: { verticalScale: number; largeNoise: number; smallNoise: number };
   beach: { wetEnd: number; dryEnd: number };
@@ -248,6 +253,7 @@ export function styleToWorldPartial(config: StyleConfig): {
     },
     smoothPasses: config.islandSmoothPasses,
     resolution: config.islandResolution,
+    layoutScale: config.layoutScale,
     verticalScale: config.islandVerticalScale,
     height: {
       verticalScale: config.islandVerticalScale,

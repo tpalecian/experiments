@@ -1,6 +1,7 @@
 /**
  * Island silhouette — land vs water.
- * Supports a single landmass or an archipelago (union of soft blobs).
+ * Default: one soft landmass per gameplay hex (number token), scaled apart
+ * so each island is large with a white beach ring and a sea channel between.
  *
  *   per blob: radialFalloff + lowFreqNoise + domainWarp
  *   mask = max(blobs)
@@ -22,8 +23,10 @@ export interface IslandParams {
   /** Low-frequency domain-warp amplitude. */
   warp: number;
   /**
-   * Number of landmasses. 1 = classic single island.
-   * 0 = auto from site count / map size when generating with a board.
+   * Number of landmasses.
+   * 0 = one island per hex (default).
+   * 1 = single landmass.
+   * N>1 = cluster into N islands.
    */
   islandCount: number;
   /** Pull island nuclei apart (0–1) for clearer sea channels. */
@@ -33,10 +36,10 @@ export interface IslandParams {
 export const DEFAULT_ISLAND: IslandParams = {
   seed: 1,
   radius: 12,
-  falloff: 1.12,
-  warp: 0.42,
+  falloff: 1.18,
+  warp: 0.16,
   islandCount: 0,
-  archipelagoSpread: 0.68,
+  archipelagoSpread: 0.85,
 };
 
 /** One soft landmass nucleus with a dominant biome. */
@@ -64,39 +67,69 @@ export function createIslandSeed(params: Partial<IslandParams> = {}): IslandSeed
   };
 }
 
-/** Pick a sensible archipelago count from board rings / site count. */
-export function autoIslandCount(siteCount: number, rings?: number): number {
-  if (rings !== undefined) {
-    if (rings <= 2) return 2;
-    if (rings === 3) return 3;
-    return 4;
-  }
-  if (siteCount <= 19) return 2;
-  if (siteCount <= 37) return 3;
-  return 4;
+/** Default: one island for every hex / number token. */
+export function autoIslandCount(siteCount: number, _rings?: number): number {
+  return Math.max(1, siteCount);
 }
 
-const BIOME_CYCLE: ResourceKind[] = ['pasture', 'forest', 'wheat', 'brick', 'ore'];
+function minSiteSeparation(sites: GraphPoint[]): number {
+  let best = Infinity;
+  for (let i = 0; i < sites.length; i++) {
+    for (let j = i + 1; j < sites.length; j++) {
+      const d = Math.hypot(sites[i]!.x - sites[j]!.x, sites[i]!.z - sites[j]!.z);
+      if (d > 1e-6 && d < best) best = d;
+    }
+  }
+  return Number.isFinite(best) ? best : 1.732;
+}
 
 /**
- * K-means-ish clustering of gameplay sites → archipelago nuclei.
- * Each blob radius covers its members so hex centers stay inland naturally.
- * Each landmass gets one dominant biome.
+ * One large island per gameplay site, biome = that hex's resource.
+ * Radius fills most of the gap to neighbors so islands feel big like the reference,
+ * leaving a narrow channel the carve can open into a sandbar.
+ */
+export function buildPerSiteIslands(
+  sites: GraphPoint[],
+  params: IslandParams,
+): IslandBlob[] {
+  if (sites.length === 0) {
+    return [{ x: 0, z: 0, radius: params.radius, biome: 'pasture' }];
+  }
+  const sep = minSiteSeparation(sites);
+  // Keep a clear water gap: coast ~0.72*radius, so 2*0.36*sep leaves ~28% channel
+  const radius = Math.max(2.4, sep * 0.36);
+  return sites.map((s) => ({
+    x: s.x,
+    z: s.z,
+    radius,
+    biome: s.resource,
+  }));
+}
+
+/**
+ * Build island blobs from hex site positions.
+ * Default (islandCount 0): one island per hex with that hex's biome.
  */
 export function buildArchipelagoBlobs(
   sites: GraphPoint[],
   params: IslandParams,
   rings?: number,
 ): IslandBlob[] {
+  if (sites.length === 0) {
+    return [{ x: 0, z: 0, radius: params.radius, biome: 'pasture' }];
+  }
+
   const countWanted =
     params.islandCount > 0
       ? Math.max(1, Math.round(params.islandCount))
       : autoIslandCount(sites.length, rings);
-  const k = Math.max(1, Math.min(countWanted, Math.max(1, sites.length)));
+  const k = Math.max(1, Math.min(countWanted, sites.length));
 
-  if (sites.length === 0) {
-    return [{ x: 0, z: 0, radius: params.radius, biome: 'pasture' }];
+  // One island per number / hex
+  if (k >= sites.length) {
+    return buildPerSiteIslands(sites, params);
   }
+
   if (k === 1) {
     let cx = 0;
     let cz = 0;
@@ -150,7 +183,6 @@ export function buildArchipelagoBlobs(
     centroids.push({ x: best.x, z: best.z });
   }
 
-  // Lloyd-ish iterations
   for (let iter = 0; iter < 8; iter++) {
     const sums = centroids.map(() => ({ x: 0, z: 0, n: 0 }));
     for (const s of sites) {
@@ -174,15 +206,14 @@ export function buildArchipelagoBlobs(
     }
   }
 
-  // Mild radial spread from cloud mean (carve does the hard separation)
   const spread = Math.max(0, Math.min(1, params.archipelagoSpread));
   if (spread > 0.05) {
     for (const c of centroids) {
       const dx = c.x - meanX;
       const dz = c.z - meanZ;
       const len = Math.hypot(dx, dz) || 1;
-      c.x += (dx / len) * spread * 0.85;
-      c.z += (dz / len) * spread * 0.85;
+      c.x += (dx / len) * spread * 1.2;
+      c.z += (dz / len) * spread * 1.2;
     }
   }
 
@@ -200,34 +231,29 @@ export function buildArchipelagoBlobs(
     members[bi]!.push(s);
   }
 
-  const used = new Set<ResourceKind>();
   const blobs: IslandBlob[] = [];
   for (let i = 0; i < centroids.length; i++) {
     const c = centroids[i]!;
     const group = members[i]!;
-    let maxR = params.radius * 0.28;
+    let maxR = params.radius * 0.2;
     if (group.length === 0) {
-      const biome = BIOME_CYCLE[i % BIOME_CYCLE.length]!;
       blobs.push({
         x: c.x,
         z: c.z,
-        radius: Math.max(1.6, params.radius * 0.22),
-        biome,
+        radius: Math.max(1.8, params.radius * 0.2),
+        biome: 'pasture',
       });
-      used.add(biome);
       continue;
     }
     for (const s of group) {
       maxR = Math.max(maxR, Math.hypot(s.x - c.x, s.z - c.z));
     }
-    let biome = majorityBiomeForSites(group);
-    if (used.has(biome) && biome !== 'desert') {
-      const alt = BIOME_CYCLE.find((b) => !used.has(b));
-      if (alt) biome = alt;
-    }
-    used.add(biome);
-    const margin = 0.9;
-    blobs.push({ x: c.x, z: c.z, radius: maxR + margin, biome });
+    blobs.push({
+      x: c.x,
+      z: c.z,
+      radius: maxR + 1.15,
+      biome: majorityBiomeForSites(group),
+    });
   }
   return blobs;
 }
@@ -261,7 +287,7 @@ function blobMask(
 
   const radial = Math.hypot(px, pz);
   const soft = 1 - radial * falloff;
-  const detail = fbm2(perm, px * 0.9 + blob.x, pz * 0.9 - blob.z, 2) * 0.18;
+  const detail = fbm2(perm, px * 0.9 + blob.x, pz * 0.9 - blob.z, 2) * 0.14;
   const t = soft + detail;
   return Math.max(0, Math.min(1, t * 0.5 + 0.5));
 }

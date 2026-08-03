@@ -33,6 +33,11 @@ export interface WorldGenerationParams {
   resolution: number;
   /** World half-extent multiplier over island radius. */
   extentScale: number;
+  /**
+   * Scales hex board → world so each hex-island is larger with sea between.
+   * Placement and tokens use the same scale.
+   */
+  layoutScale: number;
   height: HeightParams;
   beach: BeachParams;
   /** Biome soft-blur radius. */
@@ -49,27 +54,29 @@ export const DEFAULT_WORLD_GENERATION: WorldGenerationParams = {
   island: {
     seed: 1,
     radius: 12,
-    falloff: 1.12,
-    warp: 0.42,
+    falloff: 1.18,
+    warp: 0.16,
     islandCount: 0,
-    archipelagoSpread: 0.68,
+    archipelagoSpread: 0.85,
   },
-  smoothPasses: 2,
-  resolution: 128,
-  extentScale: 1.85,
+  smoothPasses: 1,
+  resolution: 192,
+  extentScale: 1.35,
+  /** Hex spacing multiplier — larger = bigger islands with wider sea gaps. */
+  layoutScale: 5.2,
   height: {
-    verticalScale: 0.048,
-    largeNoise: 0.12,
-    smallNoise: 0.035,
+    verticalScale: 0.055,
+    largeNoise: 0.08,
+    smallNoise: 0.025,
   },
   beach: {
-    wetEnd: 0.62,
-    dryEnd: 1.55,
+    wetEnd: 0.55,
+    dryEnd: 1.2,
   },
   biomeBlur: 1.4,
-  verticalScale: 0.048,
-  treeDensity: 0.55,
-  rockDensity: 0.55,
+  verticalScale: 0.055,
+  treeDensity: 0.95,
+  rockDensity: 0.85,
   showHexOverlay: false,
   showSdfOverlay: false,
 };
@@ -82,6 +89,8 @@ export interface ScatterInstance {
   yaw: number;
   /** Optional non-uniform height for rock pillars. */
   scaleY?: number;
+  /** Decorative prop kind for biome detail. */
+  kind?: 'rock' | 'pillar' | 'wheat' | 'bush';
 }
 
 export interface WorldData {
@@ -102,6 +111,8 @@ export interface WorldData {
   coastline: { x: number; z: number }[][];
   trees: ScatterInstance[];
   rocks: ScatterInstance[];
+  /** Wheat stalks / pasture bushes — biome props. */
+  props: ScatterInstance[];
   params: WorldGenerationParams;
 }
 
