@@ -5,15 +5,17 @@
 > If a renderer reads a number, colour, or toggle, the configurator must be able to edit it.
 >
 > The panel is a **craft tool**, not a settings dump — deeply complete, tightly categorised, and easy to use.
+>
+> The board stays **hex tiles**. Craft look and motion feel — do not expose organic-island generation as the product path.
 
 ---
 
 ## Goals
 
-1. **Edit everything** — island generation, SDF bands, water, atmosphere, sky, fog, lighting, vegetation, rocks, roads, buildings, camera, post.
+1. **Edit everything that is live** — water, atmosphere, sky, fog, lighting, hex/prop look, piece motion feel, camera, post.
 2. **Really well categorised** — hierarchical groups with clear names; no flat wall of sliders.
 3. **Really easy to use** — searchable, collapsible, presets, live preview, reset-per-section, sensible defaults and ranges.
-4. **Never rebuild the world for look tweaks** — day-night / palette / light changes update Environment State only ([DAY_NIGHT.md](DAY_NIGHT.md)). Generation knobs that *do* rebuild (seed, mask, mesh res) are clearly labelled and gated.
+4. **Never rebuild the board for look tweaks** — day-night / palette / light changes update Environment State only ([DAY_NIGHT.md](DAY_NIGHT.md)). Map rebuilds (new game / map size) stay outside this panel.
 
 ---
 
@@ -23,49 +25,33 @@
 | --- | --- |
 | Progressive disclosure | Top-level categories → subsections → fields. Collapse what you are not editing. |
 | Findability | Fuzzy search / filter across labels and keys. Jump-to-category. |
-| Live craft | Most fields apply on `input` with light debounce. Heavy rebuilds (mesh) confirm or use Apply. |
+| Live craft | Most fields apply on `input` with light debounce. Heavy changes confirm or use Apply. |
 | Readable controls | Human labels, units in the value readout, tooltips for “why this exists”. |
 | Safe defaults | Global Reset + **Reset section** + optional preset packs (Day / Sunset / Night / Cinematic). |
 | Persistence | Autosave to localStorage; Import / Export JSON for sharing looks. |
-| Separation | **Look** (Environment / materials) vs **Generate** (seed, SDF, mesh) — visually distinct. |
+| Separation | **Look** (Environment / materials) vs **Motion** (tween timings) — visually distinct from game setup. |
 | No clutter | Prefer one purpose per subsection. Hide advanced fields behind “Advanced”. |
 
 ---
 
 ## Category Taxonomy
 
-Mirror the rendering architecture so authors always know where a knob lives.
+Mirror the **live hex rendering** architecture so authors always know where a knob lives.
 
 ```text
 Configurator
- ├── World / Generation     ← rebuilds world data (gated)
  ├── Atmosphere             ← Environment State only
  ├── Sky & Clouds
  ├── Lighting & Shadows
  ├── Fog & Post
  ├── Water
- ├── Coast & Beaches
- ├── Terrain & Biomes
- ├── Vegetation
- ├── Rocks & Cliffs
- ├── Roads & Settlements
+ ├── Hex Board & Props
+ ├── Motion & Feedback
  ├── Camera
  └── Debug
 ```
 
-### 1. World / Generation
-
-| Subsection | Examples |
-| --- | --- |
-| Seed | Island seed, RNG lock |
-| Mask | Radius, falloff, warp, simplex amplitude |
-| Smooth | Blur passes, distance-transform soften |
-| SDF / mesh | Grid resolution, bounds, height curve scales |
-| Chunks | Chunk size, load radius |
-
-**Label clearly:** “Regenerates terrain”. Prefer an **Apply** button for this category.
-
-### 2. Atmosphere (Environment State)
+### 1. Atmosphere (Environment State)
 
 | Subsection | Examples |
 | --- | --- |
@@ -75,53 +61,55 @@ Configurator
 | Water response | Tint, brightness, Fresnel, specular, caustic multipliers |
 | Bands / foam response | Wave-band opacity, foam brightness |
 
-See [DAY_NIGHT.md](DAY_NIGHT.md). Editing here must **not** regenerate SDF or meshes.
+See [DAY_NIGHT.md](DAY_NIGHT.md). Editing here must **not** regenerate hex meshes.
 
-### 3. Sky & Clouds
+### 2. Sky & Clouds
 
 Zenith / mid / horizon colours, haze, stars, sun disc, cloud count / scale / orbit / height / drift / puff shape & colours.
 
-### 4. Lighting & Shadows
+### 3. Lighting & Shadows
 
 Exposure, sun intensity, shadow softness / opacity / bias, fill strength. Stylized readability over physical accuracy.
 
-### 5. Fog & Post
+### 4. Fog & Post
 
 Fog colour / near / far, tone mapping exposure, optional vignette / colour grade later.
 
-### 6. Water
+### 5. Water
 
 Depth palette (deep → ocean → lagoon → shallow → shelf), shore width, deep fade, horizon dissolve, swell, contour bands, foam, caustics, Fresnel, specular, mesh segments.
 
-Colours here are **craft bases**; atmosphere may multiply / tint them by scheme.
+Colours here are **craft bases**; atmosphere may multiply / tint them by scheme. Water hugs **hex land masks** ([TERRAIN.md](TERRAIN.md)).
 
-### 7. Coast & Beaches
+### 6. Hex Board & Props
 
-Wet / dry sand ranges on `distanceToCoast`, sand colours (day ivory / sunset gold / night grey as scheme overrides), beach blend softness.
+| Subsection | Examples |
+| --- | --- |
+| Tiles | Terrain colours, rim / skirt tint, hover lift amount |
+| Tokens | Number-token scale, production-pulse strength / duration |
+| Props | Tree / wheat / rock density scales, tint under atmosphere |
+| Harbors | Label bob amplitude, pier colour |
 
-### 8. Terrain & Biomes
+No organic mask / SDF island generators here.
 
-Height curve anchors, vertical scale, large/small noise, biome blur, resource colours (forest / wheat / ore / brick / pasture / desert).
+### 7. Motion & Feedback
 
-### 9. Vegetation
+| Subsection | Examples |
+| --- | --- |
+| Pieces | Spawn duration, ease, drop height |
+| Robber | Hop duration, arc height, land squash |
+| Highlights | Fade speed, pulse amount |
+| Camera | Robber nudge blend, damping |
 
-Density, max slope, min height, scale range, biome weight gates, tint / saturation under atmosphere.
+Backed by `TweenPlayer` (`src/render/tween.ts`).
 
-### 10. Rocks & Cliffs
-
-Min height, min slope, density, scale, material colours.
-
-### 11. Roads & Settlements
-
-Path width, spline samples, dirt colour; building scale / offset; visibility toggles.
-
-### 12. Camera
+### 8. Camera
 
 FOV, clip, orbit limits, framing multipliers for map size.
 
-### 13. Debug
+### 9. Debug
 
-Show SDF overlay, coastline, chunk bounds, region graph (dev only), wireframe, normals.
+Show pickables, legal markers always-on, wireframe, normals, frame timing (dev only).
 
 ---
 
@@ -134,10 +122,10 @@ Show SDF overlay, coastline, chunk bounds, region graph (dev only), wireframe, n
 | `select` | Enums (scheme, puff shape, tone map) |
 | `toggle` | Booleans (show foam, lock seed) |
 | `vector` | Compact XYZ where needed (sun direction override) |
-| `button` | Apply regenerate, reset section, export |
+| `button` | Reset section, export |
 | `preset` | Named looks that fill many fields at once |
 
-Every field needs: **key**, **label**, **category**, **subsection**, **kind**, **default**, **range or options**, optional **tooltip**, optional **`rebuildsWorld: true`**.
+Every field needs: **key**, **label**, **category**, **subsection**, **kind**, **default**, **range or options**, optional **tooltip**, optional **`rebuildsWorld: true`** (rare on the hex path).
 
 ---
 
@@ -164,7 +152,7 @@ CraftConfig  (persisted JSON)
       │
       ├── look fields ──► Environment State / materials (live)
       │
-      └── generate fields ──► Island pipeline (explicit Apply)
+      └── motion fields ──► TweenPlayer timings / BoardView feel
 ```
 
 Live MVP today: `StyleConfig` + `StyleConfigurator` (`src/render/styleConfig.ts`, `src/ui/configurator.ts`) cover time-of-day, clouds, sky refs, water, and lighting craft.
@@ -177,18 +165,18 @@ Target: grow that into **`CraftConfig`** driven by the category schema in `src/u
 
 | Doc | Configurator owns |
 | --- | --- |
-| [TERRAIN.md](TERRAIN.md) | Generation + beach/height/biome ranges |
+| [TERRAIN.md](TERRAIN.md) | Hex board / water / prop look knobs |
 | [DAY_NIGHT.md](DAY_NIGHT.md) | Atmosphere / palette / Fresnel / band opacity |
-| [VISION.md](VISION.md) | Module map + milestone that ships the deep panel |
+| [VISION.md](VISION.md) | Module map + motion milestones + deep panel |
 
 ---
 
 ## Milestone Guidance
 
 1. Keep the current Style panel working.  
-2. Introduce schema-driven sections (this doc’s taxonomy).  
+2. Retarget schema categories to the hex taxonomy above (`craftSchema.ts`).  
 3. Add search, collapse, reset-section, export/import.  
-4. Expand fields as island systems land — **every new shader uniform gets a field in the same PR**.  
-5. Split Generate vs Look visually when SDF mesh regeneration exists.
+4. Expand fields as hex systems need knobs — **every new shader uniform gets a field in the same PR**.  
+5. Add **Motion & Feedback** section for tween timings once the baseline animations ship.
 
 **Rule of thumb:** a feature is not done until it is configurable from the panel, under the right category, with a clear label and safe default.

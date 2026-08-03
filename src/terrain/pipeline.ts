@@ -1,9 +1,8 @@
 /**
- * Coastline-first island pipeline.
+ * DEPRECATED / unused — organic coastline-first island pipeline.
  *
- *   mask → smooth → SDF (distanceToCoast) → height → mesh / water / props
- *
- * Not hooked into the live hex BoardView yet; see docs/TERRAIN.md.
+ * The product path keeps readable hex tiles (`src/render/BoardView.ts`).
+ * Do not wire this into the live game. See docs/TERRAIN.md and docs/VISION.md.
  */
 
 import { createEmptyGraph, type RegionGraph } from '../gameplay/regions';

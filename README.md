@@ -12,6 +12,7 @@ A **stylized hex-board island** — classic Catan tiles, polished motion, tropic
 - **Day-night is render-only:** world data stays static; an Environment State retints lighting, water, sky, and fog.
 - **Style configurator:** craft water, atmosphere, and lighting (searchable panel over time).
 - Architecture & notes: **[docs/VISION.md](docs/VISION.md)**  
+- Hex board presentation: **[docs/TERRAIN.md](docs/TERRAIN.md)**  
 - Day-night cycle: **[docs/DAY_NIGHT.md](docs/DAY_NIGHT.md)**  
 - Configurator: **[docs/CONFIGURATOR.md](docs/CONFIGURATOR.md)**
 
