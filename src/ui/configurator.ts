@@ -54,8 +54,8 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
   {
     title: 'Clouds',
     fields: [
-      { key: 'cloudCount', label: 'Count', kind: 'range', min: 2, max: 16, step: 1 },
-      { key: 'cloudScale', label: 'Scale', kind: 'range', min: 2, max: 14, step: 0.5 },
+      { key: 'cloudCount', label: 'Count', kind: 'range', min: 2, max: 20, step: 1 },
+      { key: 'cloudScale', label: 'Scale', kind: 'range', min: 0.4, max: 6, step: 0.1 },
       { key: 'cloudOrbitMin', label: 'Orbit min', kind: 'range', min: 8, max: 30, step: 1 },
       { key: 'cloudOrbitMax', label: 'Orbit max', kind: 'range', min: 12, max: 40, step: 1 },
       { key: 'cloudHeightMin', label: 'Height min', kind: 'range', min: 2, max: 20, step: 0.5 },
@@ -67,8 +67,8 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
         label: 'Puff shape',
         kind: 'select',
         options: [
-          { value: 'sphere', label: 'Foam sphere' },
-          { value: 'icosahedron', label: 'Facet icosa' },
+          { value: 'icosahedron', label: 'Low-poly facet' },
+          { value: 'sphere', label: 'Soft sphere' },
         ],
       },
       { key: 'cloudLit', label: 'Lit color', kind: 'color' },
