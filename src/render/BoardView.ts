@@ -12,9 +12,16 @@ import {
 } from './style';
 import type { AtmosphereSnapshot } from './atmosphere';
 import type { StyleConfig } from './styleConfig';
+import { TweenPlayer, ease } from './tween';
 import { WaterSurface } from './water';
 
 const TILE_HEIGHT = 0.28;
+const HOVER_LIFT = 0.045;
+const HIGHLIGHT_FADE = 8;
+const ROBBER_HOP_SEC = 0.48;
+const SPAWN_SEC = 0.32;
+const ROAD_SPAWN_SEC = 0.26;
+const UPGRADE_SEC = 0.38;
 
 /** Pointy-top hex in the XY plane (matches board hexCorner angles). */
 function hexShape(size: number): THREE.Shape {
@@ -87,19 +94,55 @@ function seeded(n: number): () => number {
   };
 }
 
+type BuildingKind = 'settlement' | 'city';
+
+interface BuildingEntry {
+  mesh: THREE.Object3D;
+  kind: BuildingKind;
+  owner: PlayerId;
+  restingY: number;
+  restingScale: number;
+}
+
+interface RoadEntry {
+  mesh: THREE.Mesh;
+  owner: PlayerId;
+  restingScale: number;
+}
+
+interface HexVisual {
+  mesh: THREE.Mesh;
+  restingY: number;
+  baseEmissive: number;
+  numberToken: THREE.Mesh | null;
+  numberRestY: number;
+}
+
 export class BoardView {
   readonly root = new THREE.Group();
   private hexMeshes = new Map<string, THREE.Mesh>();
+  private hexVisuals = new Map<string, HexVisual>();
   private vertexMarkers = new Map<string, THREE.Mesh>();
   private edgeMarkers = new Map<string, THREE.Mesh>();
-  private buildingMeshes = new Map<string, THREE.Object3D>();
-  private roadMeshes = new Map<string, THREE.Mesh>();
+  private buildings = new Map<string, BuildingEntry>();
+  private roads = new Map<string, RoadEntry>();
   private robber: THREE.Object3D;
   private harborGroup = new THREE.Group();
+  private harborSprites: THREE.Sprite[] = [];
   private propsGroup = new THREE.Group();
   private pickables: THREE.Object3D[] = [];
   private grass = new GrassField();
   private water = new WaterSurface();
+  private tweens = new TweenPlayer();
+
+  private legalVertices = new Set<string>();
+  private legalEdges = new Set<string>();
+  private legalHexes = new Set<string>();
+  private hoverHexId: string | null = null;
+  private productionPulse = new Map<string, number>();
+  private robberHopping = false;
+  private robberTargetHex: string | null = null;
+  private elapsed = 0;
 
   constructor() {
     this.robber = this.makeRobber();
@@ -114,9 +157,34 @@ export class BoardView {
     return this.pickables;
   }
 
-  update(time: number): void {
+  getRobberPosition(out = new THREE.Vector3()): THREE.Vector3 {
+    return out.copy(this.robber.position);
+  }
+
+  setHoverHex(id: string | null): void {
+    if (this.hoverHexId === id) return;
+    this.hoverHexId = id;
+  }
+
+  /** Soft pulse on number tokens / hexes that match the dice total. */
+  pulseProduction(total: number): void {
+    if (total < 2 || total === 7) return;
+    for (const [id, vis] of this.hexVisuals) {
+      const hexNum = vis.mesh.userData.number as number | null | undefined;
+      if (hexNum === total) {
+        this.productionPulse.set(id, 1.15);
+      }
+    }
+  }
+
+  update(time: number, dt = 1 / 60): void {
+    this.elapsed = time;
+    this.tweens.update(dt);
     this.grass.update(time);
     this.water.update(time);
+    this.updateHighlightFade(dt);
+    this.updateHoverAndPulse(dt);
+    this.updateHarborBob(time);
   }
 
   setSunDirection(dir: THREE.Vector3): void {
@@ -134,6 +202,7 @@ export class BoardView {
   build(board: BoardState): void {
     this.clearDynamic();
     this.pickables = [];
+    this.tweens.clear();
 
     this.water.resize(board.rings);
     const landCenters: { x: number; z: number }[] = [];
@@ -166,10 +235,13 @@ export class BoardView {
       mesh.position.set(x, 0, z);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.userData = { kind: 'hex', id: hex.id, terrain };
+      mesh.userData = { kind: 'hex', id: hex.id, terrain, number: hex.number };
       this.hexMeshes.set(hex.id, mesh);
       this.root.add(mesh);
       this.pickables.push(mesh);
+
+      let numberToken: THREE.Mesh | null = null;
+      let numberRestY = TILE_HEIGHT + 0.04;
 
       // Dirt skirt under the tile only (top ≤ tile radius) so it doesn't show as gaps between hexes.
       // Slightly wider bottom peeks at the coastline for a tabletop edge.
@@ -199,16 +271,25 @@ export class BoardView {
       }
 
       if (hex.number !== null) {
-        const disc = new THREE.Mesh(
+        numberRestY = TILE_HEIGHT + (isPasture ? 0.14 : 0.04);
+        numberToken = new THREE.Mesh(
           new THREE.CircleGeometry(0.3, 6),
           new THREE.MeshBasicMaterial({ map: numberTexture(hex.number), transparent: true }),
         );
-        disc.rotation.x = -Math.PI / 2;
-        disc.position.set(x, TILE_HEIGHT + (isPasture ? 0.14 : 0.04), z);
-        disc.userData = { kind: 'hex', id: hex.id };
-        this.root.add(disc);
-        this.pickables.push(disc);
+        numberToken.rotation.x = -Math.PI / 2;
+        numberToken.position.set(x, numberRestY, z);
+        numberToken.userData = { kind: 'hex', id: hex.id };
+        this.root.add(numberToken);
+        this.pickables.push(numberToken);
       }
+
+      this.hexVisuals.set(hex.id, {
+        mesh,
+        restingY: 0,
+        baseEmissive: 0,
+        numberToken,
+        numberRestY,
+      });
     }
 
     const bladesPerHex = board.rings <= 2 ? 420 : board.rings === 3 ? 300 : 200;
@@ -250,7 +331,7 @@ export class BoardView {
     }
 
     this.drawHarbors(board);
-    this.syncPieces(board);
+    this.syncPieces(board, false);
     this.syncHighlights([], [], []);
   }
 
@@ -332,6 +413,7 @@ export class BoardView {
 
   private drawHarbors(board: BoardState): void {
     this.harborGroup.clear();
+    this.harborSprites = [];
     for (const h of board.harbors) {
       const edge = board.edges.get(h.edgeId);
       if (!edge) continue;
@@ -351,7 +433,11 @@ export class BoardView {
 
       const label = h.type === 'generic' ? '3:1' : `2:1 ${h.type[0].toUpperCase()}`;
       const sprite = this.makeLabelSprite(label, h.type === 'generic' ? '#ffe8c0' : '#fff0a8');
-      sprite.position.set(px, TILE_HEIGHT + 0.4, pz);
+      const bobBaseY = TILE_HEIGHT + 0.4;
+      sprite.position.set(px, bobBaseY, pz);
+      sprite.userData.bobPhase = Math.atan2(pz, px);
+      sprite.userData.bobBaseY = bobBaseY;
+      this.harborSprites.push(sprite);
       this.harborGroup.add(sprite);
     }
   }
@@ -396,13 +482,24 @@ export class BoardView {
     return g;
   }
 
-  syncPieces(board: BoardState): void {
-    for (const mesh of this.buildingMeshes.values()) this.root.remove(mesh);
-    this.buildingMeshes.clear();
-    for (const mesh of this.roadMeshes.values()) this.root.remove(mesh);
-    this.roadMeshes.clear();
+  syncPieces(board: BoardState, animate = true): void {
+    this.syncRoads(board, animate);
+    this.syncBuildings(board, animate);
+    this.syncRobber(board, animate);
+  }
 
+  private syncRoads(board: BoardState, animate: boolean): void {
+    const keep = new Set<string>();
     for (const road of board.roads.values()) {
+      keep.add(road.edgeId);
+      const existing = this.roads.get(road.edgeId);
+      if (existing && existing.owner === road.owner) continue;
+
+      if (existing) {
+        this.root.remove(existing.mesh);
+        this.roads.delete(road.edgeId);
+      }
+
       const e = board.edges.get(road.edgeId)!;
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(0.92, 0.12, 0.2),
@@ -411,24 +508,196 @@ export class BoardView {
       mesh.position.set(e.midX, TILE_HEIGHT + 0.09, e.midZ);
       mesh.rotation.y = -e.angle;
       mesh.castShadow = true;
-      this.roadMeshes.set(road.edgeId, mesh);
+      const restingScale = 1;
+      mesh.scale.set(0.15, 0.15, 0.15);
+      this.roads.set(road.edgeId, { mesh, owner: road.owner, restingScale });
       this.root.add(mesh);
+
+      if (animate) {
+        this.tweens.play(
+          ROAD_SPAWN_SEC,
+          (u) => {
+            const s = 0.15 + (restingScale - 0.15) * u;
+            mesh.scale.set(s, s * (0.6 + 0.4 * u), s);
+            mesh.position.y = TILE_HEIGHT + 0.09 + (1 - u) * 0.18;
+          },
+          {
+            ease: ease.easeOutBack,
+            onComplete: () => {
+              mesh.scale.setScalar(restingScale);
+              mesh.position.y = TILE_HEIGHT + 0.09;
+            },
+          },
+        );
+      } else {
+        mesh.scale.setScalar(restingScale);
+      }
     }
 
+    for (const [id, entry] of this.roads) {
+      if (keep.has(id)) continue;
+      this.root.remove(entry.mesh);
+      this.roads.delete(id);
+    }
+  }
+
+  private syncBuildings(board: BoardState, animate: boolean): void {
+    const keep = new Set<string>();
     for (const b of board.buildings.values()) {
+      keep.add(b.vertexId);
       const v = board.vertices.get(b.vertexId)!;
       const color = STYLIZED_PLAYER[b.owner as PlayerId];
+      const existing = this.buildings.get(b.vertexId);
+
+      if (existing && existing.kind === b.kind && existing.owner === b.owner) continue;
+
+      // Upgrade settlement → city with a short morph.
+      if (existing && existing.kind === 'settlement' && b.kind === 'city' && existing.owner === b.owner) {
+        const old = existing.mesh;
+        const city = this.makeCity(color);
+        const restingScale = 1.1;
+        city.position.set(v.x, TILE_HEIGHT, v.z);
+        city.scale.setScalar(0.01);
+        this.root.add(city);
+        this.buildings.set(b.vertexId, {
+          mesh: city,
+          kind: 'city',
+          owner: b.owner,
+          restingY: TILE_HEIGHT,
+          restingScale,
+        });
+
+        if (animate) {
+          this.tweens.play(
+            UPGRADE_SEC,
+            (u) => {
+              old.scale.setScalar(existing.restingScale * (1 - u * 0.85));
+              old.position.y = TILE_HEIGHT + u * 0.35;
+              city.scale.setScalar(restingScale * ease.easeOutBack(u));
+              city.position.y = TILE_HEIGHT + (1 - u) * 0.45;
+            },
+            {
+              ease: ease.linear,
+              onComplete: () => {
+                this.root.remove(old);
+                city.scale.setScalar(restingScale);
+                city.position.y = TILE_HEIGHT;
+              },
+            },
+          );
+        } else {
+          this.root.remove(old);
+          city.scale.setScalar(restingScale);
+        }
+        continue;
+      }
+
+      if (existing) {
+        this.root.remove(existing.mesh);
+        this.buildings.delete(b.vertexId);
+      }
+
       const piece = b.kind === 'city' ? this.makeCity(color) : this.makeSettlement(color);
-      piece.position.set(v.x, TILE_HEIGHT, v.z);
-      this.buildingMeshes.set(b.vertexId, piece);
+      // makeSettlement/City already bake scale — animate from near-zero up to that.
+      const baked = piece.scale.x;
+      piece.scale.setScalar(0.01);
+      piece.position.set(v.x, TILE_HEIGHT + (animate ? 0.55 : 0), v.z);
+      this.buildings.set(b.vertexId, {
+        mesh: piece,
+        kind: b.kind,
+        owner: b.owner,
+        restingY: TILE_HEIGHT,
+        restingScale: baked,
+      });
       this.root.add(piece);
+
+      if (animate) {
+        this.tweens.play(
+          SPAWN_SEC,
+          (u) => {
+            piece.scale.setScalar(baked * u);
+            piece.position.y = TILE_HEIGHT + (1 - u) * 0.55 - Math.sin(u * Math.PI) * 0.08 * (1 - u);
+          },
+          {
+            ease: ease.easeOutBack,
+            onComplete: () => {
+              piece.scale.setScalar(baked);
+              piece.position.y = TILE_HEIGHT;
+            },
+          },
+        );
+      } else {
+        piece.scale.setScalar(baked);
+        piece.position.y = TILE_HEIGHT;
+      }
     }
 
-    const robberHex = board.hexes.get(board.robberHexId);
-    if (robberHex) {
-      const { x, z } = axialToWorld(robberHex.q, robberHex.r);
-      this.robber.position.set(x + 0.35, TILE_HEIGHT, z + 0.2);
+    for (const [id, entry] of this.buildings) {
+      if (keep.has(id)) continue;
+      this.root.remove(entry.mesh);
+      this.buildings.delete(id);
     }
+  }
+
+  private syncRobber(board: BoardState, animate: boolean): void {
+    const robberHex = board.hexes.get(board.robberHexId);
+    if (!robberHex) return;
+    const { x, z } = axialToWorld(robberHex.q, robberHex.r);
+    const tx = x + 0.35;
+    const tz = z + 0.2;
+    const ty = TILE_HEIGHT;
+
+    if (this.robberTargetHex === board.robberHexId && (this.robberHopping || !animate)) {
+      if (!animate && !this.robberHopping) {
+        this.robber.position.set(tx, ty, tz);
+      }
+      return;
+    }
+
+    const dx = tx - this.robber.position.x;
+    const dz = tz - this.robber.position.z;
+    const dist = Math.hypot(dx, dz);
+    this.robberTargetHex = board.robberHexId;
+
+    if (!animate || dist < 0.05) {
+      this.robber.position.set(tx, ty, tz);
+      this.robber.scale.set(1, 1, 1);
+      this.robberHopping = false;
+      return;
+    }
+
+    const from = this.robber.position.clone();
+    this.robberHopping = true;
+    this.tweens.play(
+      ROBBER_HOP_SEC,
+      (u) => {
+        const s = ease.easeInOutCubic(u);
+        this.robber.position.x = from.x + (tx - from.x) * s;
+        this.robber.position.z = from.z + (tz - from.z) * s;
+        const arc = Math.sin(u * Math.PI) * Math.min(0.85, 0.35 + dist * 0.12);
+        this.robber.position.y = ty + arc;
+        this.robber.rotation.y = Math.atan2(tx - from.x, tz - from.z) * 0.15 * Math.sin(u * Math.PI);
+      },
+      {
+        ease: ease.linear,
+        onComplete: () => {
+          this.robber.position.set(tx, ty, tz);
+          this.robber.rotation.y = 0;
+          this.robberHopping = false;
+          this.tweens.play(
+            0.14,
+            (u) => {
+              const squash = 1 - Math.sin(u * Math.PI) * 0.12;
+              this.robber.scale.set(1 / squash, squash, 1 / squash);
+            },
+            {
+              ease: ease.easeOutQuad,
+              onComplete: () => this.robber.scale.set(1, 1, 1),
+            },
+          );
+        },
+      },
+    );
   }
 
   private makeSettlement(color: number): THREE.Object3D {
@@ -466,36 +735,119 @@ export class BoardView {
   }
 
   syncHighlights(vertices: string[], edges: string[], hexes: string[]): void {
+    this.legalVertices = new Set(vertices);
+    this.legalEdges = new Set(edges);
+    this.legalHexes = new Set(hexes);
+
     for (const [id, m] of this.vertexMarkers) {
+      const on = this.legalVertices.has(id);
       const mat = m.material as THREE.MeshToonMaterial;
-      const on = vertices.includes(id);
-      mat.opacity = on ? 0.9 : 0;
       mat.color.set(on ? STYLE.highlight : 0xffffff);
-      m.visible = on;
+      if (on) m.visible = true;
     }
     for (const [id, m] of this.edgeMarkers) {
+      const on = this.legalEdges.has(id);
       const mat = m.material as THREE.MeshToonMaterial;
-      const on = edges.includes(id);
-      mat.opacity = on ? 0.9 : 0;
       mat.color.set(on ? STYLE.highlight : 0xffffff);
-      m.visible = on;
+      if (on) m.visible = true;
     }
-    for (const [id, m] of this.hexMeshes) {
-      const mat = m.material as THREE.MeshToonMaterial;
-      const on = hexes.includes(id);
+    for (const [id, vis] of this.hexVisuals) {
+      const on = this.legalHexes.has(id);
+      const mat = vis.mesh.material as THREE.MeshToonMaterial;
       mat.emissive.set(on ? 0x665522 : 0x000000);
-      mat.emissiveIntensity = on ? 0.45 : 0;
+    }
+  }
+
+  private updateHighlightFade(dt: number): void {
+    const pulse = 0.82 + Math.sin(this.elapsed * 3.2) * 0.1;
+    const step = 1 - Math.exp(-HIGHLIGHT_FADE * dt);
+
+    for (const [id, m] of this.vertexMarkers) {
+      const mat = m.material as THREE.MeshToonMaterial;
+      const target = this.legalVertices.has(id) ? 0.88 * pulse : 0;
+      mat.opacity += (target - mat.opacity) * step;
+      m.visible = mat.opacity > 0.02;
+      if (this.legalVertices.has(id)) {
+        m.position.y = TILE_HEIGHT + 0.1 + Math.sin(this.elapsed * 4 + id.length) * 0.02;
+      } else {
+        m.position.y = TILE_HEIGHT + 0.1;
+      }
+    }
+
+    for (const [id, m] of this.edgeMarkers) {
+      const mat = m.material as THREE.MeshToonMaterial;
+      const target = this.legalEdges.has(id) ? 0.88 * pulse : 0;
+      mat.opacity += (target - mat.opacity) * step;
+      m.visible = mat.opacity > 0.02;
+    }
+
+    for (const [id, vis] of this.hexVisuals) {
+      const mat = vis.mesh.material as THREE.MeshToonMaterial;
+      const target = this.legalHexes.has(id) ? 0.42 * pulse : 0;
+      mat.emissiveIntensity += (target - mat.emissiveIntensity) * step;
+    }
+  }
+
+  private updateHoverAndPulse(dt: number): void {
+    const step = 1 - Math.exp(-10 * dt);
+
+    for (const [id, vis] of this.hexVisuals) {
+      const hovered = this.hoverHexId === id;
+      const targetY = vis.restingY + (hovered ? HOVER_LIFT : 0);
+      vis.mesh.position.y += (targetY - vis.mesh.position.y) * step;
+
+      let pulse = this.productionPulse.get(id) ?? 0;
+      if (pulse > 0) {
+        pulse = Math.max(0, pulse - dt);
+        this.productionPulse.set(id, pulse);
+        const wave = Math.sin((1.15 - pulse) * Math.PI * 3) * Math.min(1, pulse * 2);
+        const boost = Math.max(0, wave) * 0.55;
+        if (!this.legalHexes.has(id)) {
+          const mat = vis.mesh.material as THREE.MeshToonMaterial;
+          mat.emissive.set(0x886622);
+          mat.emissiveIntensity = Math.max(mat.emissiveIntensity, boost);
+        }
+        if (vis.numberToken) {
+          const bob = Math.max(0, wave) * 0.08;
+          const scale = 1 + Math.max(0, wave) * 0.22;
+          vis.numberToken.position.y = vis.numberRestY + bob;
+          vis.numberToken.scale.setScalar(scale);
+        }
+      } else if (vis.numberToken) {
+        vis.numberToken.position.y += (vis.numberRestY - vis.numberToken.position.y) * step;
+        const s = vis.numberToken.scale.x;
+        const ns = s + (1 - s) * step;
+        vis.numberToken.scale.setScalar(ns);
+      }
+    }
+  }
+
+  private updateHarborBob(time: number): void {
+    for (const sprite of this.harborSprites) {
+      const base = (sprite.userData.bobBaseY as number) ?? TILE_HEIGHT + 0.4;
+      const phase = (sprite.userData.bobPhase as number) ?? 0;
+      sprite.position.y = base + Math.sin(time * 1.4 + phase) * 0.035;
     }
   }
 
   private clearDynamic(): void {
+    this.tweens.clear();
     this.grass.dispose();
     while (this.root.children.length) this.root.remove(this.root.children[0]);
     this.hexMeshes.clear();
+    this.hexVisuals.clear();
     this.vertexMarkers.clear();
     this.edgeMarkers.clear();
-    this.buildingMeshes.clear();
-    this.roadMeshes.clear();
+    this.buildings.clear();
+    this.roads.clear();
+    this.harborSprites = [];
+    this.productionPulse.clear();
+    this.legalVertices.clear();
+    this.legalEdges.clear();
+    this.legalHexes.clear();
+    this.hoverHexId = null;
+    this.robberHopping = false;
+    this.robberTargetHex = null;
     this.harborGroup = new THREE.Group();
     this.propsGroup = new THREE.Group();
     this.robber = this.makeRobber();

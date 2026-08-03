@@ -209,6 +209,107 @@ button:disabled {
   max-width: min(420px, 100%);
 }
 
+.panel-enter {
+  animation: panel-in 0.28s ease-out both;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dice-roll {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  margin-right: 0.15rem;
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+.dice-roll.empty {
+  opacity: 0.55;
+}
+
+.die {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.2rem;
+  border-radius: 5px;
+  background: #fff8e8;
+  border: 2px solid var(--panel-border);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.dice-roll.fresh .die {
+  animation: die-pop 0.45s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+.dice-roll.fresh .die:nth-child(3) {
+  animation-delay: 0.06s;
+}
+
+.die-total {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.35rem;
+  padding: 0 0.3rem;
+  border-radius: 6px;
+  background: var(--accent);
+  border: 2px solid rgba(92, 61, 46, 0.25);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.dice-roll.fresh .die-total {
+  animation: die-pop 0.5s cubic-bezier(0.34, 1.4, 0.64, 1) 0.1s both;
+}
+
+.die-plus,
+.die-eq {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+@keyframes die-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.6) rotate(-8deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+}
+
+.log-enter {
+  animation: log-in 0.35s ease-out both;
+}
+
+@keyframes log-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .panel h2 {
   margin: 0 0 0.35rem;
   font-family: var(--font-display);
@@ -241,10 +342,14 @@ button:disabled {
   align-items: center;
   gap: 0.5rem;
   font-size: 0.9rem;
+  transition: background 0.2s ease, transform 0.2s ease;
+  border-radius: 6px;
+  padding: 0.1rem 0.2rem;
 }
 
 .player-row.current {
   font-weight: 700;
+  background: rgba(232, 168, 56, 0.18);
 }
 
 .swatch {
@@ -283,6 +388,12 @@ button:disabled {
   border-radius: 10px;
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.res-chip:hover {
+  transform: translateY(-1px);
+  background: #fffdf6;
 }
 
 .res-dot {
@@ -306,6 +417,7 @@ button:disabled {
   justify-content: center;
   background: rgba(60, 90, 110, 0.45);
   pointer-events: auto;
+  animation: modal-backdrop 0.2s ease-out both;
 }
 
 .modal.hidden {
@@ -319,6 +431,27 @@ button:disabled {
   border: 3px solid var(--panel-border);
   border-radius: 16px;
   box-shadow: 0 10px 0 rgba(92, 61, 46, 0.15);
+  animation: modal-card-in 0.28s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+}
+
+@keyframes modal-backdrop {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .modal-card h3 {

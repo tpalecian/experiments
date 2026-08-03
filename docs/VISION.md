@@ -1,26 +1,24 @@
-# Stylized Catan-Inspired Island Generation
+# Stylized Hex Catan
 
 ## Guiding Principles
 
-1. **The gameplay graph is invisible.** Players never see tiles. Rules run on a hidden region graph; rendering never draws that graph as hexes.
-2. **Coastline first.** Do not generate terrain and then add water. Generate a coastline, then let **everything else** derive from one value: `distanceToCoast`.
-3. **Day-night never regenerates the world.** Terrain, SDF, meshes, and instances stay static; only the **Environment State** (lighting / palettes / atmosphere) changes.
-4. **Deep craft configurator.** Every tunable value is editable from a well-categorised, easy-to-use panel — look tweaks live; generation knobs gated behind Apply.
+1. **Keep the hex board.** Players play on readable Catan hex tiles. Do not replace the board with organic non-hex terrain — that look made the game harder to read.
+2. **Motion quality matters.** Placements, robber moves, highlights, and production feedback should feel smooth (eased tweens, no instant pops).
+3. **Day-night never regenerates the world.** Meshes and instances stay static; only the **Environment State** (lighting / palettes / atmosphere) changes.
+4. **Craft configurator.** Tunable look values stay editable from the Style panel; generation rebuilds (if any) stay gated.
 
-- Terrain algorithm: **[docs/TERRAIN.md](TERRAIN.md)**
 - Day-night / atmosphere: **[docs/DAY_NIGHT.md](DAY_NIGHT.md)**
 - Configurator UX & taxonomy: **[docs/CONFIGURATOR.md](CONFIGURATOR.md)**
+- Terrain experiments (optional / deferred): **[docs/TERRAIN.md](TERRAIN.md)**
 
 ```
-Gameplay Graph (hidden)
+Hex Board (visible tiles)
         ↓
-Region Graph  (biomes / resources — does not invent a second coast)
+Gameplay Graph (same hexes — resources / adjacency / robber)
         ↓
-Island Mask → Smooth → SDF (distanceToCoast)
+BoardView (tiles · props · pieces · water · grass)
         ↓
-World Data (static height · biomes · meshes · instances)
-        ↓
-Renderers  ←  Environment State (time / weather)
+Renderers  ←  Environment State (time / weather) + TweenPlayer
 ```
 ---
 
@@ -29,174 +27,54 @@ Renderers  ←  Environment State (time / weather)
 | Layer | Tools |
 | --- | --- |
 | Engine | Three.js |
-| Materials | Custom GLSL shaders |
-| Scattering | `InstancedMesh` |
-| Noise | Simplex / FBM (low frequency only) |
-| Regions | Delaunay + Voronoi |
-| Coast / depth | Signed Distance Field (SDF) |
-| Mesh extraction | Marching Squares / Dual Contouring |
-| Queries (optional) | BVH |
+| Materials | Custom GLSL shaders + toon materials |
+| Motion | Local `TweenPlayer` (`src/render/tween.ts`) |
+| Water / grass | GPU `uTime` shaders |
+| Day-night | `TimeOfDayController` + Environment State |
 
 ---
 
-## The One Field
+## Animation Priorities
 
-```ts
-// ocean < 0, coastline = 0, land > 0
-distanceToCoast
-```
-
-Every system samples it:
-
-| System | Reads |
+| Moment | Feel |
 | --- | --- |
-| Terrain height | `terrainCurve(d) + subtle noise` |
-| Water colour | deep → turquoise → mint |
-| Beach | wet / dry sand bands |
-| Wave bands | `fract(d * freq)` contours |
-| Foam | `d ∈ [-2, 2]` |
-| Caustics | `d ∈ [-25, 0]` |
-| Trees | slope + height + biome |
-| Rocks | slope + height |
+| Place road / settlement | Scale + soft drop (easeOutBack) |
+| Upgrade to city | Crossfade morph |
+| Move robber | Arc hop + land squash |
+| Legal highlights | Opacity / emissive fade + gentle pulse |
+| Dice production | Number-token pulse on matching hexes |
+| Hex hover | Slight tile lift |
+| Camera | Soft OrbitControls damping; light nudge on robber move |
 
 ---
 
-## Pipelines
-
-### Gameplay (hidden)
-
-1. Generate island seed  
-2. Generate hidden gameplay graph  
-3. Assign resource regions  
-4. Relax region sites (Lloyd) — visual spacing only  
-
-### Terrain / render (coastline-first)
-
-1. Generate island mask (radial + low-freq simplex + domain warp)  
-2. Smooth coastline  
-3. Compute SDF (`distanceToCoast`)  
-4. Height from `terrainCurve(d)`  
-5. Terrain mesh + water mesh  
-6. Water colour, beaches, wave contours, foam, caustics  
-7. Vegetation + rocks  
-8. Lighting & polish  
-
----
-
-## Hidden Gameplay Graph
-
-Gameplay only. Never rendered as tiles.
-
-```ts
-type Region = {
-  id: string;
-  resource: 'forest' | 'wheat' | 'ore' | 'brick' | 'pasture' | 'desert';
-  neighbors: string[];
-  position: Vector2;
-};
-```
-
-- Nodes own resource type and adjacency.
-- Roads run A\* over the graph, then become splines for dirt paths.
-- Settlements spawn at graph junctions, then offset to believable world positions.
-- Biome masks blur Voronoi borders for look; **adjacency rules stay crisp**.
-- Dice / production / robber stay on this graph (today’s hex board maps here during migration).
-
----
-
-## Island Shape
-
-```ts
-island = radialFalloff + simplexNoise + domainWarp
-```
-
-**Never use high-frequency noise.** Soften the mask (Gaussian / distance transform / Marching Squares) so beaches sweep — they must not look noisy.
-
----
-
-## World Chunking
-
-```
-World
- └── Chunks
-      ├── Terrain
-      ├── Water
-      ├── Trees
-      ├── Rocks
-      └── Props
-```
-
----
-
-## Suggested Modules
+## Suggested Modules (live)
 
 ```
 src/
-  terrain/
-    island.ts      # silhouette mask
-    mask.ts        # coastline smoothing
-    graph.ts       # gameplay sites → points
-    voronoi.ts     # Delaunay / Voronoi + Lloyd
-    sdf.ts         # distanceToCoast
-    height.ts      # terrainCurve(d)
-    beach.ts       # wet / dry sand bands
-    biome.ts       # soft resource masks
-    coast.ts       # polyline extract (tools)
-    pipeline.ts    # coastline-first entry
-  water/
-    shader.ts      # colour from d + material
-    foam.ts        # shore foam
-    waves.ts       # contour bands + caustics mask
-  atmosphere/
-    environment.ts # EnvironmentState + day/sunset/night palettes
-  world/
-    chunks.ts
-    vegetation.ts
-    rocks.ts
-  gameplay/
-    regions.ts
-    roads.ts
-    settlements.ts
-  ui/
-    craftSchema.ts # deep configurator category taxonomy
+  game/          engine · board · rules · types
+  render/
+    BoardView.ts   # hex tiles, pieces, highlights, motion
+    tween.ts       # shared easing / tween queue
+    water.ts · grass.ts · sky.ts · atmosphere.ts
+  ui/            hud · configurator · styles
+  input/         picker
 ```
 
-Existing `src/game/` remains rules authority until the hidden graph replaces hex-facing APIs. Existing `src/render/` (including `atmosphere.ts` / `AtmosphereSnapshot`) and `src/ui/configurator.ts` drive the live day cycle and Style panel; modules above are the migration target for island systems and the **deep craft configurator**.
+Legacy island-generation stubs under `src/terrain/`, `src/water/`, `src/world/`, `src/gameplay/` are **not** the active presentation path.
 
 ---
 
-## Development Order
+## Development Order (current focus)
 
 | # | Milestone | Outcome |
 | --- | --- | --- |
-| 1 | Flat water | Clear sea plane + camera framing |
-| 2 | Island mask + SDF | Soft land/water + `distanceToCoast` |
-| 3 | Terrain mesh | Height from `terrainCurve(d)` |
-| 4 | Water colour | Tropical depth gradient from `d` |
-| 5 | Beaches | Wet/dry sand bands |
-| 6 | Wave bands | Breathing contour lines |
-| 7 | Foam + caustics | Shore + shallow only |
-| 8 | Biomes | Soft Voronoi on land |
-| 9 | Trees | Slope/height/biome gated |
-| 10 | Rocks | Cliff scatter from slope |
-| 11 | Roads / buildings | Graph → splines / junctions |
-| 12 | Polish | Environment State sync, LODs, craft |
-| 13 | Deep configurator | Schema-driven panel: search, categories, presets, edit everything |
+| 1 | Piece motion | Diff sync + spawn / upgrade tweens |
+| 2 | Robber hop | Arc move + land squash |
+| 3 | Highlight polish | Fade + pulse legal sites |
+| 4 | Production feedback | Pulse matching number tokens |
+| 5 | Hover + camera | Hex lift, soft look-at on robber |
+| 6 | HUD dice | Pop-in dice chips on new rolls |
+| 7 | Deeper craft | Expand Style panel as systems need knobs |
 
-Day-night itself is already live on the hex MVP (`TimeOfDayController`). For the organic island, keep feeding the same Environment State pattern into terrain/water/veg shaders — never rebuild world data when the clock moves.
-
-**Configurator rule:** a visual feature is not done until it is editable in the craft panel under the correct category ([CONFIGURATOR.md](CONFIGURATOR.md)).
-
----
-
-## Migration Stance (current MVP)
-
-Today the project still draws **visible hex tiles** with tropical water hugging hex SDFs. That is the playable baseline.
-
-The island-generation vision **keeps Catan rules**, but replaces tile rendering with:
-
-- a hidden region graph (compat layer over today’s hexes at first),
-- organic terrain / water / props derived from one coastline SDF,
-- roads and buildings as world geometry, not board tokens on flat hexes.
-
-No gameplay change is required for a visual milestone: same graph, different presentation.
+Day-night is already live (`TimeOfDayController`). Keep feeding Environment State into water/sky/lights — never rebuild hex geometry when the clock moves.

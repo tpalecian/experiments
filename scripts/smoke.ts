@@ -13,6 +13,7 @@ import {
   lerpAtmosphere,
   sampleAtmosphereAtPhase,
 } from '../src/render/atmosphere';
+import { TweenPlayer, ease } from '../src/render/tween';
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -78,6 +79,27 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(tod.getCelestialDirection() instanceof THREE.Vector3, 'celestial vector');
 
   console.log('ok atmosphere day-cycle');
+}
+
+{
+  const player = new TweenPlayer();
+  let value = 0;
+  let done = false;
+  player.to(0, 10, 0.5, (v) => {
+    value = v;
+  }, {
+    ease: ease.linear,
+    onComplete: () => {
+      done = true;
+    },
+  });
+  player.update(0.25);
+  assert(Math.abs(value - 5) < 0.001, 'tween mid value');
+  player.update(0.3);
+  assert(done && Math.abs(value - 10) < 0.001, 'tween completes');
+  assert(ease.easeOutBack(1) === 1, 'easeOutBack ends at 1');
+  assert(ease.smoothstep(0.5) === 0.5, 'smoothstep mid');
+  console.log('ok tween player');
 }
 
 console.log('smoke ok');
