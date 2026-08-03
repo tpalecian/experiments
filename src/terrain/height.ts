@@ -1,41 +1,40 @@
 /**
- * Heightmap from island SDF + layered elevation bands.
+ * Terrain height from coastline distance — never raw Perlin mountains.
+ *
+ *   height = terrainCurve(distanceToCoast) + largeScaleNoise + smallVariation
  */
 
-import type { IslandSdf } from './sdf';
+import type { DistanceToCoast, IslandSdf } from './sdf';
 
 export type HeightLayer =
   | 'deepOcean'
   | 'lagoon'
-  | 'sandShelf'
   | 'beach'
   | 'grass'
   | 'hills'
-  | 'cliffs'
   | 'mountains';
 
-/** Ordered low → high for thresholding. */
-export const HEIGHT_LAYER_ORDER: HeightLayer[] = [
-  'deepOcean',
-  'lagoon',
-  'sandShelf',
-  'beach',
-  'grass',
-  'hills',
-  'cliffs',
-  'mountains',
+/** Ordered reference bands on distanceToCoast (ocean → peak). */
+export const DISTANCE_BANDS: { layer: HeightLayer; distance: number }[] = [
+  { layer: 'deepOcean', distance: -100 },
+  { layer: 'lagoon', distance: -20 },
+  { layer: 'beach', distance: 0 },
+  { layer: 'grass', distance: 15 },
+  { layer: 'hills', distance: 40 },
+  { layer: 'mountains', distance: 70 },
 ];
 
 export interface HeightParams {
-  beachWidth: number;
-  hillScale: number;
-  mountainScale: number;
+  /** World-unit scale applied after the distance curve. */
+  verticalScale: number;
+  largeNoise: number;
+  smallNoise: number;
 }
 
 export const DEFAULT_HEIGHT: HeightParams = {
-  beachWidth: 0.8,
-  hillScale: 1.2,
-  mountainScale: 2.4,
+  verticalScale: 0.04,
+  largeNoise: 0.15,
+  smallNoise: 0.04,
 };
 
 export interface Heightmap {
@@ -47,8 +46,24 @@ export interface Heightmap {
 }
 
 /**
- * Sample continuous height from SDF.
- * Stub: maps land distance to a gentle dome.
+ * Piecewise terrain curve from signed coastline distance.
+ * Stub: smoothstep-ish ramp inland; shallow shelf offshore.
+ */
+export function terrainCurve(d: DistanceToCoast): number {
+  if (d < 0) {
+    // Underwater shelf: deeper as d → −∞
+    return Math.max(d, -80) * 0.02;
+  }
+  // Land: gentle rise toward mountains
+  if (d < 15) return d * 0.02; // beach → grass approach
+  if (d < 40) return 0.3 + (d - 15) * 0.035;
+  if (d < 70) return 1.175 + (d - 40) * 0.04;
+  return 2.375 + (d - 70) * 0.03;
+}
+
+/**
+ * Sample height. Noise terms are stubs (0) until FBM lands —
+ * keep amplitude low so the coast still reads as sculpted.
  */
 export function sampleHeight(
   sdf: IslandSdf,
@@ -57,24 +72,21 @@ export function sampleHeight(
   params: HeightParams = DEFAULT_HEIGHT,
 ): number {
   const d = sdf.sample(x, z);
-  if (d >= 0) {
-    // Water side: slight underwater shelf.
-    return -Math.min(d, 2) * 0.15;
-  }
-  const inland = -d;
-  return Math.min(
-    inland * params.hillScale,
-    params.mountainScale,
+  const base = terrainCurve(d);
+  // Placeholder noise slots — wired later via seed + FBM.
+  const largeScaleNoise = 0;
+  const smallVariation = 0;
+  const scale = params.verticalScale / DEFAULT_HEIGHT.verticalScale;
+  return (
+    (base + largeScaleNoise * params.largeNoise + smallVariation * params.smallNoise) * scale
   );
 }
 
-export function classifyLayer(height: number, sdfValue: number): HeightLayer {
-  if (sdfValue > 1.5) return 'deepOcean';
-  if (sdfValue > 0.6) return 'lagoon';
-  if (sdfValue > 0.15) return 'sandShelf';
-  if (sdfValue > -0.05 || height < 0.08) return 'beach';
-  if (height < 0.6) return 'grass';
-  if (height < 1.2) return 'hills';
-  if (height < 1.8) return 'cliffs';
+export function classifyLayer(d: DistanceToCoast): HeightLayer {
+  if (d < -50) return 'deepOcean';
+  if (d < -5) return 'lagoon';
+  if (d < 8) return 'beach';
+  if (d < 30) return 'grass';
+  if (d < 55) return 'hills';
   return 'mountains';
 }

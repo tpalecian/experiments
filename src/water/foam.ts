@@ -1,32 +1,32 @@
 /**
- * Shore foam masks derived from coastline / SDF distance.
+ * Shore foam — only near the coast. Never in deep water.
+ *
+ * Active roughly where distanceToCoast ∈ [-2, 2].
  */
 
 export interface FoamParams {
-  width: number;
-  soft: number;
+  /** Half-width of foam band around the zero contour. */
+  halfWidth: number;
   intensity: number;
 }
 
 export const DEFAULT_FOAM: FoamParams = {
-  width: 0.5,
-  soft: 0.25,
-  intensity: 0.8,
+  halfWidth: 2,
+  intensity: 0.85,
 };
 
 /**
- * Foam factor in [0, 1] from signed distance to shore (0 ≈ coastline).
- * Animate in the shader by offsetting `distance` with time.
+ * Foam factor in [0, 1] from signed distanceToCoast.
+ * Peaks at the shoreline (d ≈ 0), fades by ±halfWidth.
  */
 export function foamFactor(
-  distance: number,
+  distanceToCoast: number,
   params: FoamParams = DEFAULT_FOAM,
 ): number {
-  const inner = params.width;
-  const outer = params.width + params.soft;
-  if (distance <= 0) return 0;
-  if (distance >= outer) return 0;
-  if (distance <= inner) return params.intensity;
-  const t = 1 - (distance - inner) / Math.max(params.soft, 1e-6);
-  return t * params.intensity;
+  const a = Math.abs(distanceToCoast);
+  if (a >= params.halfWidth) return 0;
+  const t = 1 - a / params.halfWidth;
+  // Smoothstep falloff
+  const s = t * t * (3 - 2 * t);
+  return s * params.intensity;
 }

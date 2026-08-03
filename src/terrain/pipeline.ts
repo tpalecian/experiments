@@ -1,6 +1,9 @@
 /**
- * Island generation pipeline entry — wires seed → graph → SDF → mesh later.
- * Not hooked into the live hex BoardView yet; see docs/VISION.md.
+ * Coastline-first island pipeline.
+ *
+ *   mask → smooth → SDF (distanceToCoast) → height → mesh / water / props
+ *
+ * Not hooked into the live hex BoardView yet; see docs/TERRAIN.md.
  */
 
 import { createEmptyGraph, type RegionGraph } from '../gameplay/regions';
@@ -12,12 +15,13 @@ export interface IslandPipelineResult {
   seed: IslandSeed;
   graph: RegionGraph;
   sites: GraphPoint[];
+  /** Shared field: ocean < 0, coast = 0, land > 0. */
   sdf: IslandSdf;
 }
 
 /**
  * Bootstrap an island generation context.
- * Region filling / Lloyd / mesh extraction land in later milestones.
+ * Mask smoothing, true distance transform, and mesh extraction land later.
  */
 export function beginIslandPipeline(
   params: Partial<IslandParams> = {},

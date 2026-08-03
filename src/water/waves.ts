@@ -1,39 +1,61 @@
 /**
- * Wave band helpers — contour rings from coastline distance.
+ * Wave bands are contour lines of distanceToCoast — not water normals.
+ *
+ *   band = fract(distance * frequency)
+ *   then blur, fade, animate
+ *
+ * Animation is breathing, not waves:
+ *   distance += sin(time * 0.2) * 0.5
  */
 
 export interface WaveBandParams {
-  spacing: number;
+  frequency: number;
   width: number;
-  speed: number;
+  /** Breathing amplitude added to distance. */
+  breathAmp: number;
+  /** Breathing angular speed. */
+  breathSpeed: number;
 }
 
 export const DEFAULT_WAVE_BANDS: WaveBandParams = {
-  spacing: 1.4,
-  width: 0.18,
-  speed: 0.12,
+  frequency: 0.35,
+  width: 0.12,
+  breathAmp: 0.5,
+  breathSpeed: 0.2,
 };
 
+function fract(x: number): number {
+  return x - Math.floor(x);
+}
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
 /**
- * Contour band intensity from SDF / coast distance.
- *
- *   distance = sdf(worldPos)
- *   band = smoothstep(...)
- *   animate by offsetting distance with time
+ * Contour band intensity from signed distanceToCoast (ocean side preferred).
  */
 export function waveBand(
-  distance: number,
+  distanceToCoast: number,
   time: number,
   params: WaveBandParams = DEFAULT_WAVE_BANDS,
 ): number {
-  const d = distance + time * params.speed;
-  const phase = ((d % params.spacing) + params.spacing) % params.spacing;
+  // Breathing offset — almost imperceptible.
+  const d = distanceToCoast + Math.sin(time * params.breathSpeed) * params.breathAmp;
+  // Contours mainly read in water (d < 0); still defined everywhere.
+  const f = fract(Math.abs(d) * params.frequency);
   const half = params.width * 0.5;
-  const mid = params.spacing * 0.5;
-  const delta = Math.abs(phase - mid);
-  if (delta >= half) return 0;
-  // Smoothstep-ish falloff inside the band.
-  const t = 1 - delta / half;
+  const edge = smoothstep(0, half, f) * (1 - smoothstep(1 - half, 1, f));
+  // Fade out inland and in deep water extremes.
+  const shoreFade = smoothstep(-40, -2, d) * (1 - smoothstep(-1, 8, d));
+  return edge * shoreFade;
+}
+
+/** Caustic visibility in shallow water: distance ∈ [-25, 0]. */
+export function causticsMask(distanceToCoast: number): number {
+  if (distanceToCoast >= 0 || distanceToCoast < -25) return 0;
+  const t = (distanceToCoast + 25) / 25; // 0 at -25 → 1 at 0
   return t * t * (3 - 2 * t);
 }
 

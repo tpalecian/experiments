@@ -1,5 +1,6 @@
 /**
  * Biome-masked vegetation via InstancedMesh.
+ * Gate on slope + height + biome — not pure randomness.
  */
 
 import * as THREE from 'three';
@@ -11,6 +12,32 @@ export interface ScatterRequest {
   positions: { x: number; y: number; z: number; scale?: number; yaw?: number }[];
   geometry: THREE.BufferGeometry;
   material: THREE.Material;
+}
+
+export interface TreeGate {
+  maxSlope: number;
+  minHeight: number;
+  minForestWeight: number;
+}
+
+export const DEFAULT_TREE_GATE: TreeGate = {
+  maxSlope: 0.45,
+  minHeight: 0.25,
+  minForestWeight: 0.35,
+};
+
+/** Flat grasslands become forests; steep cliffs stay empty. */
+export function canSpawnTree(
+  slope: number,
+  height: number,
+  weights: BiomeWeights,
+  gate: TreeGate = DEFAULT_TREE_GATE,
+): boolean {
+  return (
+    slope < gate.maxSlope &&
+    height > gate.minHeight &&
+    weights.forest >= gate.minForestWeight
+  );
 }
 
 /**
