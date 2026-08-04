@@ -47,10 +47,12 @@ const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerH
 camera.position.set(0, 14, 14);
 
 const controls = new OrbitControls(camera, canvas);
-controls.target.set(0, 0, 0);
+controls.target.set(0, 0.12, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.maxPolarAngle = Math.PI * 0.49;
+// Keep a tabletop angle — nearly horizontal views expose tile undersides / water gaps.
+controls.minPolarAngle = 0.28;
+controls.maxPolarAngle = Math.PI * 0.42;
 controls.minDistance = 8;
 controls.maxDistance = 24;
 controls.update();
@@ -96,7 +98,7 @@ let lastRobberHex = '';
 const cameraLook = new THREE.Vector3();
 const cameraLookFrom = new THREE.Vector3();
 const robberWorld = new THREE.Vector3();
-const boardCenter = new THREE.Vector3(0, 0, 0);
+const boardCenter = new THREE.Vector3(0, 0.12, 0);
 
 function applyStyle(config: StyleConfig): void {
   styleLive = config;
@@ -178,7 +180,9 @@ function frameCamera(rings: number): void {
   camera.updateProjectionMatrix();
   controls.minDistance = Math.max(6, r * 0.9);
   controls.maxDistance = Math.max(24, r * 4.2);
-  controls.target.set(0, 0, 0);
+  controls.minPolarAngle = 0.28;
+  controls.maxPolarAngle = Math.PI * 0.42;
+  controls.target.set(0, 0.12, 0);
   controls.update();
 
   fogNear = dist * 1.8;
@@ -201,7 +205,7 @@ function nudgeCameraToward(world: THREE.Vector3): void {
   const cfg = styleLive;
   cameraLookFrom.copy(controls.target);
   cameraLook.copy(world);
-  cameraLook.y = 0;
+  cameraLook.y = 0.12;
   // Blend toward the event without yanking the orbit target fully off the board center.
   cameraLook.lerp(boardCenter, cfg.motionCameraNudgeBlend);
   cameraTweens.play(

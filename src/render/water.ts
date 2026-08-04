@@ -71,10 +71,12 @@ void main() {
 
   // Flatten swell next to hex coasts so the sea never drops away under the tiles.
   float shore = shoreDistance(world.xz);
-  float nearLand = 1.0 - smoothstep(0.0, 2.8, shore);
-  float amp = uWaveHeight * (1.0 - nearLand * 0.92);
-  // Prefer upward motion near shore — never dig a trench under the board.
-  float displacement = mix(w * amp, max(w, 0.0) * amp * 0.35, nearLand);
+  float nearLand = 1.0 - smoothstep(0.0, 3.2, shore);
+  float amp = uWaveHeight * (1.0 - nearLand * 0.97);
+  // Only gentle upward swell near shore — never dig under the board.
+  float displacement = mix(w * amp, abs(w) * amp * 0.2, nearLand);
+  // Keep the water surface from sinking below the hex bottoms near land.
+  displacement = mix(displacement, max(displacement, 0.0), nearLand);
 
   world.y += displacement;
   vWave = w;
@@ -174,7 +176,7 @@ void main() {
   float deepSpan = max(uDeepFade, 0.001);
 
   // Under land tiles — keep water out so hex edges stay crisp
-  if (shoreDist < -0.02) discard;
+  if (shoreDist < 0.0) discard;
 
   // 1. Depth gradient measured from actual tile coasts
   float d0 = 0.0;
@@ -351,8 +353,8 @@ export class WaterSurface {
     const geom = new THREE.CircleGeometry(radius, Math.max(64, segs * 2));
     geom.rotateX(-Math.PI / 2);
     this.mesh = new THREE.Mesh(geom, this.material);
-    // Sit just under tile bottoms so low camera angles don't show a floating gap.
-    this.mesh.position.y = -0.02;
+    // Flush with hex bottoms (y=0) so low angles don't show a floating gap.
+    this.mesh.position.y = 0;
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -1;
     this.mesh.receiveShadow = false;
