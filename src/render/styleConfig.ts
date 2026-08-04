@@ -129,7 +129,7 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterShoreGlow: 0.16,
   waterColorWave: 0.05,
 
-  waterWaveHeight: 0.08,
+  waterWaveHeight: 0.05,
   waterWaveSpeed: 1.15,
   waterSegments: 80,
 
