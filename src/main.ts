@@ -255,6 +255,7 @@ function syncView(): void {
 engine.subscribe(syncView);
 
 canvas.addEventListener('pointerdown', (ev) => {
+  boardView.setHoverHex(null);
   if (ev.button !== 0) return;
   // Don't place pieces while dragging style panel controls
   if ((ev.target as HTMLElement).closest?.('#style-config-root')) return;
@@ -276,6 +277,11 @@ canvas.addEventListener('pointermove', (ev) => {
     return;
   }
   if ((ev.target as HTMLElement).closest?.('#style-config-root')) {
+    boardView.setHoverHex(null);
+    return;
+  }
+  // Skip hover while dragging / on touch — orbit pans were bobbing hexes.
+  if (ev.pointerType !== 'mouse' || ev.buttons !== 0) {
     boardView.setHoverHex(null);
     return;
   }

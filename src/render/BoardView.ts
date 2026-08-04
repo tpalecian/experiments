@@ -284,13 +284,12 @@ export class BoardView {
       let numberToken: THREE.Mesh | null = null;
       let numberRestY = TILE_HEIGHT + 0.04;
 
-      // Dirt skirt under the tile only (top ≤ tile radius) so it doesn't show as gaps between hexes.
-      // Slightly wider bottom peeks at the coastline for a tabletop edge.
+      // Dirt skirt under the tile — reaches into the water so coasts don't float.
       const skirt = new THREE.Mesh(
-        new THREE.CylinderGeometry(HEX_SIZE * 0.92, HEX_SIZE * 1.04, 0.08, 6),
+        new THREE.CylinderGeometry(HEX_SIZE * 0.92, HEX_SIZE * 1.06, 0.14, 6),
         toonMat(STYLE.dirt),
       );
-      skirt.position.set(x, -0.02, z);
+      skirt.position.set(x, -0.05, z);
       skirt.receiveShadow = true;
       this.propsGroup.add(skirt);
 
@@ -833,9 +832,17 @@ export class BoardView {
     const step = 1 - Math.exp(-10 * dt);
 
     for (const [id, vis] of this.hexVisuals) {
+      // Keep hex Y locked — vertical hover lift made the island look floating/bobbing,
+      // especially while orbiting on touch. Hover is emissive-only.
+      vis.mesh.position.y = vis.restingY;
+
       const hovered = this.hoverHexId === id;
-      const targetY = vis.restingY + (hovered ? this.motion.hoverLift : 0);
-      vis.mesh.position.y += (targetY - vis.mesh.position.y) * step;
+      const mat = vis.mesh.material as THREE.MeshToonMaterial;
+      if (hovered && !this.legalHexes.has(id)) {
+        const lift = Math.min(0.22, this.motion.hoverLift * 4);
+        mat.emissive.set(0x445566);
+        mat.emissiveIntensity = Math.max(mat.emissiveIntensity, lift);
+      }
 
       let pulse = this.productionPulse.get(id) ?? 0;
       if (pulse > 0) {
@@ -844,7 +851,6 @@ export class BoardView {
         const wave = Math.sin((this.motion.productionPulseSec - pulse) * Math.PI * 3) * Math.min(1, pulse * 2);
         const boost = Math.max(0, wave) * this.motion.productionPulseStrength;
         if (!this.legalHexes.has(id)) {
-          const mat = vis.mesh.material as THREE.MeshToonMaterial;
           mat.emissive.set(0x886622);
           mat.emissiveIntensity = Math.max(mat.emissiveIntensity, boost);
         }

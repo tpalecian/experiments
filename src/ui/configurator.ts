@@ -160,7 +160,7 @@ const CATEGORIES: CategoryDef[] = [
     title: 'Hex Board & Props',
     blurb: 'Hover lift, production pulse, harbor bob.',
     fields: [
-      { key: 'hexHoverLift', label: 'Hover lift', kind: 'range', min: 0, max: 0.12, step: 0.005, tags: ['hex', 'hover'] },
+      { key: 'hexHoverLift', label: 'Hover glow', kind: 'range', min: 0, max: 0.12, step: 0.005, tags: ['hex', 'hover'] },
       {
         key: 'productionPulseSec',
         label: 'Production pulse (sec)',
