@@ -18,11 +18,32 @@ const waterVertexShader = /* glsl */ `
 uniform float uTime;
 uniform float uWaveHeight;
 uniform float uWaveSpeed;
+uniform vec2 uHexCenters[${WATER_MAX_HEXES}];
+uniform int uHexCount;
+uniform float uHexApothem;
 
 varying vec3 vWorldPos;
 varying vec3 vNormalW;
 varying vec3 vViewDir;
 varying float vWave;
+
+float sdHexagon(vec2 p, float r) {
+  p = abs(p.yx);
+  vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
+  p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
+  p -= vec2(clamp(p.x, -k.z * r, k.z * r), r);
+  return length(p) * sign(p.y);
+}
+
+float shoreDistance(vec2 p) {
+  float d = 1e5;
+  for (int i = 0; i < ${WATER_MAX_HEXES}; i++) {
+    float alive = step(float(i), float(uHexCount) - 0.5);
+    float hd = sdHexagon(p - uHexCenters[i], uHexApothem);
+    d = min(d, mix(1e5, hd, alive));
+  }
+  return d;
+}
 
 float swell(vec2 p, float t) {
   float w =
@@ -48,10 +69,17 @@ void main() {
   float w = swell(world.xz, t);
   vec2 d = swellDeriv(world.xz, t);
 
-  world.y += w * uWaveHeight;
+  // Flatten swell next to hex coasts so the sea never drops away under the tiles.
+  float shore = shoreDistance(world.xz);
+  float nearLand = 1.0 - smoothstep(0.0, 2.8, shore);
+  float amp = uWaveHeight * (1.0 - nearLand * 0.92);
+  // Prefer upward motion near shore — never dig a trench under the board.
+  float displacement = mix(w * amp, max(w, 0.0) * amp * 0.35, nearLand);
+
+  world.y += displacement;
   vWave = w;
 
-  vec3 n = normalize(vec3(-d.x * uWaveHeight, 1.0, -d.y * uWaveHeight));
+  vec3 n = normalize(vec3(-d.x * amp, 1.0, -d.y * amp));
   vNormalW = normalize(mat3(modelMatrix) * n);
   vWorldPos = world.xyz;
   vViewDir = normalize(cameraPosition - world.xyz);
@@ -323,7 +351,8 @@ export class WaterSurface {
     const geom = new THREE.CircleGeometry(radius, Math.max(64, segs * 2));
     geom.rotateX(-Math.PI / 2);
     this.mesh = new THREE.Mesh(geom, this.material);
-    this.mesh.position.y = -0.08;
+    // Sit just under tile bottoms so low camera angles don't show a floating gap.
+    this.mesh.position.y = -0.02;
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -1;
     this.mesh.receiveShadow = false;
