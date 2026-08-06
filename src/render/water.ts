@@ -224,12 +224,12 @@ void main() {
   float shore = max(uShoreWidth, 0.001);
   float deepSpan = max(uDeepFade, 0.001);
 
-  // Soft land cut — wide alpha fade so the coast blends into water (no hard mask)
-  float fade = max(uShoreFade, 0.08);
-  // Start fading outside the tile wall so the soft band is visible
-  float landAlpha = smoothstep(fade * 0.05, fade * 1.6, shoreDist);
-  landAlpha = landAlpha * landAlpha * (3.0 - 2.0 * landAlpha); // smootherstep ease
-  if (landAlpha < 0.015) discard;
+  // Soft land cut — water washes gently onto the tile base and fades out
+  // (no hard discard at shoreDist==0; that reads as a cardboard mask).
+  float fade = max(uShoreFade, 0.12);
+  float landAlpha = smoothstep(-fade * 0.55, fade * 1.15, shoreDist);
+  landAlpha = landAlpha * landAlpha * (3.0 - 2.0 * landAlpha);
+  if (landAlpha < 0.02) discard;
 
   // 1. Depth gradient measured from actual tile coasts
   float d0 = 0.0;
@@ -239,11 +239,11 @@ void main() {
   float d4 = shore + deepSpan * 0.45;
   float d5 = shore + deepSpan;
 
-  float tShelf = 1.0 - smoothstep(d0, d1, shoreDist);
-  float tShallow = smoothstep(d0, d1, shoreDist) * (1.0 - smoothstep(d1, d2, shoreDist));
-  float tLagoon = smoothstep(d1, d2, shoreDist) * (1.0 - smoothstep(d2, d3, shoreDist));
-  float tOcean = smoothstep(d2, d3, shoreDist) * (1.0 - smoothstep(d3, d4, shoreDist));
-  float tDeep = smoothstep(d3, d5, shoreDist);
+  float tShelf = 1.0 - smoothstep(d0, d1, max(shoreDist, 0.0));
+  float tShallow = smoothstep(d0, d1, max(shoreDist, 0.0)) * (1.0 - smoothstep(d1, d2, max(shoreDist, 0.0)));
+  float tLagoon = smoothstep(d1, d2, max(shoreDist, 0.0)) * (1.0 - smoothstep(d2, d3, max(shoreDist, 0.0)));
+  float tOcean = smoothstep(d2, d3, max(shoreDist, 0.0)) * (1.0 - smoothstep(d3, d4, max(shoreDist, 0.0)));
+  float tDeep = smoothstep(d3, d5, max(shoreDist, 0.0));
 
   float wSum = max(tShelf + tShallow + tLagoon + tOcean + tDeep, 0.001);
   vec3 col = (
@@ -253,7 +253,11 @@ void main() {
      uOcean * tOcean +
      uDeepOcean * tDeep) / wSum;
 
-  // 2. Soft near-shore glow (also eased by land fade so edges don't pop)
+  // Soft beach wash right against the hex wall (hides the hard geometry cut)
+  float wallWash = 1.0 - smoothstep(-fade * 0.2, fade * 0.85, shoreDist);
+  col = mix(col, uBeachEdge, wallWash * 0.55 * landAlpha);
+
+  // 2. Soft near-shore glow
   float shoreGlow = 1.0 - smoothstep(0.0, shore * 0.45, max(shoreDist, 0.0));
   shoreGlow = pow(max(shoreGlow, 0.0), 1.6) * landAlpha;
   col = mix(col, uShallow, shoreGlow * uShoreGlow);
@@ -359,15 +363,14 @@ void main() {
   float sparse = smoothstep(0.42, 0.62, n * 0.5 + nWarp * 0.3 + nDetail * 0.2);
   float ripple = crest * blotchForm * sparse * nearShore * uRippleIntensity * landAlpha;
 
-  // Soft shore wash — no hard white hex outline
-  float foamSpan = max(uFoamWidth * 1.8, fade * 1.4);
+  // Soft shore wash — faint, never a hard white hex outline
+  float foamSpan = max(uFoamWidth * 2.0, fade * 1.5);
   float shoreEdge = 1.0 - smoothstep(0.0, foamSpan, max(shoreDist, 0.0));
-  shoreEdge = pow(max(shoreEdge, 0.0), 3.2) * landAlpha * 0.35;
+  shoreEdge = pow(max(shoreEdge, 0.0), 3.4) * landAlpha * 0.22;
 
   float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 1.6 + wave * 2.5));
-  // Soft additive foam — keep contrast low so it never reads as a mask
-  float foam = (ripple * 0.85 + shoreEdge * uShoreFoam * foamPulse) * landAlpha;
-  col = mix(col, mix(col, uFoamColor, 0.65), clamp(foam, 0.0, 0.55) * keep);
+  float foam = (ripple * 0.7 + shoreEdge * uShoreFoam * foamPulse) * landAlpha;
+  col = mix(col, mix(col, uFoamColor, 0.5), clamp(foam, 0.0, 0.4) * keep);
 
   // 9. Horizon dissolve
   vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);
