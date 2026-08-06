@@ -52,22 +52,22 @@ export interface WaterDepthPalette {
 
 export const WATER_DEPTH_PALETTES: Record<EnvironmentScheme, WaterDepthPalette> = {
   day: {
-    deep: '#1FAFD4',
-    ocean: '#37C9D9',
-    lagoon: '#62E7E0',
-    shelf: '#DDFCF8',
+    deep: '#0E2A5C',
+    ocean: '#164A8C',
+    lagoon: '#1FA8C8',
+    shelf: '#A8FFF4',
   },
   sunset: {
-    deep: '#205A8C',
-    ocean: '#3A91B8',
-    lagoon: '#4FB8C4',
+    deep: '#1A3A68',
+    ocean: '#2A6A9A',
+    lagoon: '#3A9BB0',
     shelf: '#FFD8B8',
   },
   night: {
-    deep: '#0C2340',
-    ocean: '#10304F',
-    lagoon: '#153B5F',
-    shelf: '#294A67',
+    deep: '#0A1230',
+    ocean: '#101C42',
+    lagoon: '#1A2E5A',
+    shelf: '#2EC8E0',
   },
 };
 

@@ -132,12 +132,13 @@ function envExtras(scheme: EnvironmentScheme): {
     waterDeep: p.deep,
     waterOcean: p.ocean,
     waterLagoon: p.lagoon,
-    // Shallow sits between lagoon and shelf for tropical readability.
-    waterShallow: scheme === 'day' ? '#8CF7EC' : scheme === 'sunset' ? '#7AD4CF' : '#1A466E',
+    // Shallow sits between lagoon and shelf — cyan near coast, navy farther out.
+    waterShallow: scheme === 'day' ? '#3ED8E0' : scheme === 'sunset' ? '#5EC8D0' : '#2A6A9A',
     waterShelf: p.shelf,
-    waterFoamColor: scheme === 'night' ? '#B8D0E8' : scheme === 'sunset' ? '#FFF0E0' : '#FFFFFF',
+    waterFoamColor: scheme === 'night' ? '#C8F4FF' : scheme === 'sunset' ? '#FFF0E0' : '#FFFFFF',
     waveBandIntensity: WAVE_BAND_INTENSITY[scheme],
-    foamBrightness: scheme === 'night' ? 0.55 : scheme === 'sunset' ? 0.75 : 1,
+    // Keep night foam bright so the cyan rim still reads like Bruno's folio
+    foamBrightness: scheme === 'night' ? 0.85 : scheme === 'sunset' ? 0.8 : 1,
     waterFresnelStrength: FRESNEL_STRENGTH[scheme],
     waterCausticIntensity: CAUSTIC_INTENSITY[scheme] * 0.08,
     beachTint: BEACH_TINTS[scheme],

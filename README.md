@@ -46,5 +46,5 @@ npm run dev
 - Development cards are not in this MVP
 - Longest Road (2 VP at length ≥ 5) is included
 - Larger maps scale terrain, numbers, harbors, piece limits, and camera framing
-- Tropical low-poly water with **Bruno-inspired reflection** (blurred mirror + shore ripples) and live **Style** configurator
+- Tropical low-poly water with **Bruno folio shore ripples** (frosted mirror + thin cyan rim + sparse arcs) and live **Style** configurator
 - Piece placement, robber moves, legal highlights, and dice feedback are animated
