@@ -72,12 +72,18 @@ void main() {
 const grassFragmentShader = /* glsl */ `
 uniform vec3 uGrassColor;
 uniform vec3 uTipColor;
+uniform vec3 uAmbient;
+uniform vec3 uSunColor;
+uniform vec3 uSunDir;
 
 varying float vTipness;
 varying float vTint;
 
 void main() {
-  vec3 col = mix(uGrassColor, uTipColor, vTipness * 0.75 + vTint * 0.1);
+  vec3 albedo = mix(uGrassColor, uTipColor, vTipness * 0.8 + vTint * 0.1);
+  // Folio normalNode = vec3(0,1,0) — soft ground lighting, not dark edge shading
+  float ndl = max(dot(vec3(0.0, 1.0, 0.0), normalize(uSunDir)), 0.0);
+  vec3 col = albedo * (uAmbient + uSunColor * ndl);
   gl_FragColor = vec4(col, 1.0);
 }
 `;
@@ -175,9 +181,9 @@ export class GrassField {
       new THREE.InstancedBufferAttribute(heightRands.subarray(0, count), 1),
     );
 
-    // Soft light meadow — match lit pasture, pale tips (Folio tip catch)
-    const grass = sheepGreen.clone().multiplyScalar(1.25);
-    const tip = grass.clone().lerp(new THREE.Color(0xf2fad0), 0.55);
+    // Same sheep hue as Folio samples terrain; tips lighter; Y-up lit like ground
+    const grass = sheepGreen.clone();
+    const tip = sheepGreen.clone().lerp(new THREE.Color(0xf5ffe0), 0.55);
 
     this.material = new THREE.ShaderMaterial({
       vertexShader: grassVertexShader,
@@ -191,6 +197,9 @@ export class GrassField {
         uHeightRandomness: { value: HEIGHT_RANDOMNESS },
         uGrassColor: { value: grass },
         uTipColor: { value: tip },
+        uAmbient: { value: new THREE.Color(0xffe6c8).multiplyScalar(0.7) },
+        uSunColor: { value: new THREE.Color(0xfff2d6).multiplyScalar(0.85) },
+        uSunDir: { value: new THREE.Vector3(0.35, 0.9, 0.25).normalize() },
       },
       side: THREE.DoubleSide,
       depthWrite: true,
