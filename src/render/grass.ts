@@ -1,25 +1,23 @@
 import * as THREE from 'three';
 import { HEX_SIZE } from '../game/board';
-import { STYLIZED_TERRAIN, STYLIZED_TERRAIN_SIDE } from './style';
+import { STYLIZED_TERRAIN } from './style';
 
 /**
- * Folio-inspired pasture grass (bruno simon folio-2025 Grass.js), adapted to WebGL.
+ * Folio-inspired pasture grass (bruno simon folio-2025 Grass.js).
  *
- * Folio uses WebGPU + TSL with camera-facing wraparound blades and terrain masks.
- * Here we keep hex-bounded sheep patches (docs/TERRAIN.md) and port the visual core:
- * triangular blade shape, tipness-scaled wind, height randomness, terrain greens.
+ * Keeps Folio’s soft light meadow recipe — triangular blades, tip-brighter
+ * terrain color, tip-only wind, height randomness — on sheep hexes.
  *
- * Blades use a fixed random yaw (not full camera billboards) so the tabletop /
- * near-top-down board camera still reads a grassy carpet.
+ * Pure camera-billboards collapse to dark edges under our tabletop camera,
+ * so blades use random yaw + a crossed Folio triangle pair instead.
  */
 
-const BLADE_HEIGHT = 0.16;
-const BLADE_WIDTH = 0.018;
-const HEIGHT_RANDOMNESS = 0.55;
+const BLADE_WIDTH = 0.055;
+const BLADE_HEIGHT = 0.2;
+const HEIGHT_RANDOMNESS = 0.6;
 const SQRT3 = Math.sqrt(3);
 
-const sheepTop = new THREE.Color(STYLIZED_TERRAIN.sheep);
-const sheepSide = new THREE.Color(STYLIZED_TERRAIN_SIDE.sheep);
+const sheepGreen = new THREE.Color(STYLIZED_TERRAIN.sheep);
 
 const grassVertexShader = /* glsl */ `
 attribute float aPhase;
@@ -35,18 +33,17 @@ uniform float uBladeWidth;
 uniform float uBladeHeight;
 uniform float uHeightRandomness;
 
-varying float vTint;
 varying float vTipness;
-varying float vHeightNorm;
+varying float vTint;
 
 void main() {
-  // Unit triangle coords: tip has y=1, base has y=0 — Folio tipness
   float tipness = step(0.5, position.y);
   vTipness = tipness;
   vTint = aTint;
 
   float height = uBladeHeight
     * (uHeightRandomness * aHeightRand + (1.0 - uHeightRandomness));
+  height *= 0.78 + 0.32 * sin(aOffset.x * 3.05 + aOffset.z * 2.55);
 
   vec3 shape = vec3(
     position.x * uBladeWidth,
@@ -56,52 +53,39 @@ void main() {
 
   float s = sin(aYaw);
   float c = cos(aYaw);
-  vec3 rotated = vec3(
+  vec3 local = vec3(
     shape.x * c - shape.z * s,
     shape.y,
     shape.x * s + shape.z * c
   );
 
-  // Wind only on the tip, scaled by blade height (Folio tipness * height)
   float windWave = sin(uTime * uWindSpeed + aPhase + aOffset.x * 1.7 + aOffset.z * 1.3)
-                 + 0.45 * sin(uTime * uWindSpeed * 1.65 + aPhase * 1.3 + aOffset.z * 2.1);
+                 + 0.45 * sin(uTime * uWindSpeed * 1.6 + aPhase * 1.25 + aOffset.z * 2.1);
   float sway = windWave * uWindStrength * tipness * height * 2.0;
-  rotated.x += sway;
-  rotated.z += sway * 0.55;
+  local.x += sway;
+  local.z += sway * 0.55;
 
-  vHeightNorm = clamp(rotated.y / max(uBladeHeight, 0.001), 0.0, 1.0);
-
-  vec3 worldPos = rotated + aOffset;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(local + aOffset, 1.0);
 }
 `;
 
 const grassFragmentShader = /* glsl */ `
-uniform vec3 uRootColor;
+uniform vec3 uGrassColor;
 uniform vec3 uTipColor;
 
-varying float vTint;
 varying float vTipness;
-varying float vHeightNorm;
+varying float vTint;
 
 void main() {
-  vec3 base = mix(uRootColor, uTipColor, smoothstep(0.0, 1.0, vHeightNorm));
-  // Slight tip darkening (Folio tipness shadow mix feel)
-  base *= mix(1.0, 0.88, 1.0 - vTipness);
-  base *= mix(0.88, 1.12, vTint);
-  // Soft posterize keeps the toon board language
-  base = floor(base * 5.0 + 0.5) / 5.0;
-  gl_FragColor = vec4(base, 1.0);
+  vec3 col = mix(uGrassColor, uTipColor, vTipness * 0.75 + vTint * 0.1);
+  gl_FragColor = vec4(col, 1.0);
 }
 `;
 
-/** Two Folio-style triangles crossed for readable fill from tabletop angles. */
 function createBladeGeometry(): THREE.BufferGeometry {
   const positions = new Float32Array([
-    // plane A
-    0, 1, 0, 1, 0, 0, -1, 0, 0,
-    // plane B
-    0, 1, 0, 0, 0, 1, 0, 0, -1,
+    0, 1, 0, -1, 0, 0, 1, 0, 0,
+    0, 1, 0, 0, 0, -1, 0, 0, 1,
   ]);
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -112,7 +96,7 @@ function pointInHex(x: number, z: number, radius: number): boolean {
   const q = ((SQRT3 / 3) * x - (1 / 3) * z) / radius;
   const r = ((2 / 3) * z) / radius;
   const s = -q - r;
-  return Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) <= 0.82;
+  return Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) <= 0.84;
 }
 
 export interface GrassPatch {
@@ -128,7 +112,7 @@ export class GrassField {
   private geometry: THREE.InstancedBufferGeometry | null = null;
   private blade: THREE.BufferGeometry | null = null;
 
-  build(patches: GrassPatch[], bladesPerHex = 480): void {
+  build(patches: GrassPatch[], bladesPerHex = 200): void {
     this.dispose();
     if (patches.length === 0) return;
 
@@ -140,17 +124,16 @@ export class GrassField {
     const heightRands = new Float32Array(maxBlades);
 
     let count = 0;
-    const radius = HEX_SIZE * 0.78;
+    const radius = HEX_SIZE * 0.8;
     for (const patch of patches) {
       let placed = 0;
       let attempts = 0;
-      while (placed < bladesPerHex && attempts < bladesPerHex * 10) {
+      while (placed < bladesPerHex && attempts < bladesPerHex * 14) {
         attempts++;
         const lx = (Math.random() * 2 - 1) * radius;
         const lz = (Math.random() * 2 - 1) * radius;
         if (!pointInHex(lx, lz, HEX_SIZE)) continue;
-        // Keep number token / center clear
-        if (lx * lx + lz * lz < 0.13 * 0.13) continue;
+        if (lx * lx + lz * lz < 0.15 * 0.15) continue;
 
         phases[count] = Math.random() * Math.PI * 2;
         tints[count] = Math.random();
@@ -192,20 +175,25 @@ export class GrassField {
       new THREE.InstancedBufferAttribute(heightRands.subarray(0, count), 1),
     );
 
+    // Soft light meadow — match lit pasture, pale tips (Folio tip catch)
+    const grass = sheepGreen.clone().multiplyScalar(1.25);
+    const tip = grass.clone().lerp(new THREE.Color(0xf2fad0), 0.55);
+
     this.material = new THREE.ShaderMaterial({
       vertexShader: grassVertexShader,
       fragmentShader: grassFragmentShader,
       uniforms: {
         uTime: { value: 0 },
-        uWindStrength: { value: 0.085 },
-        uWindSpeed: { value: 1.85 },
+        uWindStrength: { value: 0.07 },
+        uWindSpeed: { value: 1.55 },
         uBladeWidth: { value: BLADE_WIDTH },
         uBladeHeight: { value: BLADE_HEIGHT },
         uHeightRandomness: { value: HEIGHT_RANDOMNESS },
-        uRootColor: { value: sheepSide.clone() },
-        uTipColor: { value: sheepTop.clone().lerp(new THREE.Color(0xb8e878), 0.35) },
+        uGrassColor: { value: grass },
+        uTipColor: { value: tip },
       },
       side: THREE.DoubleSide,
+      depthWrite: true,
     });
 
     this.mesh = new THREE.Mesh(this.geometry, this.material);
