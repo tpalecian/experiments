@@ -145,6 +145,7 @@ uniform sampler2D tReflection;
 uniform vec2 uHexCenters[${WATER_MAX_HEXES}];
 uniform int uHexCount;
 uniform float uHexApothem;
+uniform float uIslandRadius;
 
 varying vec3 vWorldPos;
 varying vec3 vNormalW;
@@ -227,38 +228,22 @@ void main() {
   // Under land tiles — keep water out so hex edges stay crisp
   if (shoreDist < 0.0) discard;
 
-  // Depth colouring: hex SDF hugs the coast shelf; radial distance in open water
-  // so min(hex) iso-contours don't paint light/dark hex bands in the blue water.
-  float radialSea = length(vWorldPos.xz) * 0.27;
-  float nearHexCoast = 1.0 - smoothstep(0.0, 2.4, shoreDist);
-  float depthDist = mix(radialSea + 1.4, shoreDist, nearHexCoast);
+  // Depth colour must NOT use min(hex SDF) — those iso-contours paint
+  // hex-shaped light/dark bands and bubble arcs into the blue water.
+  // Circular island envelope + one continuous ramp (no multi-stop rings).
+  float depthDist = max(0.0, length(vWorldPos.xz) - uIslandRadius);
+  float depthT = clamp(depthDist / (shore + deepSpan), 0.0, 1.0);
+  depthT = depthT * depthT * (3.0 - 2.0 * depthT);
 
-  // 1. Depth gradient — navy open water, cyan only in a tight band at the hex coast
-  float d0 = 0.0;
-  float d1 = shore * 0.12;
-  float d2 = shore * 0.32;
-  float d3 = shore * 0.55;
-  float d4 = shore + deepSpan * 0.3;
-  float d5 = shore + deepSpan;
+  vec3 col = mix(uBeachEdge, uShallow, smoothstep(0.0, 0.18, depthT));
+  col = mix(col, uLagoon, smoothstep(0.08, 0.38, depthT));
+  col = mix(col, uOcean, smoothstep(0.28, 0.62, depthT));
+  col = mix(col, uDeepOcean, smoothstep(0.5, 1.0, depthT));
 
-  float tShelf = 1.0 - smoothstep(d0, d1, depthDist);
-  float tShallow = smoothstep(d0, d1, depthDist) * (1.0 - smoothstep(d1, d2, depthDist));
-  float tLagoon = smoothstep(d1, d2, depthDist) * (1.0 - smoothstep(d2, d3, depthDist));
-  float tOcean = smoothstep(d2, d3, depthDist) * (1.0 - smoothstep(d3, d4, depthDist));
-  float tDeep = smoothstep(d3, d5, depthDist);
-
-  float wSum = max(tShelf + tShallow + tLagoon + tOcean + tDeep, 0.001);
-  vec3 col = (
-     uBeachEdge * tShelf +
-     uShallow * tShallow +
-     uLagoon * tLagoon +
-     uOcean * tOcean +
-     uDeepOcean * tDeep) / wSum;
-
-  // 2. Soft cyan shelf wash — keep it tight to the coast (Bruno rim, not a sea wash)
-  float shelfWash = 1.0 - smoothstep(0.0, shore * 0.28, shoreDist);
-  shelfWash = pow(max(shelfWash, 0.0), 1.8);
-  col = mix(col, uShallow, shelfWash * uShoreGlow * 0.7);
+  // 2. Soft cyan shelf wash — hex-accurate rim (depth palette is circular)
+  float shelfWash = 1.0 - smoothstep(0.0, shore * 0.42, shoreDist);
+  shelfWash = pow(max(shelfWash, 0.0), 1.55);
+  col = mix(col, uShallow, shelfWash * uShoreGlow);
 
   // 3. Gentle colour motion
   float wt = uTime * uWaveSpeed;
@@ -271,8 +256,8 @@ void main() {
   col = mix(col, uLagoon, max(wave, 0.0) * uColorWave * 1.4);
   col += vec3(uColorWave * 0.5) * vWave;
 
-  // 4. Soft travelling bands (craft residual — kept very quiet by default)
-  float radial = shoreDist * uBandScale - uTime * uBandSpeed;
+  // 4. Soft travelling bands — world-space only (shoreDist phase = hex iso rings)
+  float radial = length(vWorldPos.xz) * uBandScale * 0.35 - uTime * uBandSpeed;
   float bandDrift = dot(vWorldPos.xz, vec2(0.72, 0.35)) * uBandScale * 0.55 - uTime * uBandSpeed * 0.65;
   float bands =
     softBand(radial) * 0.55 +
@@ -499,6 +484,7 @@ export class WaterSurface {
         uHexCenters: { value: this.hexCenters },
         uHexCount: { value: 0 },
         uHexApothem: { value: HEX_SIZE * Math.sqrt(3) * 0.5 },
+        uIslandRadius: { value: islandHexApothem(2, HEX_SIZE) },
       },
       transparent: true,
       depthWrite: true,
@@ -614,13 +600,20 @@ export class WaterSurface {
 
   setLandHexes(centers: { x: number; z: number }[], tileRadius = HEX_SIZE): void {
     const count = Math.min(centers.length, WATER_MAX_HEXES);
+    const tileApothem = tileRadius * Math.sqrt(3) * 0.5;
+    let islandR = tileApothem;
     for (let i = 0; i < WATER_MAX_HEXES; i++) {
-      if (i < count) this.hexCenters[i].set(centers[i].x, centers[i].z);
-      else this.hexCenters[i].set(0, 0);
+      if (i < count) {
+        this.hexCenters[i].set(centers[i].x, centers[i].z);
+        islandR = Math.max(islandR, Math.hypot(centers[i].x, centers[i].z) + tileApothem);
+      } else {
+        this.hexCenters[i].set(0, 0);
+      }
     }
     this.material.uniforms.uHexCount.value = count;
-    this.material.uniforms.uHexApothem.value = tileRadius * Math.sqrt(3) * 0.5;
+    this.material.uniforms.uHexApothem.value = tileApothem;
     this.material.uniforms.uHexCenters.value = this.hexCenters;
+    this.material.uniforms.uIslandRadius.value = islandR;
   }
 
   resize(rings: number): void {
@@ -638,6 +631,7 @@ export class WaterSurface {
     this.mesh.geometry = geom;
     old.dispose();
     this.material.uniforms.uSeaRadius.value = radius * 0.94;
+    this.material.uniforms.uIslandRadius.value = apothem;
   }
 
   /**
