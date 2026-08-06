@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { HEX_SIZE, axialToWorld } from '../game/board';
 import type { BoardState, PlayerId, Terrain } from '../game/types';
-import { GrassField } from './grass';
 import {
   STYLE,
   STYLIZED_PLAYER,
@@ -127,7 +126,6 @@ export class BoardView {
   private harborSprites: THREE.Sprite[] = [];
   private propsGroup = new THREE.Group();
   private pickables: THREE.Object3D[] = [];
-  private grass = new GrassField();
   private water = new WaterSurface();
   private tweens = new TweenPlayer();
 
@@ -157,7 +155,6 @@ export class BoardView {
     this.root.add(this.harborGroup);
     this.root.add(this.propsGroup);
     this.root.add(this.robber);
-    this.root.add(this.grass.group);
   }
 
   getPickables(): THREE.Object3D[] {
@@ -187,7 +184,6 @@ export class BoardView {
   update(time: number, dt = 1 / 60): void {
     this.elapsed = time;
     this.tweens.update(dt);
-    this.grass.update(time);
     this.water.update(time);
     this.updateHighlightFade(dt);
     this.updateHoverAndPulse(dt);
@@ -277,12 +273,9 @@ export class BoardView {
     geom.computeVertexNormals();
     const rimGeom = hexRimGeometry(tileRadius * 0.9, tileRadius * 0.985);
 
-    const grassPatches: { x: number; z: number; y: number }[] = [];
-
     for (const hex of board.hexes.values()) {
       const { x, z } = axialToWorld(hex.q, hex.r);
       const terrain = hex.terrain as Terrain;
-      const isPasture = terrain === 'sheep';
 
       const mat = toonMat(STYLIZED_TERRAIN[terrain]);
       const mesh = new THREE.Mesh(geom, mat);
@@ -319,13 +312,8 @@ export class BoardView {
 
       this.addTerrainProps(terrain, x, z, hex.id);
 
-      if (isPasture) {
-        grassPatches.push({ x, z, y: TILE_HEIGHT + 0.005 });
-      }
-
       if (hex.number !== null) {
-        // Tiny diorama grass — tokens barely need lift
-        numberRestY = TILE_HEIGHT + (isPasture ? 0.08 : 0.04);
+        numberRestY = TILE_HEIGHT + 0.04;
         numberToken = new THREE.Mesh(
           new THREE.CircleGeometry(0.3, 6),
           new THREE.MeshBasicMaterial({ map: numberTexture(hex.number), transparent: true }),
@@ -345,10 +333,6 @@ export class BoardView {
         numberRestY,
       });
     }
-
-    // Dense fine grass — many tiny blades to read as meadow texture
-    const bladesPerHex = board.rings <= 2 ? 900 : board.rings === 3 ? 650 : 450;
-    this.grass.build(grassPatches, bladesPerHex);
 
     for (const v of board.vertices.values()) {
       const m = new THREE.Mesh(
@@ -447,7 +431,84 @@ export class BoardView {
       cactus.position.set(x + 0.25, y, z - 0.15);
       cactus.castShadow = true;
       this.propsGroup.add(cactus);
+    } else if (terrain === 'sheep') {
+      // Classic Enhanced pasture: tiny sheep + short fences on soft green ground
+      const sheepCount = 3 + Math.floor(rand() * 3);
+      for (let i = 0; i < sheepCount; i++) {
+        const sheep = this.makeSheep();
+        const a = rand() * Math.PI * 2;
+        const d = 0.28 + rand() * 0.42;
+        sheep.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
+        sheep.rotation.y = rand() * Math.PI * 2;
+        sheep.scale.setScalar(0.85 + rand() * 0.3);
+        this.propsGroup.add(sheep);
+      }
+
+      const fenceCount = 1 + Math.floor(rand() * 2);
+      for (let i = 0; i < fenceCount; i++) {
+        const fence = this.makeFence();
+        const a = rand() * Math.PI * 2;
+        const d = 0.55 + rand() * 0.18;
+        fence.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
+        fence.rotation.y = a + Math.PI * 0.5;
+        this.propsGroup.add(fence);
+      }
+
+      if (rand() > 0.55) {
+        const tree = this.makeTree(0.38 + rand() * 0.12);
+        const a = rand() * Math.PI * 2;
+        const d = 0.35 + rand() * 0.3;
+        tree.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
+        tree.rotation.y = rand() * Math.PI;
+        this.propsGroup.add(tree);
+      }
     }
+  }
+
+  /** Tiny low-poly sheep for Classic Enhanced pasture hexes. */
+  private makeSheep(): THREE.Object3D {
+    const g = new THREE.Group();
+    const wool = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.075, 0.07), toonMat(0xf4f0e6));
+    wool.position.y = 0.055;
+    wool.castShadow = true;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.035, 0.04), toonMat(0xe8e0d4));
+    head.position.set(0.055, 0.06, 0);
+    head.castShadow = true;
+    const legGeo = new THREE.BoxGeometry(0.015, 0.03, 0.015);
+    const legMat = toonMat(0x5c4a3a);
+    const legs: [number, number][] = [
+      [-0.03, 0.02],
+      [-0.03, -0.02],
+      [0.03, 0.02],
+      [0.03, -0.02],
+    ];
+    for (const [lx, lz] of legs) {
+      const leg = new THREE.Mesh(legGeo, legMat);
+      leg.position.set(lx, 0.015, lz);
+      g.add(leg);
+    }
+    g.add(wool, head);
+    return g;
+  }
+
+  /** Short wooden fence segment for pasture hexes. */
+  private makeFence(): THREE.Object3D {
+    const g = new THREE.Group();
+    const postMat = toonMat(STYLE.woodTrim);
+    const postGeo = new THREE.BoxGeometry(0.025, 0.1, 0.025);
+    for (const px of [-0.09, 0.09]) {
+      const post = new THREE.Mesh(postGeo, postMat);
+      post.position.set(px, 0.05, 0);
+      post.castShadow = true;
+      g.add(post);
+    }
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.018), postMat);
+    rail.position.set(0, 0.07, 0);
+    rail.castShadow = true;
+    const rail2 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.018, 0.016), postMat);
+    rail2.position.set(0, 0.04, 0);
+    g.add(rail, rail2);
+    return g;
   }
 
   private makeTree(scale: number): THREE.Object3D {
@@ -894,7 +955,6 @@ export class BoardView {
 
   private clearDynamic(): void {
     this.tweens.clear();
-    this.grass.dispose();
     while (this.root.children.length) this.root.remove(this.root.children[0]);
     this.hexMeshes.clear();
     this.hexVisuals.clear();
@@ -917,7 +977,6 @@ export class BoardView {
     this.root.add(this.harborGroup);
     this.root.add(this.propsGroup);
     this.root.add(this.robber);
-    this.root.add(this.grass.group);
   }
 }
 
