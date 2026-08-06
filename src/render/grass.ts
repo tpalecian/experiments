@@ -3,95 +3,129 @@ import { HEX_SIZE } from '../game/board';
 import { STYLIZED_TERRAIN } from './style';
 
 /**
- * Folio-inspired pasture grass (bruno simon folio-2025 Grass.js).
+ * Exact Folio grass (bruno simon folio-2025 Grass.js) — WebGL port.
  *
- * Keeps Folio’s soft light meadow recipe — triangular blades, tip-brighter
- * terrain color, tip-only wind, height randomness — on sheep hexes.
+ * Faithful to Folio:
+ * - one triangle per blade (tip / left / right bladeShape)
+ * - camera billboard: atan(dz, dx) − π/2 + rotate around blade xz
+ * - tipness wind × height × 2
+ * - bladeWidth 0.1, bladeHeight 0.6, heightRandomness 0.6
+ * - color = terrain, normal = (0,1,0), shadow = tipness.oneMinus()
  *
- * Pure camera-billboards collapse to dark edges under our tabletop camera,
- * so blades use random yaw + a crossed Folio triangle pair instead.
+ * WebGPU/TSL rewritten as GLSL. Hex-bounded on sheep (no camera-wrap grid /
+ * terrain mask — those need Folio’s Terrain/View systems).
  */
 
-const BLADE_WIDTH = 0.055;
-const BLADE_HEIGHT = 0.2;
-const HEIGHT_RANDOMNESS = 0.6;
+const BLADE_WIDTH = 0.1;
+const BLADE_HEIGHT = 0.6;
+const BLADE_HEIGHT_RANDOMNESS = 0.6;
 const SQRT3 = Math.sqrt(3);
 
-const sheepGreen = new THREE.Color(STYLIZED_TERRAIN.sheep);
+const terrainColor = new THREE.Color(STYLIZED_TERRAIN.sheep);
 
 const grassVertexShader = /* glsl */ `
-attribute float aPhase;
-attribute float aTint;
-attribute vec3 aOffset;
-attribute float aYaw;
-attribute float aHeightRand;
+// Unit Folio bladeShape as mesh position: tip (0,1,0), left (1,0,0), right (-1,0,0)
+attribute float aHeightRandomness;
+attribute vec2 aBladeXZ;
 
 uniform float uTime;
-uniform float uWindStrength;
-uniform float uWindSpeed;
 uniform float uBladeWidth;
 uniform float uBladeHeight;
-uniform float uHeightRandomness;
+uniform float uBladeHeightRandomness;
+uniform float uWindStrength;
+uniform vec2 uWindDirection;
+uniform float uGroundY;
 
 varying float vTipness;
-varying float vTint;
+varying float vTerrainGrass;
+
+vec2 rotateUV(vec2 uv, float rotation, vec2 center) {
+  // Exact three/tsl rotateUV used by Folio Grass.js
+  uv -= center;
+  float s = sin(rotation);
+  float c = cos(rotation);
+  return center + vec2(c * uv.x + s * uv.y, c * uv.y - s * uv.x);
+}
 
 void main() {
+  // Folio tipness: tip vertex has y=1
   float tipness = step(0.5, position.y);
   vTipness = tipness;
-  vTint = aTint;
+  vTerrainGrass = 1.0;
+
+  vec3 position3 = vec3(aBladeXZ.x, uGroundY, aBladeXZ.y);
+  vec2 bladePosition = position3.xz;
+
+  // Folio: heightVariation = perlin.r + 0.5  → ~0.5..1.5
+  float n = sin(bladePosition.x * 1.284 + bladePosition.y * 1.187) * 0.5 + 0.5;
+  float heightVariation = n + 0.5;
 
   float height = uBladeHeight
-    * (uHeightRandomness * aHeightRand + (1.0 - uHeightRandomness));
-  height *= 0.78 + 0.32 * sin(aOffset.x * 3.05 + aOffset.z * 2.55);
+    * (uBladeHeightRandomness * aHeightRandomness + (1.0 - uBladeHeightRandomness))
+    * heightVariation
+    * vTerrainGrass;
 
+  // Folio shape = bladeShape * (width, height)
   vec3 shape = vec3(
-    position.x * uBladeWidth,
+    position.x * uBladeWidth * vTerrainGrass,
     position.y * height,
-    position.z * uBladeWidth
+    0.0
   );
 
-  float s = sin(aYaw);
-  float c = cos(aYaw);
-  vec3 local = vec3(
-    shape.x * c - shape.z * s,
-    shape.y,
-    shape.x * s + shape.z * c
-  );
+  vec3 vertexPosition = position3 + shape;
 
-  float windWave = sin(uTime * uWindSpeed + aPhase + aOffset.x * 1.7 + aOffset.z * 1.3)
-                 + 0.45 * sin(uTime * uWindSpeed * 1.6 + aPhase * 1.25 + aOffset.z * 2.1);
-  float sway = windWave * uWindStrength * tipness * height * 2.0;
-  local.x += sway;
-  local.z += sway * 0.55;
+  // Folio: atan(z - cam.z, x - cam.x) - PI/2, rotateUV around blade xz
+  float angleToCamera = atan(position3.z - cameraPosition.z, position3.x - cameraPosition.x) - 1.5707963267948966;
+  vec2 rotated = rotateUV(vertexPosition.xz, angleToCamera, position3.xz);
+  vertexPosition.x = rotated.x;
+  vertexPosition.z = rotated.y;
 
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(local + aOffset, 1.0);
+  // Folio wind.offset * tipness * height * 2
+  float t = uTime * 0.1;
+  vec2 remapped = bladePosition * 0.5;
+  float noise1 = sin(dot(remapped, vec2(1.7, 2.1)) + dot(uWindDirection, vec2(t * 8.0))) * 0.5;
+  float noise2 = sin(dot(remapped, vec2(0.9, 1.3)) + dot(uWindDirection, vec2(t * 1.6))) * 0.5;
+  vec2 wind = uWindDirection * (noise1 + noise2) * uWindStrength * tipness * height * 2.0;
+  vertexPosition.x += wind.x;
+  vertexPosition.z += wind.y;
+
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(vertexPosition, 1.0);
 }
 `;
 
 const grassFragmentShader = /* glsl */ `
 uniform vec3 uGrassColor;
-uniform vec3 uTipColor;
 uniform vec3 uAmbient;
 uniform vec3 uSunColor;
 uniform vec3 uSunDir;
+uniform vec3 uShadowTint;
 
 varying float vTipness;
-varying float vTint;
+varying float vTerrainGrass;
 
 void main() {
-  vec3 albedo = mix(uGrassColor, uTipColor, vTipness * 0.8 + vTint * 0.1);
-  // Folio normalNode = vec3(0,1,0) — soft ground lighting, not dark edge shading
+  vec3 baseColor = uGrassColor;
   float ndl = max(dot(vec3(0.0, 1.0, 0.0), normalize(uSunDir)), 0.0);
-  vec3 col = albedo * (uAmbient + uSunColor * ndl);
+  vec3 lit = baseColor * (uAmbient + uSunColor * ndl);
+
+  // Folio shadowNode: tipness.oneMinus() * terrainGrass
+  float tipnessShadowMix = (1.0 - vTipness) * vTerrainGrass;
+  vec3 shadowColor = baseColor * uShadowTint;
+  vec3 col = mix(lit, shadowColor, clamp(tipnessShadowMix, 0.0, 1.0) * 0.65);
+
   gl_FragColor = vec4(col, 1.0);
 }
 `;
 
-function createBladeGeometry(): THREE.BufferGeometry {
+/** Folio single triangle: tip, left, right */
+function createFolioBladeGeometry(): THREE.BufferGeometry {
   const positions = new Float32Array([
-    0, 1, 0, -1, 0, 0, 1, 0, 0,
-    0, 1, 0, 0, 0, -1, 0, 0, 1,
+    // tip
+    0, 1, 0,
+    // left
+    1, 0, 0,
+    // right
+    -1, 0, 0,
   ]);
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -102,7 +136,7 @@ function pointInHex(x: number, z: number, radius: number): boolean {
   const q = ((SQRT3 / 3) * x - (1 / 3) * z) / radius;
   const r = ((2 / 3) * z) / radius;
   const s = -q - r;
-  return Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) <= 0.84;
+  return Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) <= 0.78;
 }
 
 export interface GrassPatch {
@@ -118,95 +152,85 @@ export class GrassField {
   private geometry: THREE.InstancedBufferGeometry | null = null;
   private blade: THREE.BufferGeometry | null = null;
 
-  build(patches: GrassPatch[], bladesPerHex = 200): void {
+  build(patches: GrassPatch[], bladesPerHex = 120): void {
     this.dispose();
     if (patches.length === 0) return;
 
-    const maxBlades = patches.length * bladesPerHex;
-    const phases = new Float32Array(maxBlades);
-    const tints = new Float32Array(maxBlades);
-    const offsets = new Float32Array(maxBlades * 3);
-    const yaws = new Float32Array(maxBlades);
-    const heightRands = new Float32Array(maxBlades);
+    // Folio setGeometry grid (local per hex)
+    const subdiv = Math.max(8, Math.round(Math.sqrt(bladesPerHex)));
+    const maxBlades = patches.length * subdiv * subdiv;
+    const heightRandomness = new Float32Array(maxBlades);
+    const bladeXZ = new Float32Array(maxBlades * 2);
 
     let count = 0;
-    const radius = HEX_SIZE * 0.8;
-    for (const patch of patches) {
-      let placed = 0;
-      let attempts = 0;
-      while (placed < bladesPerHex && attempts < bladesPerHex * 14) {
-        attempts++;
-        const lx = (Math.random() * 2 - 1) * radius;
-        const lz = (Math.random() * 2 - 1) * radius;
-        if (!pointInHex(lx, lz, HEX_SIZE)) continue;
-        if (lx * lx + lz * lz < 0.15 * 0.15) continue;
+    const extent = HEX_SIZE * 1.5;
+    const fragmentSize = extent / subdiv;
+    let groundY = patches[0].y;
 
-        phases[count] = Math.random() * Math.PI * 2;
-        tints[count] = Math.random();
-        offsets[count * 3] = patch.x + lx;
-        offsets[count * 3 + 1] = patch.y;
-        offsets[count * 3 + 2] = patch.z + lz;
-        yaws[count] = Math.random() * Math.PI * 2;
-        heightRands[count] = Math.random();
-        count++;
-        placed++;
+    for (const patch of patches) {
+      groundY = patch.y;
+      for (let iX = 0; iX < subdiv; iX++) {
+        const fragmentX = (iX / subdiv - 0.5) * extent + fragmentSize * 0.5;
+        for (let iZ = 0; iZ < subdiv; iZ++) {
+          const fragmentZ = (iZ / subdiv - 0.5) * extent + fragmentSize * 0.5;
+          const lx = fragmentX + (Math.random() - 0.5) * fragmentSize;
+          const lz = fragmentZ + (Math.random() - 0.5) * fragmentSize;
+          if (!pointInHex(lx, lz, HEX_SIZE)) continue;
+          if (lx * lx + lz * lz < 0.18 * 0.18) continue;
+
+          bladeXZ[count * 2] = patch.x + lx;
+          bladeXZ[count * 2 + 1] = patch.z + lz;
+          heightRandomness[count] = Math.random();
+          count++;
+        }
       }
     }
 
     if (count === 0) return;
 
-    this.blade = createBladeGeometry();
+    this.blade = createFolioBladeGeometry();
     this.geometry = new THREE.InstancedBufferGeometry();
     this.geometry.index = this.blade.index;
     this.geometry.setAttribute('position', this.blade.getAttribute('position')!);
     this.geometry.instanceCount = count;
     this.geometry.setAttribute(
-      'aPhase',
-      new THREE.InstancedBufferAttribute(phases.subarray(0, count), 1),
+      'aBladeXZ',
+      new THREE.InstancedBufferAttribute(bladeXZ.subarray(0, count * 2), 2),
     );
     this.geometry.setAttribute(
-      'aTint',
-      new THREE.InstancedBufferAttribute(tints.subarray(0, count), 1),
-    );
-    this.geometry.setAttribute(
-      'aOffset',
-      new THREE.InstancedBufferAttribute(offsets.subarray(0, count * 3), 3),
-    );
-    this.geometry.setAttribute(
-      'aYaw',
-      new THREE.InstancedBufferAttribute(yaws.subarray(0, count), 1),
-    );
-    this.geometry.setAttribute(
-      'aHeightRand',
-      new THREE.InstancedBufferAttribute(heightRands.subarray(0, count), 1),
+      'aHeightRandomness',
+      new THREE.InstancedBufferAttribute(heightRandomness.subarray(0, count), 1),
     );
 
-    // Same sheep hue as Folio samples terrain; tips lighter; Y-up lit like ground
-    const grass = sheepGreen.clone();
-    const tip = sheepGreen.clone().lerp(new THREE.Color(0xf5ffe0), 0.55);
+    const windAngle = Math.PI * 0.6;
 
     this.material = new THREE.ShaderMaterial({
       vertexShader: grassVertexShader,
       fragmentShader: grassFragmentShader,
       uniforms: {
         uTime: { value: 0 },
-        uWindStrength: { value: 0.07 },
-        uWindSpeed: { value: 1.55 },
         uBladeWidth: { value: BLADE_WIDTH },
         uBladeHeight: { value: BLADE_HEIGHT },
-        uHeightRandomness: { value: HEIGHT_RANDOMNESS },
-        uGrassColor: { value: grass },
-        uTipColor: { value: tip },
-        uAmbient: { value: new THREE.Color(0xffe6c8).multiplyScalar(0.7) },
-        uSunColor: { value: new THREE.Color(0xfff2d6).multiplyScalar(0.85) },
+        uBladeHeightRandomness: { value: BLADE_HEIGHT_RANDOMNESS },
+        uWindStrength: { value: 0.5 },
+        uWindDirection: {
+          value: new THREE.Vector2(Math.sin(windAngle), Math.cos(windAngle)),
+        },
+        uGroundY: { value: groundY },
+        uGrassColor: { value: terrainColor.clone() },
+        uAmbient: { value: new THREE.Color(0xffe6c8).multiplyScalar(0.8) },
+        uSunColor: { value: new THREE.Color(0xfff2d6).multiplyScalar(0.95) },
         uSunDir: { value: new THREE.Vector3(0.35, 0.9, 0.25).normalize() },
+        uShadowTint: { value: new THREE.Color(0x5c7348) },
       },
-      side: THREE.DoubleSide,
+      // Folio MeshDefaultMaterial defaults to FrontSide
+      side: THREE.FrontSide,
       depthWrite: true,
     });
 
     this.mesh = new THREE.Mesh(this.geometry, this.material);
     this.mesh.frustumCulled = false;
+    this.mesh.receiveShadow = true;
     this.group.add(this.mesh);
   }
 
