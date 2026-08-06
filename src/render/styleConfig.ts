@@ -171,10 +171,10 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterReflectStrength: 0.48,
   waterReflectDistort: 0.022,
   waterReflectBlur: 0.018,
-  // Open-water drift off by default (craft knob still available)
-  waterRippleFreq: 0.9,
-  waterRippleSpeed: 0.28,
-  waterRippleIntensity: 0.7,
+  // Open-water drift off by default; shore ripples use Bruno proximity flow
+  waterRippleFreq: 0.95,
+  waterRippleSpeed: 0.22,
+  waterRippleIntensity: 0.75,
   waterDriftIntensity: 0,
   waterDriftScale: 0.16,
   waterDriftSpeed: 0.18,
@@ -294,7 +294,7 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-const STORAGE_KEY = 'catan-style-config-v19';
+const STORAGE_KEY = 'catan-style-config-v20';
 
 export function loadStyleConfig(): StyleConfig {
   try {
