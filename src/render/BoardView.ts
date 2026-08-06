@@ -297,12 +297,13 @@ export class BoardView {
       let numberToken: THREE.Mesh | null = null;
       let numberRestY = TILE_HEIGHT + 0.04;
 
-      // Foundation under each hex — deep dirt pedestal so coasts never float over open water.
+      // Foundation under each hex — tucked under the tile so it doesn't
+      // draw a hard dirt outline through the soft water shore fade.
       const skirt = new THREE.Mesh(
-        new THREE.CylinderGeometry(HEX_SIZE * 0.94, HEX_SIZE * 1.08, 0.22, 6),
+        new THREE.CylinderGeometry(HEX_SIZE * 0.86, HEX_SIZE * 0.96, 0.26, 6),
         toonMat(STYLE.dirt),
       );
-      skirt.position.set(x, -0.1, z);
+      skirt.position.set(x, -0.14, z);
       skirt.receiveShadow = true;
       this.propsGroup.add(skirt);
 

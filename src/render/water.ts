@@ -224,10 +224,10 @@ void main() {
   float shore = max(uShoreWidth, 0.001);
   float deepSpan = max(uDeepFade, 0.001);
 
-  // Soft land cut — wide alpha fade across the hex edge (no hard discard mask)
+  // Soft land cut — wide alpha fade so the coast blends into water (no hard mask)
   float fade = max(uShoreFade, 0.08);
-  // Mostly outside the tile so the soft band is visible against open water
-  float landAlpha = smoothstep(-fade * 0.15, fade * 1.25, shoreDist);
+  // Start fading outside the tile wall so the soft band is visible
+  float landAlpha = smoothstep(fade * 0.05, fade * 1.6, shoreDist);
   landAlpha = landAlpha * landAlpha * (3.0 - 2.0 * landAlpha); // smootherstep ease
   if (landAlpha < 0.015) discard;
 
