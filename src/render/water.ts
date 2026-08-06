@@ -14,7 +14,7 @@ export const WATER_MAX_HEXES = 64;
  *   - frosted mirrored scene (hash-blur stand-in via multi-tap)
  *   - hex-SDF shore / discard (keep Catan tiles readable)
  *   - thin glowing shore lip flush to hex coast (Bruno `shoreNode`)
- *   - sparse thin arc ripples on near-shore proximity (Bruno `ripplesNode`)
+ *   - sparse organic shore foam patches (world-space noise, not hex SDF contours)
  *   - quiet open-water brightness drift (craft; default off)
  *   - depth colour underneath (navy → cyan shelf)
  *
@@ -265,8 +265,8 @@ void main() {
   col = mix(col, uLagoon, max(wave, 0.0) * uColorWave * 1.4);
   col += vec3(uColorWave * 0.5) * vWave;
 
-  // 4. Soft travelling bands (craft residual — kept very quiet by default)
-  float radial = shoreDist * uBandScale - uTime * uBandSpeed;
+  // 4. Soft travelling bands — world-space only (never periodic in hex SDF distance)
+  float radial = length(vWorldPos.xz) * uBandScale * 0.35 - uTime * uBandSpeed;
   float bandDrift = dot(vWorldPos.xz, vec2(0.72, 0.35)) * uBandScale * 0.55 - uTime * uBandSpeed * 0.65;
   float bands =
     softBand(radial) * 0.55 +
@@ -339,35 +339,18 @@ void main() {
   float driftWaves = max(driftPatch * 0.7, driftPatch2 * 0.35);
   col += vec3(0.04) * driftWaves * openWater * uDriftIntensity * keep;
 
-  // 8. Bruno ripplesNode — iso-contours of the hex shoreline SDF
-  // Those smooth outer "bubble" arcs are distance-field contours: near the
-  // hexes they hug tile edges; farther out, min(hex SDF) rounds into arcs.
-  // Isolated crescents are the same contour, broken by noise gates.
-  //
-  // Direction: prox - time → crests move toward land (prox↑ / shoreDist↓).
-  // (prox + time was the outward flow visible in screenshots.)
-  float prox = clamp(1.0 - shoreDist / 3.2, 0.0, 1.0);
-  float slopeFreq = max(uRippleFreq, 0.05) * 6.5;
-  float timed = prox - uTime * uRippleSpeed * 0.45;
-  float band = timed * slopeFreq;
-  float bandIdx = floor(band);
-  float bandFrac = fract(band);
-
-  vec2 coastUv = vWorldPos.xz * 0.28;
-  float n1 = valueNoise(coastUv + vec2(bandIdx * 1.7, bandIdx * 0.9));
-  float n2 = valueNoise(coastUv * 1.9 + vec2(-bandIdx * 0.6, bandIdx * 2.1));
-  float n3 = valueNoise(vWorldPos.xz * 0.08 + vec2(bandIdx * 3.1, -2.4));
-
-  // Bruno: fract - remap proximity attenuation + noise
-  float atten = mix(1.15, 0.05, prox);
-  float rippleField = bandFrac - atten + n1 * 0.35 + n2 * 0.15;
-  float accept = step(0.55, rippleField);
-  float arcGate = step(0.62, n1 * 0.55 + n2 * 0.45);
-  float crest = 1.0 - abs(bandFrac - mix(0.55, 0.82, n3));
-  crest = pow(max(crest, 0.0), 5.5);
-  // Keep crests closer to land so they still follow hex edges (less outer rounding)
-  float nearShore = smoothstep(0.22, 0.5, prox) * (1.0 - smoothstep(0.82, 0.98, prox));
-  float ripple = accept * arcGate * crest * nearShore * clamp(uRippleIntensity, 0.0, 1.2);
+  // 8. Sparse irregular shore ripples — organic world-space patches (no hex SDF iso-contours)
+  float nearShore = 1.0 - smoothstep(0.0, 2.6, shoreDist);
+  vec2 rippleDrift = vec2(uTime * uRippleSpeed * 0.35, -uTime * uRippleSpeed * 0.28);
+  vec2 rippleBase = vWorldPos.xz * uRippleFreq * 0.42 + rippleDrift;
+  float n1 = valueNoise(rippleBase);
+  float n2 = valueNoise(rippleBase * 1.65 + vec2(4.2, 1.8));
+  float n3 = valueNoise(vWorldPos.xz * (uRippleFreq * 1.1) + vec2(uTime * 0.05, -uTime * 0.04));
+  float crest = smoothstep(0.48, 0.68, n1) * (1.0 - smoothstep(0.58, 0.82, n2));
+  crest = pow(max(crest, 0.0), 1.8);
+  float blotchForm = smoothstep(0.38, 0.62, n1) * smoothstep(0.25, 0.55, n3);
+  float sparse = step(0.55, n1 * 0.5 + n2 * 0.3 + n3 * 0.2);
+  float ripple = crest * blotchForm * sparse * nearShore * clamp(uRippleIntensity, 0.0, 1.2);
 
   // Shore foam lip flush to hex coast
   float foamWidth = max(uFoamWidth, 0.04);
@@ -375,7 +358,8 @@ void main() {
   shoreCore = pow(max(shoreCore, 0.0), 2.8);
   float shoreHalo = 1.0 - smoothstep(0.0, foamWidth * 1.1, shoreDist);
   shoreHalo = pow(max(shoreHalo, 0.0), 1.8);
-  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 2.4 + wave * 2.0));
+  float foamPhase = dot(vWorldPos.xz, vec2(0.71, 0.42)) * 0.55 + wave * 2.0;
+  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + foamPhase));
   float shoreFoam = shoreCore * uShoreFoam * foamPulse;
   float shoreGlowRim = shoreHalo * uShoreGlow * 1.6;
 
