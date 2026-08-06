@@ -324,8 +324,8 @@ export class BoardView {
       }
 
       if (hex.number !== null) {
-        // Folio blades are 0.6 tall — keep tokens above tips
-        numberRestY = TILE_HEIGHT + (isPasture ? 0.68 : 0.04);
+        // Smaller Folio blades (~0.14) — tokens sit just above tips
+        numberRestY = TILE_HEIGHT + (isPasture ? 0.18 : 0.04);
         numberToken = new THREE.Mesh(
           new THREE.CircleGeometry(0.3, 6),
           new THREE.MeshBasicMaterial({ map: numberTexture(hex.number), transparent: true }),
@@ -346,8 +346,8 @@ export class BoardView {
       });
     }
 
-    // Folio fragment density on one hex (~39 blades / unit² × ~2.6 area)
-    const bladesPerHex = board.rings <= 2 ? 100 : board.rings === 3 ? 80 : 60;
+    // Random tuft patterns — enough samples for clumpy meadow coverage
+    const bladesPerHex = board.rings <= 2 ? 220 : board.rings === 3 ? 160 : 110;
     this.grass.build(grassPatches, bladesPerHex);
 
     for (const v of board.vertices.values()) {
