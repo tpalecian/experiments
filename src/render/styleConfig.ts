@@ -75,6 +75,18 @@ export interface StyleConfig {
   waterCausticScale: number;
   waterCausticSpeed: number;
 
+  // Water — Bruno-like reflection + shore ripples
+  /** How strongly the mirrored scene shows through (0–1). */
+  waterReflectStrength: number;
+  /** UV wobble on the reflection. */
+  waterReflectDistort: number;
+  /** Multi-tap blur radius in UV space. */
+  waterReflectBlur: number;
+  /** Marching shore ripple frequency (hex SDF). */
+  waterRippleFreq: number;
+  waterRippleSpeed: number;
+  waterRippleIntensity: number;
+
   // Lighting (craft reference — atmosphere owns live values)
   exposure: number;
   sunIntensity: number;
@@ -133,7 +145,7 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterWaveSpeed: 1.15,
   waterSegments: 80,
 
-  waterBandIntensity: 0.11,
+  waterBandIntensity: 0.04,
   waterBandScale: 0.42,
   waterBandSpeed: 0.28,
   waterBandSoftness: 0.55,
@@ -148,9 +160,16 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterFoamPulse: 0.22,
   waterFoamPulseSpeed: 0.7,
 
-  waterCausticIntensity: 0.08,
+  waterCausticIntensity: 0.05,
   waterCausticScale: 0.55,
   waterCausticSpeed: 0.35,
+
+  waterReflectStrength: 0.72,
+  waterReflectDistort: 0.035,
+  waterReflectBlur: 0.01,
+  waterRippleFreq: 2.4,
+  waterRippleSpeed: 0.4,
+  waterRippleIntensity: 0.9,
 
   exposure: 1.15,
   sunIntensity: 1.45,
@@ -258,7 +277,7 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-const STORAGE_KEY = 'catan-style-config-v6';
+const STORAGE_KEY = 'catan-style-config-v7';
 
 export function loadStyleConfig(): StyleConfig {
   try {

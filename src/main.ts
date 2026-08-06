@@ -315,6 +315,7 @@ function animate(): void {
   applyAtmosphereFrame();
   boardView.update(t, dt);
   sky.update(t);
+  boardView.renderWaterReflection(renderer, scene, camera);
   renderer.render(scene, camera);
 }
 animate();

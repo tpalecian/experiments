@@ -153,6 +153,12 @@ const CATEGORIES: CategoryDef[] = [
       { key: 'waterCausticIntensity', label: 'Caustics', kind: 'range', min: 0, max: 0.25, step: 0.01 },
       { key: 'waterCausticScale', label: 'Caustic scale', kind: 'range', min: 0.15, max: 1.5, step: 0.05 },
       { key: 'waterCausticSpeed', label: 'Caustic speed', kind: 'range', min: 0, max: 1.2, step: 0.05 },
+      { key: 'waterReflectStrength', label: 'Reflection', kind: 'range', min: 0, max: 1, step: 0.02, tags: ['bruno', 'mirror'] },
+      { key: 'waterReflectDistort', label: 'Reflect distort', kind: 'range', min: 0, max: 0.12, step: 0.005, tags: ['bruno'] },
+      { key: 'waterReflectBlur', label: 'Reflect blur', kind: 'range', min: 0, max: 0.04, step: 0.001, tags: ['bruno'] },
+      { key: 'waterRippleFreq', label: 'Shore ripple freq', kind: 'range', min: 0.5, max: 6, step: 0.1, tags: ['bruno', 'ripple'] },
+      { key: 'waterRippleSpeed', label: 'Shore ripple speed', kind: 'range', min: 0, max: 1.5, step: 0.05, tags: ['bruno'] },
+      { key: 'waterRippleIntensity', label: 'Shore ripples', kind: 'range', min: 0, max: 1.5, step: 0.05, tags: ['bruno'] },
     ],
   },
   {

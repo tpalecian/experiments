@@ -213,6 +213,15 @@ export class BoardView {
     };
   }
 
+  /** Bruno-like mirrored reflection pass — call before the main render. */
+  renderWaterReflection(
+    renderer: THREE.WebGLRenderer,
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+  ): void {
+    this.water.renderReflection(renderer, scene, camera);
+  }
+
   applyAtmosphere(atm: AtmosphereSnapshot): void {
     this.water.applyAtmosphere(atm);
     this.applyBoardTint(atm);
