@@ -8,16 +8,22 @@ import { DEFAULT_STYLE_CONFIG } from './styleConfig';
 export const WATER_MAX_HEXES = 64;
 
 /**
- * Stylized tropical low-poly water — calm, painterly, aerial-friendly.
- * Shoreline is the SDF union of every land hex so foam/depth hug tile edges.
- * Layers: depth gradient → shoreline → sine swells → wave bands →
- * soft Fresnel → satin specular → caustics → beach foam → horizon alpha fade.
- * Geometry is a large disc that soft-dissolves into the sky so no hard sea rim.
+ * Bruno Simon–inspired reflective water for the hex board (WebGL).
+ *
+ * Bruno's folio uses WebGPU/TSL: flat plane + shore ripples + blurred
+ * viewport sampling. We approximate that here with:
+ *   - mirrored scene reflection RT (distorted + multi-tap blur)
+ *   - hex-SDF shore / discard (keep Catan tiles readable)
+ *   - marching white shore ripples (Bruno-style bands)
+ *   - soft tropical depth colour underneath the reflection
+ *
+ * Board meshes never regenerate for look changes.
  */
 const waterVertexShader = /* glsl */ `
 uniform float uTime;
 uniform float uWaveHeight;
 uniform float uWaveSpeed;
+uniform mat4 uTextureMatrix;
 uniform vec2 uHexCenters[${WATER_MAX_HEXES}];
 uniform int uHexCount;
 uniform float uHexApothem;
@@ -26,6 +32,7 @@ varying vec3 vWorldPos;
 varying vec3 vNormalW;
 varying vec3 vViewDir;
 varying float vWave;
+varying vec4 vReflectCoord;
 
 float sdHexagon(vec2 p, float r) {
   p = abs(p.yx);
@@ -69,13 +76,10 @@ void main() {
   float w = swell(world.xz, t);
   vec2 d = swellDeriv(world.xz, t);
 
-  // Flatten swell next to hex coasts so the sea never drops away under the tiles.
   float shore = shoreDistance(world.xz);
   float nearLand = 1.0 - smoothstep(0.0, 3.2, shore);
   float amp = uWaveHeight * (1.0 - nearLand * 0.97);
-  // Only gentle upward swell near shore — never dig under the board.
-  float displacement = mix(w * amp, abs(w) * amp * 0.2, nearLand);
-  // Keep the water surface from sinking below the hex bottoms near land.
+  float displacement = mix(w * amp, abs(w) * amp * 0.15, nearLand);
   displacement = mix(displacement, max(displacement, 0.0), nearLand);
 
   world.y += displacement;
@@ -85,6 +89,7 @@ void main() {
   vNormalW = normalize(mat3(modelMatrix) * n);
   vWorldPos = world.xyz;
   vViewDir = normalize(cameraPosition - world.xyz);
+  vReflectCoord = uTextureMatrix * world;
 
   gl_Position = projectionMatrix * viewMatrix * world;
 }
@@ -122,9 +127,16 @@ uniform float uColorWave;
 uniform float uCausticIntensity;
 uniform float uCausticScale;
 uniform float uCausticSpeed;
+uniform float uReflectStrength;
+uniform float uReflectDistort;
+uniform float uReflectBlur;
+uniform float uRippleFreq;
+uniform float uRippleSpeed;
+uniform float uRippleIntensity;
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
 uniform vec3 uSkyFresnel;
+uniform sampler2D tReflection;
 uniform vec2 uHexCenters[${WATER_MAX_HEXES}];
 uniform int uHexCount;
 uniform float uHexApothem;
@@ -133,8 +145,8 @@ varying vec3 vWorldPos;
 varying vec3 vNormalW;
 varying vec3 vViewDir;
 varying float vWave;
+varying vec4 vReflectCoord;
 
-// Pointy-top hex SDF (r = apothem / center-to-flat). Positive outside.
 float sdHexagon(vec2 p, float r) {
   p = abs(p.yx);
   vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
@@ -143,7 +155,6 @@ float sdHexagon(vec2 p, float r) {
   return length(p) * sign(p.y);
 }
 
-// Distance to the island coast = SDF union of every land tile.
 float shoreDistance(vec2 p) {
   float d = 1e5;
   for (int i = 0; i < ${WATER_MAX_HEXES}; i++) {
@@ -170,6 +181,24 @@ float softCaustic(vec2 p, float t) {
   return smoothstep(-0.15, 0.55, m);
 }
 
+// Cheap multi-tap blur of the mirrored scene (Bruno-like frosted reflection).
+vec3 sampleReflection(vec2 uv, float distortAmp) {
+  vec2 jitter = vec2(
+    sin(uTime * 0.7 + vWorldPos.x * 0.35 + vWorldPos.z * 0.22),
+    cos(uTime * 0.55 + vWorldPos.z * 0.4 - vWorldPos.x * 0.18)
+  ) * distortAmp;
+
+  float blur = max(uReflectBlur, 0.0);
+  vec3 sum = texture2D(tReflection, uv + jitter).rgb;
+  sum += texture2D(tReflection, uv + jitter + vec2( blur, 0.0)).rgb;
+  sum += texture2D(tReflection, uv + jitter + vec2(-blur, 0.0)).rgb;
+  sum += texture2D(tReflection, uv + jitter + vec2(0.0,  blur)).rgb;
+  sum += texture2D(tReflection, uv + jitter + vec2(0.0, -blur)).rgb;
+  sum += texture2D(tReflection, uv + jitter + vec2( blur,  blur) * 0.7).rgb;
+  sum += texture2D(tReflection, uv + jitter + vec2(-blur, -blur) * 0.7).rgb;
+  return sum / 7.0;
+}
+
 void main() {
   float shoreDist = shoreDistance(vWorldPos.xz);
   float shore = max(uShoreWidth, 0.001);
@@ -180,31 +209,32 @@ void main() {
 
   // 1. Depth gradient measured from actual tile coasts
   float d0 = 0.0;
-  float d1 = shore * 0.22;
-  float d2 = shore * 0.55;
-  float d3 = shore * 1.05;
-  float d4 = shore + deepSpan;
+  float d1 = shore * 0.35;
+  float d2 = shore * 0.75;
+  float d3 = shore;
+  float d4 = shore + deepSpan * 0.45;
+  float d5 = shore + deepSpan;
 
-  float tBeach = 1.0 - smoothstep(d0, d1, shoreDist);
+  float tShelf = 1.0 - smoothstep(d0, d1, shoreDist);
   float tShallow = smoothstep(d0, d1, shoreDist) * (1.0 - smoothstep(d1, d2, shoreDist));
   float tLagoon = smoothstep(d1, d2, shoreDist) * (1.0 - smoothstep(d2, d3, shoreDist));
   float tOcean = smoothstep(d2, d3, shoreDist) * (1.0 - smoothstep(d3, d4, shoreDist));
-  float tDeep = smoothstep(d3, d4, shoreDist);
+  float tDeep = smoothstep(d3, d5, shoreDist);
 
-  float wSum = tBeach + tShallow + tLagoon + tOcean + tDeep + 1e-5;
-  vec3 col =
-    (uBeachEdge * tBeach +
+  float wSum = max(tShelf + tShallow + tLagoon + tOcean + tDeep, 0.001);
+  vec3 col = (
+     uBeachEdge * tShelf +
      uShallow * tShallow +
      uLagoon * tLagoon +
      uOcean * tOcean +
      uDeepOcean * tDeep) / wSum;
 
-  // 2. Soft near-shore turquoise (no separate geometric halo)
+  // 2. Soft near-shore glow
   float shoreGlow = 1.0 - smoothstep(0.0, shore * 0.45, shoreDist);
   shoreGlow = pow(max(shoreGlow, 0.0), 1.6);
   col = mix(col, uShallow, shoreGlow * uShoreGlow);
 
-  // 3. Large sine-wave color motion — runs all the way to the hex edges
+  // 3. Gentle colour motion
   float wt = uTime * uWaveSpeed;
   float wave =
     sin(vWorldPos.x * 0.30 + wt * 0.15) +
@@ -215,7 +245,7 @@ void main() {
   col = mix(col, uLagoon, max(wave, 0.0) * uColorWave * 1.4);
   col += vec3(uColorWave * 0.5) * vWave;
 
-  // 4. Soft wave bands traveling toward shore — including right at the tiles
+  // 4. Soft travelling bands (craft residual)
   float radial = shoreDist * uBandScale - uTime * uBandSpeed;
   float drift = dot(vWorldPos.xz, vec2(0.72, 0.35)) * uBandScale * 0.55 - uTime * uBandSpeed * 0.65;
   float bands =
@@ -228,7 +258,6 @@ void main() {
   vec3 V = normalize(vViewDir);
   vec3 L = normalize(uSunDir);
 
-  // Horizon dissolve weight — computed early so lighting can't draw a bright rim.
   float seaR = max(uSeaRadius, 1.0);
   float soft = max(uEdgeSoft, seaR * 0.55);
   float radialDist = length(vWorldPos.xz);
@@ -249,17 +278,23 @@ void main() {
   haze = haze * haze * (3.0 - 2.0 * haze);
   float keep = 1.0 - haze;
 
-  // 5. Subtle Fresnel — tinted by sky atmosphere (killed toward the rim)
+  // 5. Bruno-like blurred reflection (projector UV + wobble + multi-tap)
+  vec2 ruv = vReflectCoord.xy / max(vReflectCoord.w, 0.0001);
   float fres = pow(1.0 - max(dot(N, V), 0.0), uFresnelPower);
-  fres *= uFresnelStrength * keep;
-  col = mix(col, uSkyFresnel, fres * 0.35);
+  float reflectAmt = clamp(uReflectStrength * (0.35 + fres * uFresnelStrength * 4.0), 0.0, 0.92) * keep;
+  if (ruv.x > 0.0 && ruv.x < 1.0 && ruv.y > 0.0 && ruv.y < 1.0) {
+    vec3 refl = sampleReflection(ruv, uReflectDistort * (0.6 + fres));
+    col = mix(col, refl, reflectAmt);
+  } else {
+    col = mix(col, uSkyFresnel, fres * uFresnelStrength * keep * 0.45);
+  }
 
-  // 6. Satin specular — no grazing hotspot line at the horizon
+  // 6. Satin specular
   vec3 H = normalize(L + V);
   float spec = pow(max(dot(N, H), 0.0), uSpecularPower);
   spec = smoothstep(0.0, 1.0, spec);
   spec *= 0.85 + 0.15 * wave;
-  col += uSunColor * spec * uSpecularIntensity * keep;
+  col += uSunColor * spec * uSpecularIntensity * keep * (1.0 - reflectAmt * 0.5);
 
   // 7. Soft caustics in shallow water
   float shallowMask = 1.0 - smoothstep(0.0, shore * 0.95, shoreDist);
@@ -267,15 +302,23 @@ void main() {
   float cau = softCaustic(vWorldPos.xz * uCausticScale, uTime * uCausticSpeed);
   col += mix(uBeachEdge, uShallow, 0.4) * cau * uCausticIntensity * shallowMask * keep;
 
-  // 8. Thin foam exactly where water meets each land hex edge
-  float foam = smoothstep(-uFoamWidth * 0.2, uFoamWidth * 0.15, shoreDist);
-  foam *= 1.0 - smoothstep(uFoamWidth * 0.2, uFoamWidth, shoreDist);
-  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 2.0 + wave * 2.5));
-  foam = pow(max(foam, 0.0), 1.15) * foamPulse * uShoreFoam;
-  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.85) * keep);
+  // 8. Bruno-style marching shore ripples (sharp white rings from hex SDF)
+  float rippleBase = shoreDist * uRippleFreq - uTime * uRippleSpeed;
+  float rippleBand = fract(rippleBase);
+  float rippleNoise = sin(vWorldPos.x * 1.7 + vWorldPos.z * 1.3 + uTime * 0.4) * 0.04;
+  float ripple = step(0.78 + rippleNoise, rippleBand) * (1.0 - step(0.92 + rippleNoise, rippleBand));
+  float rippleFade = 1.0 - smoothstep(0.05, 3.8, shoreDist);
+  ripple *= rippleFade * uRippleIntensity;
 
-  // 9. Dissolve into the live sky horizon (incl. bloom) so morning/evening/night match.
-  // Avoid mixing deep-ocean cyan here — that fringe is what reads as a TOD-dependent line.
+  // Hard white shore lip (Bruno shoreEdge)
+  float shoreEdge = 1.0 - smoothstep(0.0, max(uFoamWidth * 0.55, 0.08), shoreDist);
+  shoreEdge = pow(max(shoreEdge, 0.0), 1.35);
+
+  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 2.0 + wave * 2.5));
+  float foam = max(ripple, shoreEdge * uShoreFoam * foamPulse);
+  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.95) * keep);
+
+  // 9. Horizon dissolve
   vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);
   col = mix(col, fadeCol, haze);
   if (keep < 0.04) discard;
@@ -288,6 +331,11 @@ function emptyHexCenters(): THREE.Vector2[] {
   return Array.from({ length: WATER_MAX_HEXES }, () => new THREE.Vector2(0, 0));
 }
 
+function reflectionSize(): number {
+  if (typeof window === 'undefined') return 512;
+  return Math.min(window.devicePixelRatio, 2) > 1.25 ? 768 : 512;
+}
+
 export class WaterSurface {
   readonly mesh: THREE.Mesh;
   private material: THREE.ShaderMaterial;
@@ -297,8 +345,35 @@ export class WaterSurface {
   private readonly hexCenters = emptyHexCenters();
   private readonly tmpColor = new THREE.Color();
 
+  private readonly reflectionTarget: THREE.WebGLRenderTarget;
+  private readonly reflectionCamera = new THREE.PerspectiveCamera();
+  private readonly textureMatrix = new THREE.Matrix4();
+  private readonly reflectorPlane = new THREE.Plane();
+  private readonly normal = new THREE.Vector3();
+  private readonly reflectorWorldPosition = new THREE.Vector3();
+  private readonly cameraWorldPosition = new THREE.Vector3();
+  private readonly rotationMatrix = new THREE.Matrix4();
+  private readonly lookAtPosition = new THREE.Vector3(0, 0, -1);
+  private readonly clipPlane = new THREE.Vector4();
+  private readonly view = new THREE.Vector3();
+  private readonly target = new THREE.Vector3();
+  private readonly q = new THREE.Vector4();
+  private readonly clipBias = 0.003;
+  private reflecting = false;
+
   constructor(config?: StyleConfig) {
     if (config) this.config = { ...config };
+
+    const size = reflectionSize();
+    this.reflectionTarget = new THREE.WebGLRenderTarget(size, size, {
+      type: THREE.HalfFloatType,
+      samples: 0,
+      depthBuffer: true,
+    });
+    this.reflectionTarget.texture.generateMipmaps = false;
+    this.reflectionTarget.texture.minFilter = THREE.LinearFilter;
+    this.reflectionTarget.texture.magFilter = THREE.LinearFilter;
+
     this.material = new THREE.ShaderMaterial({
       vertexShader: waterVertexShader,
       fragmentShader: waterFragmentShader,
@@ -306,6 +381,8 @@ export class WaterSurface {
         uTime: { value: 0 },
         uWaveHeight: { value: this.config.waterWaveHeight },
         uWaveSpeed: { value: this.config.waterWaveSpeed },
+        uTextureMatrix: { value: this.textureMatrix },
+        tReflection: { value: this.reflectionTarget.texture },
         uDeepOcean: { value: new THREE.Color(this.config.waterDeepOcean) },
         uOcean: { value: new THREE.Color(this.config.waterOcean) },
         uLagoon: { value: new THREE.Color(this.config.waterLagoon) },
@@ -335,12 +412,17 @@ export class WaterSurface {
         uCausticIntensity: { value: this.config.waterCausticIntensity },
         uCausticScale: { value: this.config.waterCausticScale },
         uCausticSpeed: { value: this.config.waterCausticSpeed },
+        uReflectStrength: { value: this.config.waterReflectStrength },
+        uReflectDistort: { value: this.config.waterReflectDistort },
+        uReflectBlur: { value: this.config.waterReflectBlur },
+        uRippleFreq: { value: this.config.waterRippleFreq },
+        uRippleSpeed: { value: this.config.waterRippleSpeed },
+        uRippleIntensity: { value: this.config.waterRippleIntensity },
         uSunDir: { value: this.sunDir.clone() },
         uSunColor: { value: new THREE.Color('#fff6e8') },
         uSkyFresnel: { value: new THREE.Color(this.config.waterLagoon) },
         uHexCenters: { value: this.hexCenters },
         uHexCount: { value: 0 },
-        // Pointy-top tile apothem (center → flat) matches BoardView HEX_SIZE tiles
         uHexApothem: { value: HEX_SIZE * Math.sqrt(3) * 0.5 },
       },
       transparent: true,
@@ -353,7 +435,6 @@ export class WaterSurface {
     const geom = new THREE.CircleGeometry(radius, Math.max(64, segs * 2));
     geom.rotateX(-Math.PI / 2);
     this.mesh = new THREE.Mesh(geom, this.material);
-    // Flush with hex bottoms (y=0) so low angles don't show a floating gap.
     this.mesh.position.y = 0;
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -1;
@@ -366,7 +447,6 @@ export class WaterSurface {
     const u = this.material.uniforms;
     u.uWaveHeight.value = config.waterWaveHeight;
     u.uWaveSpeed.value = config.waterWaveSpeed;
-    // Base palette — atmosphere re-tints these every frame.
     u.uDeepOcean.value.set(config.waterDeepOcean);
     u.uOcean.value.set(config.waterOcean);
     u.uLagoon.value.set(config.waterLagoon);
@@ -394,16 +474,18 @@ export class WaterSurface {
     u.uCausticIntensity.value = config.waterCausticIntensity;
     u.uCausticScale.value = config.waterCausticScale;
     u.uCausticSpeed.value = config.waterCausticSpeed;
+    u.uReflectStrength.value = config.waterReflectStrength;
+    u.uReflectDistort.value = config.waterReflectDistort;
+    u.uReflectBlur.value = config.waterReflectBlur;
+    u.uRippleFreq.value = config.waterRippleFreq;
+    u.uRippleSpeed.value = config.waterRippleSpeed;
+    u.uRippleIntensity.value = config.waterRippleIntensity;
     u.uSkyFresnel.value.set(config.waterLagoon);
 
     const nextSegs = Math.max(16, Math.round(config.waterSegments));
     if (nextSegs !== prevSegs) this.rebuildGeometry(this.rings, nextSegs);
   }
 
-  /**
-   * Apply Environment State: scheme depth palettes, bands, foam, fresnel/specular/caustics.
-   * Craft StyleConfig bases compose with atmosphere (never rebuild the water mesh).
-   */
   applyAtmosphere(atm: AtmosphereSnapshot): void {
     const u = this.material.uniforms;
     const bright = atm.waterBrightness;
@@ -433,7 +515,6 @@ export class WaterSurface {
     u.uHorizon.value.copy(atm.skyHorizon);
     u.uHorizonHaze.value = atm.horizonHaze;
 
-    // Craft bases × atmosphere response (afternoon craft refs as 1×).
     const fresnelRef = 0.12;
     const specularRef = 0.28;
     const causticRef = 0.08;
@@ -445,6 +526,7 @@ export class WaterSurface {
       this.config.waterCausticIntensity * (atm.waterCausticIntensity / Math.max(causticRef, 0.001));
     u.uBandIntensity.value = this.config.waterBandIntensity * atm.waveBandIntensity;
     u.uShoreFoam.value = this.config.waterShoreFoam * atm.foamBrightness;
+    u.uRippleIntensity.value = this.config.waterRippleIntensity * atm.foamBrightness;
   }
 
   setSunDirection(dir: THREE.Vector3): void {
@@ -452,10 +534,6 @@ export class WaterSurface {
     this.material.uniforms.uSunDir.value.copy(this.sunDir);
   }
 
-  /**
-   * Feed land hex world centers so the shoreline SDF hugs every tile edge.
-   * `tileRadius` is center-to-vertex (same as BoardView HEX_SIZE).
-   */
   setLandHexes(centers: { x: number; z: number }[], tileRadius = HEX_SIZE): void {
     const count = Math.min(centers.length, WATER_MAX_HEXES);
     for (let i = 0; i < WATER_MAX_HEXES; i++) {
@@ -475,7 +553,6 @@ export class WaterSurface {
 
   private rebuildGeometry(rings: number, segments: number): void {
     const apothem = islandHexApothem(rings, HEX_SIZE);
-    // Large disc; soft rim is wide so grazing views still dissolve in screen space.
     const radius = Math.max(180, apothem * 24);
     const old = this.mesh.geometry;
     const geom = new THREE.CircleGeometry(radius, Math.max(64, segments * 2));
@@ -485,6 +562,106 @@ export class WaterSurface {
     this.material.uniforms.uSeaRadius.value = radius * 0.94;
   }
 
+  /**
+   * Render mirrored scene into the reflection RT (Bruno-like frosted mirror).
+   * Call once per frame before the main render, with the water mesh hidden.
+   */
+  renderReflection(
+    renderer: THREE.WebGLRenderer,
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+  ): void {
+    if (this.reflecting) return;
+    if (this.config.waterReflectStrength <= 0.001) return;
+
+    this.reflecting = true;
+    const wasVisible = this.mesh.visible;
+    this.mesh.visible = false;
+
+    this.reflectorWorldPosition.setFromMatrixPosition(this.mesh.matrixWorld);
+    this.cameraWorldPosition.setFromMatrixPosition(camera.matrixWorld);
+    this.rotationMatrix.extractRotation(this.mesh.matrixWorld);
+
+    this.normal.set(0, 1, 0);
+    this.view.subVectors(this.reflectorWorldPosition, this.cameraWorldPosition);
+    if (this.view.dot(this.normal) > 0) {
+      this.mesh.visible = wasVisible;
+      this.reflecting = false;
+      return;
+    }
+
+    this.view.reflect(this.normal).negate();
+    this.view.add(this.reflectorWorldPosition);
+
+    this.rotationMatrix.extractRotation(camera.matrixWorld);
+    this.lookAtPosition.set(0, 0, -1);
+    this.lookAtPosition.applyMatrix4(this.rotationMatrix);
+    this.lookAtPosition.add(this.cameraWorldPosition);
+
+    this.target.subVectors(this.reflectorWorldPosition, this.lookAtPosition);
+    this.target.reflect(this.normal).negate();
+    this.target.add(this.reflectorWorldPosition);
+
+    this.reflectionCamera.position.copy(this.view);
+    this.reflectionCamera.up.set(0, 1, 0).applyMatrix4(this.rotationMatrix).reflect(this.normal);
+    this.reflectionCamera.lookAt(this.target);
+    this.reflectionCamera.far = (camera as THREE.PerspectiveCamera).far;
+    this.reflectionCamera.updateMatrixWorld();
+    this.reflectionCamera.projectionMatrix.copy((camera as THREE.PerspectiveCamera).projectionMatrix);
+
+    this.reflectorPlane.setFromNormalAndCoplanarPoint(this.normal, this.reflectorWorldPosition);
+    this.reflectorPlane.applyMatrix4(this.reflectionCamera.matrixWorldInverse);
+
+    this.clipPlane.set(
+      this.reflectorPlane.normal.x,
+      this.reflectorPlane.normal.y,
+      this.reflectorPlane.normal.z,
+      this.reflectorPlane.constant,
+    );
+
+    const projectionMatrix = this.reflectionCamera.projectionMatrix;
+    this.q.x = (Math.sign(this.clipPlane.x) + projectionMatrix.elements[8]) / projectionMatrix.elements[0];
+    this.q.y = (Math.sign(this.clipPlane.y) + projectionMatrix.elements[9]) / projectionMatrix.elements[5];
+    this.q.z = -1;
+    this.q.w = (1 + projectionMatrix.elements[10]) / projectionMatrix.elements[14];
+
+    this.clipPlane.multiplyScalar(2 / this.clipPlane.dot(this.q));
+    projectionMatrix.elements[2] = this.clipPlane.x;
+    projectionMatrix.elements[6] = this.clipPlane.y;
+    projectionMatrix.elements[10] = this.clipPlane.z + 1 - this.clipBias;
+    projectionMatrix.elements[14] = this.clipPlane.w;
+
+    this.textureMatrix.set(
+      0.5, 0.0, 0.0, 0.5,
+      0.0, 0.5, 0.0, 0.5,
+      0.0, 0.0, 0.5, 0.5,
+      0.0, 0.0, 0.0, 1.0,
+    );
+    this.textureMatrix.multiply(this.reflectionCamera.projectionMatrix);
+    this.textureMatrix.multiply(this.reflectionCamera.matrixWorldInverse);
+    this.textureMatrix.multiply(this.mesh.matrixWorld);
+
+    const currentXr = renderer.xr.enabled;
+    const currentShadow = renderer.shadowMap.autoUpdate;
+    renderer.xr.enabled = false;
+    renderer.shadowMap.autoUpdate = false;
+
+    const currentRenderTarget = renderer.getRenderTarget();
+    const currentXrEnabled = renderer.xr.enabled;
+    void currentXrEnabled;
+
+    renderer.setRenderTarget(this.reflectionTarget);
+    if (renderer.autoClear === false) renderer.clear();
+    renderer.render(scene, this.reflectionCamera);
+    renderer.setRenderTarget(currentRenderTarget);
+
+    renderer.xr.enabled = currentXr;
+    renderer.shadowMap.autoUpdate = currentShadow;
+
+    this.mesh.visible = wasVisible;
+    this.reflecting = false;
+  }
+
   update(time: number): void {
     this.material.uniforms.uTime.value = time;
   }
@@ -492,5 +669,6 @@ export class WaterSurface {
   dispose(): void {
     this.mesh.geometry.dispose();
     this.material.dispose();
+    this.reflectionTarget.dispose();
   }
 }
