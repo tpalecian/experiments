@@ -294,7 +294,7 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-const STORAGE_KEY = 'catan-style-config-v20';
+const STORAGE_KEY = 'catan-style-config-v21';
 
 export function loadStyleConfig(): StyleConfig {
   try {

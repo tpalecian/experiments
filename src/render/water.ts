@@ -339,13 +339,16 @@ void main() {
   float driftWaves = max(driftPatch * 0.7, driftPatch2 * 0.35);
   col += vec3(0.04) * driftWaves * openWater * uDriftIntensity * keep;
 
-  // 8. Bruno ripplesNode — restore the proximity flow that looked right
-  // Folio: terrainData.b is a near-shore field (high at coast). Using prox + time
-  // (not shoreDist + time) matches that and reads much better visually.
-  // "Goes to the shore" = foam lives at the coast, not that crests reverse seaward.
+  // 8. Bruno ripplesNode — iso-contours of the hex shoreline SDF
+  // Those smooth outer "bubble" arcs are distance-field contours: near the
+  // hexes they hug tile edges; farther out, min(hex SDF) rounds into arcs.
+  // Isolated crescents are the same contour, broken by noise gates.
+  //
+  // Direction: prox - time → crests move toward land (prox↑ / shoreDist↓).
+  // (prox + time was the outward flow visible in screenshots.)
   float prox = clamp(1.0 - shoreDist / 3.2, 0.0, 1.0);
   float slopeFreq = max(uRippleFreq, 0.05) * 6.5;
-  float timed = prox + uTime * uRippleSpeed * 0.45;
+  float timed = prox - uTime * uRippleSpeed * 0.45;
   float band = timed * slopeFreq;
   float bandIdx = floor(band);
   float bandFrac = fract(band);
@@ -362,7 +365,8 @@ void main() {
   float arcGate = step(0.62, n1 * 0.55 + n2 * 0.45);
   float crest = 1.0 - abs(bandFrac - mix(0.55, 0.82, n3));
   crest = pow(max(crest, 0.0), 5.5);
-  float nearShore = smoothstep(0.08, 0.35, prox) * (1.0 - smoothstep(0.55, 0.95, prox));
+  // Keep crests closer to land so they still follow hex edges (less outer rounding)
+  float nearShore = smoothstep(0.22, 0.5, prox) * (1.0 - smoothstep(0.82, 0.98, prox));
   float ripple = accept * arcGate * crest * nearShore * clamp(uRippleIntensity, 0.0, 1.2);
 
   // Shore foam lip flush to hex coast
