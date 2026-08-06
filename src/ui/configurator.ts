@@ -150,7 +150,7 @@ const CATEGORIES: CategoryDef[] = [
       { key: 'waterFoamWidth', label: 'Foam width', kind: 'range', min: 0.2, max: 2.5, step: 0.05 },
       { key: 'waterFoamPulse', label: 'Foam pulse', kind: 'range', min: 0, max: 1, step: 0.05 },
       { key: 'waterFoamPulseSpeed', label: 'Foam pulse speed', kind: 'range', min: 0, max: 2, step: 0.05 },
-      { key: 'waterShoreFade', label: 'Shore fade', kind: 'range', min: 0.05, max: 1.5, step: 0.05, tags: ['bruno', 'mask'] },
+      { key: 'waterShoreFade', label: 'Shore fade', kind: 'range', min: 0.05, max: 2.5, step: 0.05, tags: ['bruno', 'mask'] },
       { key: 'waterCausticIntensity', label: 'Caustics', kind: 'range', min: 0, max: 0.25, step: 0.01 },
       { key: 'waterCausticScale', label: 'Caustic scale', kind: 'range', min: 0.15, max: 1.5, step: 0.05 },
       { key: 'waterCausticSpeed', label: 'Caustic speed', kind: 'range', min: 0, max: 1.2, step: 0.05 },
