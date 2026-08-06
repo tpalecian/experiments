@@ -35,17 +35,18 @@ Gameplay adjacency and production stay on the hex graph. Presentation never inve
 
 Water is a flat sea plane with a **land mask from hex centers** (not an organic island silhouette).
 
-Live path: `src/render/water.ts` — depth colour, swells, contour bands, foam, caustics, atmosphere tint.
+Live path: `src/render/water.ts` — Bruno folio shore (cyan rim + sparse arcs), frosted mirror, depth colour, atmosphere tint.
 
 Craft bases live in `StyleConfig`; day-night multiplies them via Environment State ([DAY_NIGHT.md](DAY_NIGHT.md)).
 
 | Effect | Intent |
 | --- | --- |
-| Depth colour | Deep → turquoise → mint near shore |
-| Swells | Soft vertex motion |
-| Wave bands | Breathing contour lines near land |
-| Foam | Shore only |
-| Caustics | Shallow water only |
+| Depth colour | Navy open water → cyan shelf at hex coast |
+| Shore foam | Thin glowing lip (Bruno `shoreNode`) |
+| Shore ripples | Sparse thin arcs marching on SDF (Bruno `ripplesNode`) |
+| Frosted mirror | Soft scene contact shadows on the plane |
+| Swells | Near-flat (folio amplitude is tiny) |
+| Caustics | Quiet, shallow only |
 
 Polish work improves these shaders and Style knobs — **without** removing hex tiles.
 

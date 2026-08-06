@@ -10,14 +10,15 @@ export const WATER_MAX_HEXES = 64;
 /**
  * Bruno Simon–inspired reflective water for the hex board (WebGL).
  *
- * Bruno's folio uses WebGPU/TSL: flat plane + shore ripples + blurred
- * viewport sampling. We approximate that here with:
- *   - mirrored scene reflection RT (distorted + multi-tap blur)
+ * Port of folio-2025 `WaterSurface.js` ideas into WebGL:
+ *   - frosted mirrored scene (hash-blur stand-in via multi-tap)
  *   - hex-SDF shore / discard (keep Catan tiles readable)
- *   - sparse irregular shore ripples (few random blotches → coast)
- *   - soft drifting wave patches across open water
- *   - soft tropical depth colour underneath the reflection
+ *   - thin glowing shore lip (Bruno `shoreNode`)
+ *   - sparse thin arc ripples marching on coast distance (Bruno `ripplesNode`)
+ *   - soft open-water drift patches
+ *   - depth colour underneath (navy → cyan shelf)
  *
+ * Reference: https://github.com/brunosimon/folio-2025/blob/main/sources/Game/World/WaterSurface.js
  * Board meshes never regenerate for look changes.
  */
 const waterVertexShader = /* glsl */ `
@@ -226,12 +227,12 @@ void main() {
   // Under land tiles — keep water out so hex edges stay crisp
   if (shoreDist < 0.0) discard;
 
-  // 1. Depth gradient measured from actual tile coasts
+  // 1. Depth gradient — navy open water, cyan only near the hex coast
   float d0 = 0.0;
-  float d1 = shore * 0.35;
-  float d2 = shore * 0.75;
-  float d3 = shore;
-  float d4 = shore + deepSpan * 0.45;
+  float d1 = shore * 0.22;
+  float d2 = shore * 0.5;
+  float d3 = shore * 0.85;
+  float d4 = shore + deepSpan * 0.35;
   float d5 = shore + deepSpan;
 
   float tShelf = 1.0 - smoothstep(d0, d1, shoreDist);
@@ -248,10 +249,10 @@ void main() {
      uOcean * tOcean +
      uDeepOcean * tDeep) / wSum;
 
-  // 2. Soft near-shore glow
-  float shoreGlow = 1.0 - smoothstep(0.0, shore * 0.45, shoreDist);
-  shoreGlow = pow(max(shoreGlow, 0.0), 1.6);
-  col = mix(col, uShallow, shoreGlow * uShoreGlow);
+  // 2. Soft cyan shelf wash (rim itself is applied with foam below)
+  float shelfWash = 1.0 - smoothstep(0.0, shore * 0.55, shoreDist);
+  shelfWash = pow(max(shelfWash, 0.0), 1.35);
+  col = mix(col, uShallow, shelfWash * uShoreGlow * 0.85);
 
   // 3. Gentle colour motion
   float wt = uTime * uWaveSpeed;
@@ -297,23 +298,27 @@ void main() {
   haze = haze * haze * (3.0 - 2.0 * haze);
   float keep = 1.0 - haze;
 
-  // 5. Bruno-like blurred reflection (projector UV + wobble + multi-tap)
+  // 5. Frosted mirror — softer, more painted (Bruno viewport hashBlur feel)
   vec2 ruv = vReflectCoord.xy / max(vReflectCoord.w, 0.0001);
   float fres = pow(1.0 - max(dot(N, V), 0.0), uFresnelPower);
-  float reflectAmt = clamp(uReflectStrength * (0.35 + fres * uFresnelStrength * 4.0), 0.0, 0.92) * keep;
+  // Keep base depth colour dominant; reflection adds soft scene contact shadows
+  float reflectAmt = clamp(uReflectStrength * (0.22 + fres * uFresnelStrength * 2.8), 0.0, 0.72) * keep;
   if (ruv.x > 0.0 && ruv.x < 1.0 && ruv.y > 0.0 && ruv.y < 1.0) {
-    vec3 refl = sampleReflection(ruv, uReflectDistort * (0.6 + fres));
+    vec3 refl = sampleReflection(ruv, uReflectDistort * (0.5 + fres * 0.8));
+    // Desaturate / darken reflection so water stays readable as painted navy
+    float reflLuma = dot(refl, vec3(0.299, 0.587, 0.114));
+    refl = mix(vec3(reflLuma), refl, 0.55) * 0.85;
     col = mix(col, refl, reflectAmt);
   } else {
-    col = mix(col, uSkyFresnel, fres * uFresnelStrength * keep * 0.45);
+    col = mix(col, uSkyFresnel, fres * uFresnelStrength * keep * 0.35);
   }
 
-  // 6. Satin specular
+  // 6. Soft satin specular (matte folio look — not glitter)
   vec3 H = normalize(L + V);
   float spec = pow(max(dot(N, H), 0.0), uSpecularPower);
-  spec = smoothstep(0.0, 1.0, spec);
-  spec *= 0.85 + 0.15 * wave;
-  col += uSunColor * spec * uSpecularIntensity * keep * (1.0 - reflectAmt * 0.5);
+  spec = smoothstep(0.15, 1.0, spec);
+  spec *= 0.7 + 0.3 * wave;
+  col += uSunColor * spec * uSpecularIntensity * keep * (1.0 - reflectAmt * 0.65);
 
   // 7. Soft caustics in shallow water
   float shallowMask = 1.0 - smoothstep(0.0, shore * 0.95, shoreDist);
@@ -321,46 +326,65 @@ void main() {
   float cau = softCaustic(vWorldPos.xz * uCausticScale, uTime * uCausticSpeed);
   col += mix(uBeachEdge, uShallow, 0.4) * cau * uCausticIntensity * shallowMask * keep;
 
-  // 7b. Random drift waves across open water (Bruno ambient surface motion)
-  // Soft irregular blotches that wander — never use reverse smoothstep (edge0>edge1).
-  float openWater = smoothstep(0.5, 3.2, shoreDist);
+  // 7b. Soft open-water drift (quiet ambient motion — Bruno water is mostly flat)
+  float openWater = smoothstep(0.8, 4.0, shoreDist);
   vec2 driftUvA = vWorldPos.xz * uDriftScale + vec2(uTime * uDriftSpeed * 0.14, -uTime * uDriftSpeed * 0.09);
   vec2 driftUvB = vWorldPos.xz * uDriftScale * 1.55 + vec2(-uTime * uDriftSpeed * 0.08, uTime * uDriftSpeed * 0.11);
   float dnA = valueNoise(driftUvA);
   float dnB = valueNoise(driftUvB + vec2(2.7, 5.1));
   float dnC = valueNoise(driftUvA * 2.2 + vec2(uTime * 0.025, -1.3));
-  float driftPatch = smoothstep(0.48, 0.72, dnA) * (1.0 - smoothstep(0.55, 0.82, dnB));
-  driftPatch *= 0.4 + 0.6 * dnC;
-  float driftPatch2 = smoothstep(0.55, 0.8, valueNoise(driftUvB * 0.7 + vec2(4.2, uTime * 0.02)));
-  float driftWaves = max(driftPatch * 0.9, driftPatch2 * 0.45);
-  col += vec3(0.07) * driftWaves * openWater * uDriftIntensity * keep;
-  col = mix(col, mix(col, uFoamColor, 0.4), driftWaves * openWater * uDriftIntensity * 0.32 * keep);
+  float driftPatch = smoothstep(0.52, 0.78, dnA) * (1.0 - smoothstep(0.58, 0.88, dnB));
+  driftPatch *= 0.35 + 0.65 * dnC;
+  float driftPatch2 = smoothstep(0.6, 0.85, valueNoise(driftUvB * 0.7 + vec2(4.2, uTime * 0.02)));
+  float driftWaves = max(driftPatch * 0.75, driftPatch2 * 0.35);
+  col += vec3(0.045) * driftWaves * openWater * uDriftIntensity * keep;
+  col = mix(col, mix(col, uFoamColor, 0.28), driftWaves * openWater * uDriftIntensity * 0.22 * keep);
 
-  // 8. Sparse irregular shore ripples (few random blotches marching toward coast)
-  float band = shoreDist * uRippleFreq + uTime * uRippleSpeed;
+  // 8. Bruno ripplesNode — sparse thin arcs (NOT full concentric rings)
+  // Folio: terrainData.b ≈ land proximity (1 at shore → 0 deep).
+  float prox = clamp(1.0 - shoreDist / 3.2, 0.0, 1.0);
+  float slopeFreq = max(uRippleFreq, 0.05) * 6.5;
+  float timed = prox + uTime * uRippleSpeed * 0.45;
+  float band = timed * slopeFreq;
   float bandIdx = floor(band);
   float bandFrac = fract(band);
-  vec2 nUv = vWorldPos.xz * 0.55 + vec2(bandIdx * 0.91, bandIdx * 0.37);
-  float n = valueNoise(nUv);
-  float nWarp = valueNoise(vWorldPos.xz * 1.1 + vec2(bandIdx * 0.33, -bandIdx * 0.19));
-  float nDetail = valueNoise(vWorldPos.xz * 1.8 + vec2(bandIdx * 0.13, bandIdx * 0.61));
-  // Thin crest warped into an organic shape (not a clean ring)
-  float crestCenter = mix(0.62, 0.88, n * 0.55 + nWarp * 0.45);
-  float crest = 1.0 - abs(bandFrac - crestCenter) * mix(2.4, 3.6, nDetail);
-  crest = pow(max(crest, 0.0), 3.2);
-  float nearShore = 1.0 - smoothstep(0.0, 2.6, shoreDist);
-  // Sparse but visible: ~25–35% of each crest becomes a blotch
-  float blotchForm = smoothstep(0.38, 0.62, n) * smoothstep(0.25, 0.55, nDetail);
-  float sparse = step(0.55, n * 0.5 + nWarp * 0.3 + nDetail * 0.2);
-  float ripple = crest * blotchForm * sparse * nearShore * uRippleIntensity;
 
-  // Soft shore lip
-  float shoreEdge = 1.0 - smoothstep(0.0, max(uFoamWidth * 0.5, 0.07), shoreDist);
-  shoreEdge = pow(max(shoreEdge, 0.0), 1.45) * 0.85;
+  // Spatial noise along the coast (breaks rings into short arcs)
+  vec2 coastUv = vWorldPos.xz * 0.28;
+  float n1 = valueNoise(coastUv + vec2(bandIdx * 1.7, bandIdx * 0.9));
+  float n2 = valueNoise(coastUv * 1.9 + vec2(-bandIdx * 0.6, bandIdx * 2.1));
+  float n3 = valueNoise(vWorldPos.xz * 0.08 + vec2(bandIdx * 3.1, -2.4));
 
-  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 2.0 + wave * 2.5));
-  float foam = max(ripple, shoreEdge * uShoreFoam * foamPulse);
+  // Bruno field: fract - proximity attenuation + noise
+  float atten = mix(1.15, 0.05, prox);
+  float rippleField = bandFrac - atten + n1 * 0.35 + n2 * 0.15;
+
+  // Strict step — only the crest tips survive
+  float accept = step(0.55, rippleField);
+  // Extra angular sparsity so ~20–30% of each ring remains
+  float arcGate = step(0.62, n1 * 0.55 + n2 * 0.45);
+  // Thin wisp profile (elongated, soft)
+  float crest = 1.0 - abs(bandFrac - mix(0.55, 0.82, n3));
+  crest = pow(max(crest, 0.0), 5.5);
+  float nearShore = smoothstep(0.08, 0.35, prox) * (1.0 - smoothstep(0.55, 0.95, prox));
+  float ripple = accept * arcGate * crest * nearShore * clamp(uRippleIntensity, 0.0, 1.2);
+
+  // Bruno shoreNode — thin glowing lip (not a thick halo)
+  float foamWidth = max(uFoamWidth, 0.04);
+  float shoreCore = 1.0 - smoothstep(0.0, foamWidth * 0.4, shoreDist);
+  shoreCore = pow(max(shoreCore, 0.0), 2.8);
+  float shoreHalo = 1.0 - smoothstep(0.0, foamWidth * 1.1, shoreDist);
+  shoreHalo = pow(max(shoreHalo, 0.0), 1.8);
+  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 2.4 + wave * 2.0));
+  float shoreFoam = shoreCore * uShoreFoam * foamPulse;
+  float shoreGlowRim = shoreHalo * uShoreGlow * 1.6;
+
+  // Cyan shelf glow under the white lip
+  col = mix(col, mix(uShallow, uFoamColor, 0.25), clamp(shoreGlowRim, 0.0, 0.7) * keep);
+
+  float foam = max(ripple * 0.9, shoreFoam);
   col = mix(col, uFoamColor, clamp(foam, 0.0, 0.92) * keep);
+  col += uFoamColor * foam * 0.12 * keep;
 
   // 9. Horizon dissolve
   vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);

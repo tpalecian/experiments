@@ -78,7 +78,7 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(tod.getSnapshot().waterDeep !== undefined, 'scheme water palette on snapshot');
   assert(tod.getSnapshot().waveBandIntensity < 0.5, 'night softens wave bands');
   assert(tod.getSnapshot().shadowStrength < 0.55, 'night softens shadows');
-  assert(tod.getSnapshot().foamBrightness < 0.7, 'night foam dimmer');
+  assert(tod.getSnapshot().foamBrightness < 0.95, 'night foam slightly softer than day');
 
   tod.setMode('cycle');
   tod.setDayLength(60);

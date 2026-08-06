@@ -81,20 +81,20 @@ It **interpolates palettes and scalars** from Environment State.
 
 | Band | Hex |
 | --- | --- |
-| Deep Ocean | `#1FAFD4` |
-| Ocean | `#37C9D9` |
-| Lagoon | `#62E7E0` |
-| Beach / foam shelf | `#DDFCF8` |
+| Deep Ocean | `#0E2A5C` |
+| Ocean | `#164A8C` |
+| Lagoon | `#1FA8C8` |
+| Beach / foam shelf | `#A8FFF4` |
 
-Bright. Clear. Highly saturated.
+Navy open water with a bright cyan shelf — Bruno folio shore read.
 
 ### Sunset
 
 | Band | Hex |
 | --- | --- |
-| Deep Ocean | `#205A8C` |
-| Ocean | `#3A91B8` |
-| Lagoon | `#4FB8C4` |
+| Deep Ocean | `#1A3A68` |
+| Ocean | `#2A6A9A` |
+| Lagoon | `#3A9BB0` |
 | Beach | `#FFD8B8` |
 
 Warmer. Longer shadows. Soft reflections.
@@ -103,12 +103,12 @@ Warmer. Longer shadows. Soft reflections.
 
 | Band | Hex |
 | --- | --- |
-| Deep Ocean | `#0C2340` |
-| Ocean | `#10304F` |
-| Lagoon | `#153B5F` |
-| Beach | `#294A67` |
+| Deep Ocean | `#0A1230` |
+| Ocean | `#101C42` |
+| Lagoon | `#1A2E5A` |
+| Beach | `#2EC8E0` |
 
-Cool. Higher contrast. More reflections.
+Indigo open water with a glowing cyan rim.
 
 ---
 
