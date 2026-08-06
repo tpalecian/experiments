@@ -145,8 +145,8 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterShoreGlow: 0.18,
   waterColorWave: 0.03,
 
-  waterWaveHeight: 0.02,
-  waterWaveSpeed: 0.85,
+  waterWaveHeight: 0.035,
+  waterWaveSpeed: 0.95,
   waterSegments: 80,
 
   waterBandIntensity: 0.015,
@@ -171,13 +171,13 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterReflectStrength: 0.48,
   waterReflectDistort: 0.022,
   waterReflectBlur: 0.018,
-  // Sparse thin arcs near coast only
-  waterRippleFreq: 0.85,
-  waterRippleSpeed: 0.22,
-  waterRippleIntensity: 0.7,
-  waterDriftIntensity: 0.35,
-  waterDriftScale: 0.16,
-  waterDriftSpeed: 0.2,
+  // Sparse coastbound arcs + visible random open-water waves
+  waterRippleFreq: 0.9,
+  waterRippleSpeed: 0.28,
+  waterRippleIntensity: 0.75,
+  waterDriftIntensity: 1.0,
+  waterDriftScale: 0.22,
+  waterDriftSpeed: 0.35,
 
   exposure: 1.15,
   sunIntensity: 1.45,
@@ -220,7 +220,8 @@ export const STYLE_PRESETS: StylePreset[] = [
       waterBeachEdge: '#A8FFF4',
       waterBandIntensity: 0.02,
       waterShoreFoam: 0.7,
-      waterRippleIntensity: 0.7,
+      waterRippleIntensity: 0.75,
+      waterDriftIntensity: 0.85,
       waterCausticIntensity: 0.04,
       exposure: 1.15,
       sunIntensity: 1.45,
@@ -240,6 +241,7 @@ export const STYLE_PRESETS: StylePreset[] = [
       waterBandIntensity: 0.02,
       waterShoreFoam: 0.7,
       waterRippleIntensity: 0.7,
+      waterDriftIntensity: 0.7,
       waterCausticIntensity: 0.03,
       exposure: 1.05,
       sunIntensity: 1.2,
@@ -260,6 +262,7 @@ export const STYLE_PRESETS: StylePreset[] = [
       waterShoreFoam: 0.8,
       waterShoreGlow: 0.28,
       waterRippleIntensity: 0.75,
+      waterDriftIntensity: 0.65,
       waterCausticIntensity: 0.02,
       waterFresnelStrength: 0.18,
       waterReflectStrength: 0.4,
@@ -281,6 +284,7 @@ export const STYLE_PRESETS: StylePreset[] = [
       waterShoreFoam: 0.9,
       waterFoamPulse: 0.22,
       waterRippleIntensity: 0.95,
+      waterDriftIntensity: 0.9,
       waterCausticIntensity: 0.05,
       motionPieceSpawnSec: 0.42,
       motionRobberHopSec: 0.58,
@@ -291,7 +295,7 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-const STORAGE_KEY = 'catan-style-config-v15';
+const STORAGE_KEY = 'catan-style-config-v16';
 
 export function loadStyleConfig(): StyleConfig {
   try {
