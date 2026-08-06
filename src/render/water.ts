@@ -14,7 +14,8 @@ export const WATER_MAX_HEXES = 64;
  * viewport sampling. We approximate that here with:
  *   - mirrored scene reflection RT (distorted + multi-tap blur)
  *   - hex-SDF shore / discard (keep Catan tiles readable)
- *   - marching white shore ripples (Bruno-style bands)
+ *   - sparse irregular shore ripples (few random blotches → coast)
+ *   - soft drifting wave patches across open water
  *   - soft tropical depth colour underneath the reflection
  *
  * Board meshes never regenerate for look changes.
@@ -133,6 +134,9 @@ uniform float uReflectBlur;
 uniform float uRippleFreq;
 uniform float uRippleSpeed;
 uniform float uRippleIntensity;
+uniform float uDriftIntensity;
+uniform float uDriftScale;
+uniform float uDriftSpeed;
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
 uniform vec3 uSkyFresnel;
@@ -179,6 +183,21 @@ float softCaustic(vec2 p, float t) {
   float c = sin(p.x * 0.55 - t * 0.2) * sin(p.y * 0.65 + t * 0.18);
   float m = a * 0.45 + b * 0.35 + c * 0.20;
   return smoothstep(-0.15, 0.55, m);
+}
+
+float hash21(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float valueNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  float a = hash21(i);
+  float b = hash21(i + vec2(1.0, 0.0));
+  float c = hash21(i + vec2(0.0, 1.0));
+  float d = hash21(i + vec2(1.0, 1.0));
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 
 // Cheap multi-tap blur of the mirrored scene (Bruno-like frosted reflection).
@@ -245,13 +264,13 @@ void main() {
   col = mix(col, uLagoon, max(wave, 0.0) * uColorWave * 1.4);
   col += vec3(uColorWave * 0.5) * vWave;
 
-  // 4. Soft travelling bands (craft residual)
+  // 4. Soft travelling bands (craft residual — kept very quiet by default)
   float radial = shoreDist * uBandScale - uTime * uBandSpeed;
-  float drift = dot(vWorldPos.xz, vec2(0.72, 0.35)) * uBandScale * 0.55 - uTime * uBandSpeed * 0.65;
+  float bandDrift = dot(vWorldPos.xz, vec2(0.72, 0.35)) * uBandScale * 0.55 - uTime * uBandSpeed * 0.65;
   float bands =
     softBand(radial) * 0.55 +
     softBand(radial * 0.5 + 1.4) * 0.25 +
-    softBand(drift) * 0.20;
+    softBand(bandDrift) * 0.20;
   col += vec3(uBandIntensity) * bands;
 
   vec3 N = normalize(vNormalW);
@@ -302,33 +321,49 @@ void main() {
   float cau = softCaustic(vWorldPos.xz * uCausticScale, uTime * uCausticSpeed);
   col += mix(uBeachEdge, uShallow, 0.4) * cau * uCausticIntensity * shallowMask * keep;
 
-  // 8. Bruno-style shore ripples: broken segments marching TOWARD the coast
-  // (not continuous rings expanding into open water).
-  float rippleNoise =
-    sin(vWorldPos.x * 2.35 + vWorldPos.z * 1.85) * 0.5 +
-    sin(vWorldPos.x * 5.1 - vWorldPos.z * 4.4 + 1.7) * 0.35 +
-    sin((vWorldPos.x + vWorldPos.z) * 9.2) * 0.15;
-  rippleNoise = rippleNoise * 0.5 + 0.5; // 0..1
+  // 7b. Random drift waves across open water (Bruno ambient surface motion)
+  // Soft irregular blotches that wander — not stripes or rings.
+  float openWater = smoothstep(0.8, 4.0, shoreDist);
+  vec2 driftUvA = vWorldPos.xz * uDriftScale + vec2(uTime * uDriftSpeed * 0.11, -uTime * uDriftSpeed * 0.07);
+  vec2 driftUvB = vWorldPos.xz * uDriftScale * 1.7 + vec2(-uTime * uDriftSpeed * 0.06, uTime * uDriftSpeed * 0.09);
+  float dnA = valueNoise(driftUvA);
+  float dnB = valueNoise(driftUvB + vec2(2.7, 5.1));
+  float dnC = valueNoise(driftUvA * 2.4 + vec2(uTime * 0.02, -1.3));
+  // Threshold high → few visible patches; noise warps shape so each is organic
+  float driftPatch = smoothstep(0.58, 0.82, dnA) * smoothstep(0.68, 0.42, dnB);
+  driftPatch *= 0.45 + 0.55 * dnC;
+  // Second slower layer for variety
+  float driftPatch2 = smoothstep(0.62, 0.88, valueNoise(driftUvB * 0.65 + vec2(4.2, uTime * 0.015)));
+  float driftWaves = max(driftPatch, driftPatch2 * 0.55);
+  col += vec3(0.055) * driftWaves * openWater * uDriftIntensity * keep;
+  col = mix(col, mix(col, uFoamColor, 0.28), driftWaves * openWater * uDriftIntensity * 0.22 * keep);
 
-  // +time so bands travel from open water → shore (decreasing shoreDist).
-  float rippleTravel = shoreDist * uRippleFreq + uTime * uRippleSpeed;
-  float rippleBand = fract(rippleTravel + rippleNoise * 0.35);
+  // 8. Few irregular shore ripples (Bruno: sparse random forms → coast)
+  // Low frequency + high noise gate = not many at once; form is blotchy not arcs.
+  float band = shoreDist * uRippleFreq + uTime * uRippleSpeed;
+  float bandIdx = floor(band);
+  float bandFrac = fract(band);
+  vec2 nUv = vWorldPos.xz * 0.38 + vec2(bandIdx * 0.73, bandIdx * 0.41);
+  float n = valueNoise(nUv);
+  float nWarp = valueNoise(vWorldPos.xz * 0.95 + vec2(bandIdx * 0.29, -bandIdx * 0.17));
+  float nDetail = valueNoise(vWorldPos.xz * 1.55 + vec2(bandIdx * 0.11, bandIdx * 0.53));
+  // Soft crest, warped so the white isn't a clean ring segment
+  float crestCenter = mix(0.48, 0.78, n);
+  float crest = 1.0 - abs(bandFrac - crestCenter - (nWarp - 0.5) * 0.22) * 1.85;
+  crest = pow(max(crest, 0.0), 4.2);
+  float nearShore = 1.0 - smoothstep(0.05, 2.0, shoreDist);
+  // Strict gate: only ~15–25% of shoreline gets a blotch per crest
+  float form = smoothstep(0.42, 0.78, n) * smoothstep(0.28, 0.65, nDetail);
+  float sparse = step(0.78, n * 0.55 + nWarp * 0.25 + nDetail * 0.20);
+  float ripple = crest * form * sparse * nearShore * uRippleIntensity;
 
-  // Thin dashes — noise breaks the ring into short arcs instead of full lines.
-  float dash = step(0.55, fract(rippleNoise * 6.0 + shoreDist * 0.8));
-  float thin = step(0.82, rippleBand) * (1.0 - step(0.94, rippleBand));
-  // Closer to shore = stronger / denser (Bruno remaps terrain.b into the threshold).
-  float shorePull = 1.0 - smoothstep(0.0, 3.2, shoreDist);
-  float densityGate = step(mix(0.75, 0.35, shorePull), rippleNoise + shorePull * 0.25);
-  float ripple = thin * dash * densityGate * shorePull * uRippleIntensity;
-
-  // Hard white shore lip
-  float shoreEdge = 1.0 - smoothstep(0.0, max(uFoamWidth * 0.55, 0.08), shoreDist);
-  shoreEdge = pow(max(shoreEdge, 0.0), 1.35);
+  // Soft shore lip (kept quieter than before)
+  float shoreEdge = 1.0 - smoothstep(0.0, max(uFoamWidth * 0.45, 0.06), shoreDist);
+  shoreEdge = pow(max(shoreEdge, 0.0), 1.6) * 0.75;
 
   float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 2.0 + wave * 2.5));
   float foam = max(ripple, shoreEdge * uShoreFoam * foamPulse);
-  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.95) * keep);
+  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.92) * keep);
 
   // 9. Horizon dissolve
   vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);
@@ -430,6 +465,9 @@ export class WaterSurface {
         uRippleFreq: { value: this.config.waterRippleFreq },
         uRippleSpeed: { value: this.config.waterRippleSpeed },
         uRippleIntensity: { value: this.config.waterRippleIntensity },
+        uDriftIntensity: { value: this.config.waterDriftIntensity },
+        uDriftScale: { value: this.config.waterDriftScale },
+        uDriftSpeed: { value: this.config.waterDriftSpeed },
         uSunDir: { value: this.sunDir.clone() },
         uSunColor: { value: new THREE.Color('#fff6e8') },
         uSkyFresnel: { value: new THREE.Color(this.config.waterLagoon) },
@@ -492,6 +530,9 @@ export class WaterSurface {
     u.uRippleFreq.value = config.waterRippleFreq;
     u.uRippleSpeed.value = config.waterRippleSpeed;
     u.uRippleIntensity.value = config.waterRippleIntensity;
+    u.uDriftIntensity.value = config.waterDriftIntensity;
+    u.uDriftScale.value = config.waterDriftScale;
+    u.uDriftSpeed.value = config.waterDriftSpeed;
     u.uSkyFresnel.value.set(config.waterLagoon);
 
     const nextSegs = Math.max(16, Math.round(config.waterSegments));

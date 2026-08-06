@@ -86,6 +86,10 @@ export interface StyleConfig {
   waterRippleFreq: number;
   waterRippleSpeed: number;
   waterRippleIntensity: number;
+  /** Sparse irregular drift waves across open water. */
+  waterDriftIntensity: number;
+  waterDriftScale: number;
+  waterDriftSpeed: number;
 
   // Lighting (craft reference — atmosphere owns live values)
   exposure: number;
@@ -145,7 +149,7 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterWaveSpeed: 1.15,
   waterSegments: 80,
 
-  waterBandIntensity: 0.04,
+  waterBandIntensity: 0.02,
   waterBandScale: 0.42,
   waterBandSpeed: 0.28,
   waterBandSoftness: 0.55,
@@ -155,8 +159,8 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterSpecularIntensity: 0.28,
   waterSpecularPower: 14,
 
-  waterShoreFoam: 0.55,
-  waterFoamWidth: 0.55,
+  waterShoreFoam: 0.35,
+  waterFoamWidth: 0.4,
   waterFoamPulse: 0.22,
   waterFoamPulseSpeed: 0.7,
 
@@ -167,9 +171,13 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterReflectStrength: 0.72,
   waterReflectDistort: 0.035,
   waterReflectBlur: 0.01,
-  waterRippleFreq: 2.4,
-  waterRippleSpeed: 0.4,
-  waterRippleIntensity: 0.9,
+  // Low freq + moderate intensity = few sparse blotches, not busy rings
+  waterRippleFreq: 0.75,
+  waterRippleSpeed: 0.18,
+  waterRippleIntensity: 0.42,
+  waterDriftIntensity: 0.65,
+  waterDriftScale: 0.18,
+  waterDriftSpeed: 0.28,
 
   exposure: 1.15,
   sunIntensity: 1.45,
@@ -277,7 +285,7 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-const STORAGE_KEY = 'catan-style-config-v7';
+const STORAGE_KEY = 'catan-style-config-v9';
 
 export function loadStyleConfig(): StyleConfig {
   try {
