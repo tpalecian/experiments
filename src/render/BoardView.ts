@@ -324,8 +324,8 @@ export class BoardView {
       }
 
       if (hex.number !== null) {
-        // Folio-style blades are taller (~0.22); keep tokens clear of tips
-        numberRestY = TILE_HEIGHT + (isPasture ? 0.26 : 0.04);
+        // Keep tokens clear of Folio-style blade tips
+        numberRestY = TILE_HEIGHT + (isPasture ? 0.2 : 0.04);
         numberToken = new THREE.Mesh(
           new THREE.CircleGeometry(0.3, 6),
           new THREE.MeshBasicMaterial({ map: numberTexture(hex.number), transparent: true }),
@@ -346,8 +346,8 @@ export class BoardView {
       });
     }
 
-    // Single camera-facing triangles (Folio) cost ~1/4 of crossed quads — denser pasture
-    const bladesPerHex = board.rings <= 2 ? 720 : board.rings === 3 ? 520 : 360;
+    // Crossed Folio triangles are cheaper than old quads — denser pasture carpet
+    const bladesPerHex = board.rings <= 2 ? 560 : board.rings === 3 ? 400 : 280;
     this.grass.build(grassPatches, bladesPerHex);
 
     for (const v of board.vertices.values()) {

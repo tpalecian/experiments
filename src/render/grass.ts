@@ -5,13 +5,16 @@ import { STYLIZED_TERRAIN, STYLIZED_TERRAIN_SIDE } from './style';
 /**
  * Folio-inspired pasture grass (bruno simon folio-2025 Grass.js), adapted to WebGL.
  *
- * Folio uses WebGPU + TSL with a camera-following wraparound grid and terrain masks.
+ * Folio uses WebGPU + TSL with camera-facing wraparound blades and terrain masks.
  * Here we keep hex-bounded sheep patches (docs/TERRAIN.md) and port the visual core:
- * single camera-facing triangles, tipness wind, height randomness, terrain greens.
+ * triangular blade shape, tipness-scaled wind, height randomness, terrain greens.
+ *
+ * Blades use a fixed random yaw (not full camera billboards) so the tabletop /
+ * near-top-down board camera still reads a grassy carpet.
  */
 
-const BLADE_HEIGHT = 0.22;
-const BLADE_WIDTH = 0.045;
+const BLADE_HEIGHT = 0.16;
+const BLADE_WIDTH = 0.018;
 const HEIGHT_RANDOMNESS = 0.55;
 const SQRT3 = Math.sqrt(3);
 
@@ -22,6 +25,7 @@ const grassVertexShader = /* glsl */ `
 attribute float aPhase;
 attribute float aTint;
 attribute vec3 aOffset;
+attribute float aYaw;
 attribute float aHeightRand;
 
 uniform float uTime;
@@ -36,7 +40,7 @@ varying float vTipness;
 varying float vHeightNorm;
 
 void main() {
-  // Unit triangle: tip (0,1,0), left (1,0,0), right (-1,0,0) — Folio bladeShape
+  // Unit triangle coords: tip has y=1, base has y=0 — Folio tipness
   float tipness = step(0.5, position.y);
   vTipness = tipness;
   vTint = aTint;
@@ -44,18 +48,14 @@ void main() {
   float height = uBladeHeight
     * (uHeightRandomness * aHeightRand + (1.0 - uHeightRandomness));
 
-  // Local blade shape before billboard
   vec3 shape = vec3(
     position.x * uBladeWidth,
     position.y * height,
-    0.0
+    position.z * uBladeWidth
   );
 
-  vec3 worldBase = aOffset;
-  // Face the camera (Folio: atan + rotateUV around blade xz)
-  float angle = atan(worldBase.z - cameraPosition.z, worldBase.x - cameraPosition.x) - 1.57079632679;
-  float s = sin(angle);
-  float c = cos(angle);
+  float s = sin(aYaw);
+  float c = cos(aYaw);
   vec3 rotated = vec3(
     shape.x * c - shape.z * s,
     shape.y,
@@ -63,15 +63,15 @@ void main() {
   );
 
   // Wind only on the tip, scaled by blade height (Folio tipness * height)
-  float windWave = sin(uTime * uWindSpeed + aPhase + worldBase.x * 1.7 + worldBase.z * 1.3)
-                 + 0.45 * sin(uTime * uWindSpeed * 1.65 + aPhase * 1.3 + worldBase.z * 2.1);
+  float windWave = sin(uTime * uWindSpeed + aPhase + aOffset.x * 1.7 + aOffset.z * 1.3)
+                 + 0.45 * sin(uTime * uWindSpeed * 1.65 + aPhase * 1.3 + aOffset.z * 2.1);
   float sway = windWave * uWindStrength * tipness * height * 2.0;
   rotated.x += sway;
   rotated.z += sway * 0.55;
 
   vHeightNorm = clamp(rotated.y / max(uBladeHeight, 0.001), 0.0, 1.0);
 
-  vec3 worldPos = rotated + worldBase;
+  vec3 worldPos = rotated + aOffset;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);
 }
 `;
@@ -95,13 +95,13 @@ void main() {
 }
 `;
 
-/** Unit triangle matching Folio's three-vertex blade. */
+/** Two Folio-style triangles crossed for readable fill from tabletop angles. */
 function createBladeGeometry(): THREE.BufferGeometry {
   const positions = new Float32Array([
-    // tip, left base, right base
-    0, 1, 0,
-    1, 0, 0,
-    -1, 0, 0,
+    // plane A
+    0, 1, 0, 1, 0, 0, -1, 0, 0,
+    // plane B
+    0, 1, 0, 0, 0, 1, 0, 0, -1,
   ]);
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -112,7 +112,7 @@ function pointInHex(x: number, z: number, radius: number): boolean {
   const q = ((SQRT3 / 3) * x - (1 / 3) * z) / radius;
   const r = ((2 / 3) * z) / radius;
   const s = -q - r;
-  return Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) <= 0.92;
+  return Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) <= 0.82;
 }
 
 export interface GrassPatch {
@@ -136,10 +136,11 @@ export class GrassField {
     const phases = new Float32Array(maxBlades);
     const tints = new Float32Array(maxBlades);
     const offsets = new Float32Array(maxBlades * 3);
+    const yaws = new Float32Array(maxBlades);
     const heightRands = new Float32Array(maxBlades);
 
     let count = 0;
-    const radius = HEX_SIZE * 0.88;
+    const radius = HEX_SIZE * 0.78;
     for (const patch of patches) {
       let placed = 0;
       let attempts = 0;
@@ -156,6 +157,7 @@ export class GrassField {
         offsets[count * 3] = patch.x + lx;
         offsets[count * 3 + 1] = patch.y;
         offsets[count * 3 + 2] = patch.z + lz;
+        yaws[count] = Math.random() * Math.PI * 2;
         heightRands[count] = Math.random();
         count++;
         placed++;
@@ -180,6 +182,10 @@ export class GrassField {
     this.geometry.setAttribute(
       'aOffset',
       new THREE.InstancedBufferAttribute(offsets.subarray(0, count * 3), 3),
+    );
+    this.geometry.setAttribute(
+      'aYaw',
+      new THREE.InstancedBufferAttribute(yaws.subarray(0, count), 1),
     );
     this.geometry.setAttribute(
       'aHeightRand',
