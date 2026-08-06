@@ -359,14 +359,15 @@ void main() {
   float sparse = smoothstep(0.42, 0.62, n * 0.5 + nWarp * 0.3 + nDetail * 0.2);
   float ripple = crest * blotchForm * sparse * nearShore * uRippleIntensity * landAlpha;
 
-  // Soft shore lip — wide gentle ramp, not a hard white hex outline
-  float foamSpan = max(uFoamWidth * 1.4, fade * 1.1);
+  // Soft shore wash — no hard white hex outline
+  float foamSpan = max(uFoamWidth * 1.8, fade * 1.4);
   float shoreEdge = 1.0 - smoothstep(0.0, foamSpan, max(shoreDist, 0.0));
-  shoreEdge = pow(max(shoreEdge, 0.0), 2.6) * landAlpha * 0.55;
+  shoreEdge = pow(max(shoreEdge, 0.0), 3.2) * landAlpha * 0.35;
 
-  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 2.0 + wave * 2.5));
-  float foam = max(ripple, shoreEdge * uShoreFoam * foamPulse) * landAlpha;
-  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.78) * keep);
+  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 1.6 + wave * 2.5));
+  // Soft additive foam — keep contrast low so it never reads as a mask
+  float foam = (ripple * 0.85 + shoreEdge * uShoreFoam * foamPulse) * landAlpha;
+  col = mix(col, mix(col, uFoamColor, 0.65), clamp(foam, 0.0, 0.55) * keep);
 
   // 9. Horizon dissolve
   vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);
