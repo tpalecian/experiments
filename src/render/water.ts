@@ -302,15 +302,27 @@ void main() {
   float cau = softCaustic(vWorldPos.xz * uCausticScale, uTime * uCausticSpeed);
   col += mix(uBeachEdge, uShallow, 0.4) * cau * uCausticIntensity * shallowMask * keep;
 
-  // 8. Bruno-style marching shore ripples (sharp white rings from hex SDF)
-  float rippleBase = shoreDist * uRippleFreq - uTime * uRippleSpeed;
-  float rippleBand = fract(rippleBase);
-  float rippleNoise = sin(vWorldPos.x * 1.7 + vWorldPos.z * 1.3 + uTime * 0.4) * 0.04;
-  float ripple = step(0.78 + rippleNoise, rippleBand) * (1.0 - step(0.92 + rippleNoise, rippleBand));
-  float rippleFade = 1.0 - smoothstep(0.05, 3.8, shoreDist);
-  ripple *= rippleFade * uRippleIntensity;
+  // 8. Bruno-style shore ripples: broken segments marching TOWARD the coast
+  // (not continuous rings expanding into open water).
+  float rippleNoise =
+    sin(vWorldPos.x * 2.35 + vWorldPos.z * 1.85) * 0.5 +
+    sin(vWorldPos.x * 5.1 - vWorldPos.z * 4.4 + 1.7) * 0.35 +
+    sin((vWorldPos.x + vWorldPos.z) * 9.2) * 0.15;
+  rippleNoise = rippleNoise * 0.5 + 0.5; // 0..1
 
-  // Hard white shore lip (Bruno shoreEdge)
+  // +time so bands travel from open water → shore (decreasing shoreDist).
+  float rippleTravel = shoreDist * uRippleFreq + uTime * uRippleSpeed;
+  float rippleBand = fract(rippleTravel + rippleNoise * 0.35);
+
+  // Thin dashes — noise breaks the ring into short arcs instead of full lines.
+  float dash = step(0.55, fract(rippleNoise * 6.0 + shoreDist * 0.8));
+  float thin = step(0.82, rippleBand) * (1.0 - step(0.94, rippleBand));
+  // Closer to shore = stronger / denser (Bruno remaps terrain.b into the threshold).
+  float shorePull = 1.0 - smoothstep(0.0, 3.2, shoreDist);
+  float densityGate = step(mix(0.75, 0.35, shorePull), rippleNoise + shorePull * 0.25);
+  float ripple = thin * dash * densityGate * shorePull * uRippleIntensity;
+
+  // Hard white shore lip
   float shoreEdge = 1.0 - smoothstep(0.0, max(uFoamWidth * 0.55, 0.08), shoreDist);
   shoreEdge = pow(max(shoreEdge, 0.0), 1.35);
 
