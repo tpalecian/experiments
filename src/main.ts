@@ -25,11 +25,11 @@ const configurator = new StyleConfigurator(configRoot);
 const initialConfig = configurator.getConfig();
 
 const boardView = new BoardView();
-applyStyle(initialConfig);
 const sky = new SkyDome(initialConfig);
 const dayCycle = new TimeOfDayController(initialConfig.timeOfDay as TimeOfDayMode);
 dayCycle.setDayLength(initialConfig.dayLengthSec);
 dayCycle.setTransitionSec(initialConfig.dayTransitionSec);
+
 const cameraTweens = new TweenPlayer();
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -115,6 +115,8 @@ function applyStyle(config: StyleConfig): void {
     dayCycle.setMode(config.timeOfDay as TimeOfDayMode);
   }
 }
+
+applyStyle(initialConfig);
 
 function applyAtmosphereFrame(): void {
   const atm = dayCycle.getSnapshot();
