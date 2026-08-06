@@ -110,6 +110,11 @@ export interface StyleConfig {
   motionHighlightFade: number;
   motionCameraNudgeSec: number;
   motionCameraNudgeBlend: number;
+
+  // Audio
+  audioAmbientVolume: number;
+  audioSfxVolume: number;
+  audioHoverPreview: boolean;
 }
 
 export const DEFAULT_STYLE_CONFIG: StyleConfig = {
@@ -195,6 +200,10 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   motionHighlightFade: 8,
   motionCameraNudgeSec: 0.55,
   motionCameraNudgeBlend: 0.55,
+
+  audioAmbientVolume: 0.55,
+  audioSfxVolume: 0.45,
+  audioHoverPreview: true,
 };
 
 export type StylePresetId = 'day' | 'sunset' | 'night' | 'cinematic';
@@ -294,7 +303,7 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-const STORAGE_KEY = 'catan-style-config-v21';
+const STORAGE_KEY = 'catan-style-config-v22';
 
 export function loadStyleConfig(): StyleConfig {
   try {

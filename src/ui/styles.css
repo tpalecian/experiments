@@ -702,6 +702,21 @@ button:disabled {
   color: var(--ink);
 }
 
+.style-field-toggle {
+  grid-template-columns: 1fr auto;
+}
+
+.style-field-toggle span {
+  grid-column: 1;
+}
+
+.style-field-toggle input[type='checkbox'] {
+  grid-column: 2;
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent);
+}
+
 .style-config-actions {
   display: flex;
   justify-content: flex-end;
