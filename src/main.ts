@@ -25,7 +25,7 @@ const configurator = new StyleConfigurator(configRoot);
 const initialConfig = configurator.getConfig();
 
 const boardView = new BoardView();
-boardView.applyStyleConfig(initialConfig);
+applyStyle(initialConfig);
 const sky = new SkyDome(initialConfig);
 const dayCycle = new TimeOfDayController(initialConfig.timeOfDay as TimeOfDayMode);
 dayCycle.setDayLength(initialConfig.dayLengthSec);
@@ -106,6 +106,7 @@ function applyStyle(config: StyleConfig): void {
   styleLive = config;
   sky.applyConfig(config);
   boardView.applyStyleConfig(config);
+  audio.applyStyle(config.audioAmbientVolume, config.audioSfxVolume, config.audioHoverPreview);
 
   dayCycle.setDayLength(config.dayLengthSec);
   dayCycle.setTransitionSec(config.dayTransitionSec);
@@ -302,10 +303,21 @@ canvas.addEventListener('pointermove', (ev) => {
     return;
   }
   const hit = picker.pick(ev.clientX, ev.clientY, boardView.getPickables());
-  boardView.setHoverHex(hit?.kind === 'hex' ? hit.id : null);
+  const hexId = hit?.kind === 'hex' ? hit.id : null;
+  boardView.setHoverHex(hexId);
+
+  if (hexId) {
+    const hex = snap.board.hexes.get(hexId);
+    if (hex) audio.playTerrainPreview(hex.terrain);
+  } else {
+    audio.clearPreview();
+  }
 });
 
-canvas.addEventListener('pointerleave', () => boardView.setHoverHex(null));
+canvas.addEventListener('pointerleave', () => {
+  boardView.setHoverHex(null);
+  audio.clearPreview();
+});
 
 function onResize(): void {
   const w = window.innerWidth;
