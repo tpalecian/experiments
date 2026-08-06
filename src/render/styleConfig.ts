@@ -82,7 +82,7 @@ export interface StyleConfig {
   waterReflectDistort: number;
   /** Multi-tap blur radius in UV space. */
   waterReflectBlur: number;
-  /** Shore ripple patch scale (world-space noise, not hex SDF contours). */
+  /** Marching shore ripple frequency (hex SDF). */
   waterRippleFreq: number;
   waterRippleSpeed: number;
   waterRippleIntensity: number;
