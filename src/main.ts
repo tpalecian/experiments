@@ -1,6 +1,7 @@
 import './ui/styles.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { AudioManager } from './audio/AudioManager';
 import { axialToWorld, boardRadiusWorld } from './game/board';
 import { GameEngine } from './game/engine';
 import { Picker } from './input/picker';
@@ -19,6 +20,7 @@ const lobbyEl = document.querySelector<HTMLElement>('#lobby')!;
 const configRoot = document.querySelector<HTMLElement>('#style-config-root')!;
 
 const engine = new GameEngine();
+const audio = new AudioManager();
 const configurator = new StyleConfigurator(configRoot);
 const initialConfig = configurator.getConfig();
 
@@ -224,7 +226,11 @@ function syncView(): void {
     lastRollKey = '';
     lastRobberHex = '';
     boardView.setHoverHex(null);
+    audio.clearTerrainAmbient();
     return;
+  }
+  if (snap.phase === 'gameOver') {
+    audio.clearTerrainAmbient();
   }
   if (!boardBuilt) {
     boardView.build(snap.board);
@@ -259,6 +265,7 @@ function syncView(): void {
 engine.subscribe(syncView);
 
 canvas.addEventListener('pointerdown', (ev) => {
+  audio.unlock();
   boardView.setHoverHex(null);
   if (ev.button !== 0) return;
   // Don't place pieces while dragging style panel controls
@@ -268,6 +275,11 @@ canvas.addEventListener('pointerdown', (ev) => {
 
   const hit = picker.pick(ev.clientX, ev.clientY, boardView.getPickables());
   if (!hit) return;
+
+  if (hit.kind === 'hex') {
+    const hex = snap.board.hexes.get(hit.id);
+    if (hex) audio.playTerrainAmbient(hex.terrain);
+  }
 
   if (hit.kind === 'vertex') engine.clickVertex(hit.id);
   else if (hit.kind === 'edge') engine.clickEdge(hit.id);
@@ -315,6 +327,7 @@ function animate(): void {
   applyAtmosphereFrame();
   boardView.update(t, dt);
   sky.update(t);
+  audio.update(t);
   boardView.renderWaterReflection(renderer, scene, camera);
   renderer.render(scene, camera);
 }
