@@ -352,8 +352,9 @@ void main() {
   // Bruno: fract - remap proximity attenuation + noise
   float atten = mix(1.15, 0.05, prox);
   float rippleField = bandFrac - atten + n1 * 0.35 + n2 * 0.15;
-  float accept = step(0.55, rippleField);
-  float arcGate = step(0.62, n1 * 0.55 + n2 * 0.45);
+  // Soft side fades — hard step() was cutting crescent edges
+  float accept = smoothstep(0.42, 0.62, rippleField);
+  float arcGate = smoothstep(0.48, 0.72, n1 * 0.55 + n2 * 0.45);
   float crest = 1.0 - abs(bandFrac - mix(0.55, 0.82, n3));
   crest = pow(max(crest, 0.0), 5.5);
   // Keep crests closer to land so they still follow hex edges (less outer rounding)
