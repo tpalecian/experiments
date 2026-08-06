@@ -322,44 +322,41 @@ void main() {
   col += mix(uBeachEdge, uShallow, 0.4) * cau * uCausticIntensity * shallowMask * keep;
 
   // 7b. Random drift waves across open water (Bruno ambient surface motion)
-  // Soft irregular blotches that wander — not stripes or rings.
-  float openWater = smoothstep(0.8, 4.0, shoreDist);
-  vec2 driftUvA = vWorldPos.xz * uDriftScale + vec2(uTime * uDriftSpeed * 0.11, -uTime * uDriftSpeed * 0.07);
-  vec2 driftUvB = vWorldPos.xz * uDriftScale * 1.7 + vec2(-uTime * uDriftSpeed * 0.06, uTime * uDriftSpeed * 0.09);
+  // Soft irregular blotches that wander — never use reverse smoothstep (edge0>edge1).
+  float openWater = smoothstep(0.5, 3.2, shoreDist);
+  vec2 driftUvA = vWorldPos.xz * uDriftScale + vec2(uTime * uDriftSpeed * 0.14, -uTime * uDriftSpeed * 0.09);
+  vec2 driftUvB = vWorldPos.xz * uDriftScale * 1.55 + vec2(-uTime * uDriftSpeed * 0.08, uTime * uDriftSpeed * 0.11);
   float dnA = valueNoise(driftUvA);
   float dnB = valueNoise(driftUvB + vec2(2.7, 5.1));
-  float dnC = valueNoise(driftUvA * 2.4 + vec2(uTime * 0.02, -1.3));
-  // Threshold high → few visible patches; noise warps shape so each is organic
-  float driftPatch = smoothstep(0.58, 0.82, dnA) * smoothstep(0.68, 0.42, dnB);
-  driftPatch *= 0.45 + 0.55 * dnC;
-  // Second slower layer for variety
-  float driftPatch2 = smoothstep(0.62, 0.88, valueNoise(driftUvB * 0.65 + vec2(4.2, uTime * 0.015)));
-  float driftWaves = max(driftPatch, driftPatch2 * 0.55);
-  col += vec3(0.055) * driftWaves * openWater * uDriftIntensity * keep;
-  col = mix(col, mix(col, uFoamColor, 0.28), driftWaves * openWater * uDriftIntensity * 0.22 * keep);
+  float dnC = valueNoise(driftUvA * 2.2 + vec2(uTime * 0.025, -1.3));
+  float driftPatch = smoothstep(0.48, 0.72, dnA) * (1.0 - smoothstep(0.55, 0.82, dnB));
+  driftPatch *= 0.4 + 0.6 * dnC;
+  float driftPatch2 = smoothstep(0.55, 0.8, valueNoise(driftUvB * 0.7 + vec2(4.2, uTime * 0.02)));
+  float driftWaves = max(driftPatch * 0.9, driftPatch2 * 0.45);
+  col += vec3(0.07) * driftWaves * openWater * uDriftIntensity * keep;
+  col = mix(col, mix(col, uFoamColor, 0.4), driftWaves * openWater * uDriftIntensity * 0.32 * keep);
 
-  // 8. Few irregular shore ripples (Bruno: sparse random forms → coast)
-  // Low frequency + high noise gate = not many at once; form is blotchy not arcs.
+  // 8. Sparse irregular shore ripples (few random blotches marching toward coast)
   float band = shoreDist * uRippleFreq + uTime * uRippleSpeed;
   float bandIdx = floor(band);
   float bandFrac = fract(band);
-  vec2 nUv = vWorldPos.xz * 0.38 + vec2(bandIdx * 0.73, bandIdx * 0.41);
+  vec2 nUv = vWorldPos.xz * 0.55 + vec2(bandIdx * 0.91, bandIdx * 0.37);
   float n = valueNoise(nUv);
-  float nWarp = valueNoise(vWorldPos.xz * 0.95 + vec2(bandIdx * 0.29, -bandIdx * 0.17));
-  float nDetail = valueNoise(vWorldPos.xz * 1.55 + vec2(bandIdx * 0.11, bandIdx * 0.53));
-  // Soft crest, warped so the white isn't a clean ring segment
-  float crestCenter = mix(0.48, 0.78, n);
-  float crest = 1.0 - abs(bandFrac - crestCenter - (nWarp - 0.5) * 0.22) * 1.85;
-  crest = pow(max(crest, 0.0), 4.2);
-  float nearShore = 1.0 - smoothstep(0.05, 2.0, shoreDist);
-  // Strict gate: only ~15–25% of shoreline gets a blotch per crest
-  float form = smoothstep(0.42, 0.78, n) * smoothstep(0.28, 0.65, nDetail);
-  float sparse = step(0.78, n * 0.55 + nWarp * 0.25 + nDetail * 0.20);
-  float ripple = crest * form * sparse * nearShore * uRippleIntensity;
+  float nWarp = valueNoise(vWorldPos.xz * 1.1 + vec2(bandIdx * 0.33, -bandIdx * 0.19));
+  float nDetail = valueNoise(vWorldPos.xz * 1.8 + vec2(bandIdx * 0.13, bandIdx * 0.61));
+  // Thin crest warped into an organic shape (not a clean ring)
+  float crestCenter = mix(0.62, 0.88, n * 0.55 + nWarp * 0.45);
+  float crest = 1.0 - abs(bandFrac - crestCenter) * mix(2.4, 3.6, nDetail);
+  crest = pow(max(crest, 0.0), 3.2);
+  float nearShore = 1.0 - smoothstep(0.0, 2.6, shoreDist);
+  // Sparse but visible: ~25–35% of each crest becomes a blotch
+  float blotchForm = smoothstep(0.38, 0.62, n) * smoothstep(0.25, 0.55, nDetail);
+  float sparse = step(0.55, n * 0.5 + nWarp * 0.3 + nDetail * 0.2);
+  float ripple = crest * blotchForm * sparse * nearShore * uRippleIntensity;
 
-  // Soft shore lip (kept quieter than before)
-  float shoreEdge = 1.0 - smoothstep(0.0, max(uFoamWidth * 0.45, 0.06), shoreDist);
-  shoreEdge = pow(max(shoreEdge, 0.0), 1.6) * 0.75;
+  // Soft shore lip
+  float shoreEdge = 1.0 - smoothstep(0.0, max(uFoamWidth * 0.5, 0.07), shoreDist);
+  shoreEdge = pow(max(shoreEdge, 0.0), 1.45) * 0.85;
 
   float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 2.0 + wave * 2.5));
   float foam = max(ripple, shoreEdge * uShoreFoam * foamPulse);

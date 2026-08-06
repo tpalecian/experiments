@@ -171,13 +171,13 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterReflectStrength: 0.72,
   waterReflectDistort: 0.035,
   waterReflectBlur: 0.01,
-  // Low freq + moderate intensity = few sparse blotches, not busy rings
-  waterRippleFreq: 0.75,
-  waterRippleSpeed: 0.18,
-  waterRippleIntensity: 0.42,
-  waterDriftIntensity: 0.65,
-  waterDriftScale: 0.18,
-  waterDriftSpeed: 0.28,
+  // Sparse blotches (not full rings); open-water drift stays visible
+  waterRippleFreq: 0.95,
+  waterRippleSpeed: 0.2,
+  waterRippleIntensity: 0.62,
+  waterDriftIntensity: 0.72,
+  waterDriftScale: 0.2,
+  waterDriftSpeed: 0.32,
 
   exposure: 1.15,
   sunIntensity: 1.45,
@@ -285,7 +285,7 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-const STORAGE_KEY = 'catan-style-config-v9';
+const STORAGE_KEY = 'catan-style-config-v10';
 
 export function loadStyleConfig(): StyleConfig {
   try {

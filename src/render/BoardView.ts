@@ -219,7 +219,11 @@ export class BoardView {
     scene: THREE.Scene,
     camera: THREE.Camera,
   ): void {
+    // Harbor sprites/piers read as flat yellow rectangles in the mirror — skip them.
+    const harborsWereVisible = this.harborGroup.visible;
+    this.harborGroup.visible = false;
     this.water.renderReflection(renderer, scene, camera);
+    this.harborGroup.visible = harborsWereVisible;
   }
 
   applyAtmosphere(atm: AtmosphereSnapshot): void {
