@@ -227,6 +227,12 @@ void main() {
   // Under land tiles — keep water out so hex edges stay crisp
   if (shoreDist < 0.0) discard;
 
+  // Depth colouring: hex SDF hugs the coast shelf; radial distance in open water
+  // so min(hex) iso-contours don't paint light/dark hex bands in the blue water.
+  float radialSea = length(vWorldPos.xz) * 0.27;
+  float nearHexCoast = 1.0 - smoothstep(0.0, 2.4, shoreDist);
+  float depthDist = mix(radialSea + 1.4, shoreDist, nearHexCoast);
+
   // 1. Depth gradient — navy open water, cyan only in a tight band at the hex coast
   float d0 = 0.0;
   float d1 = shore * 0.12;
@@ -235,11 +241,11 @@ void main() {
   float d4 = shore + deepSpan * 0.3;
   float d5 = shore + deepSpan;
 
-  float tShelf = 1.0 - smoothstep(d0, d1, shoreDist);
-  float tShallow = smoothstep(d0, d1, shoreDist) * (1.0 - smoothstep(d1, d2, shoreDist));
-  float tLagoon = smoothstep(d1, d2, shoreDist) * (1.0 - smoothstep(d2, d3, shoreDist));
-  float tOcean = smoothstep(d2, d3, shoreDist) * (1.0 - smoothstep(d3, d4, shoreDist));
-  float tDeep = smoothstep(d3, d5, shoreDist);
+  float tShelf = 1.0 - smoothstep(d0, d1, depthDist);
+  float tShallow = smoothstep(d0, d1, depthDist) * (1.0 - smoothstep(d1, d2, depthDist));
+  float tLagoon = smoothstep(d1, d2, depthDist) * (1.0 - smoothstep(d2, d3, depthDist));
+  float tOcean = smoothstep(d2, d3, depthDist) * (1.0 - smoothstep(d3, d4, depthDist));
+  float tDeep = smoothstep(d3, d5, depthDist);
 
   float wSum = max(tShelf + tShallow + tLagoon + tOcean + tDeep, 0.001);
   vec3 col = (
