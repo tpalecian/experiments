@@ -63,14 +63,12 @@ export interface StyleConfig {
   waterSpecularIntensity: number;
   waterSpecularPower: number;
 
-  // Water — foam / soft land cut
+  // Water — foam
   waterShoreFoam: number;
   waterFoamWidth: number;
   /** Foam breathing amplitude (0 = static). */
   waterFoamPulse: number;
   waterFoamPulseSpeed: number;
-  /** Soft alpha fade width across the hex shoreline (world units). */
-  waterShoreFade: number;
 
   // Water — caustics
   waterCausticIntensity: number;
@@ -161,11 +159,10 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterSpecularIntensity: 0.28,
   waterSpecularPower: 14,
 
-  waterShoreFoam: 0.1,
-  waterFoamWidth: 1.4,
-  waterFoamPulse: 0.15,
+  waterShoreFoam: 0.35,
+  waterFoamWidth: 0.4,
+  waterFoamPulse: 0.22,
   waterFoamPulseSpeed: 0.7,
-  waterShoreFade: 1.5,
 
   waterCausticIntensity: 0.05,
   waterCausticScale: 0.55,
@@ -175,9 +172,9 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterReflectDistort: 0.035,
   waterReflectBlur: 0.01,
   // Sparse blotches (not full rings); open-water drift stays visible
-  waterRippleFreq: 0.85,
-  waterRippleSpeed: 0.18,
-  waterRippleIntensity: 0.48,
+  waterRippleFreq: 0.95,
+  waterRippleSpeed: 0.2,
+  waterRippleIntensity: 0.62,
   waterDriftIntensity: 0.72,
   waterDriftScale: 0.2,
   waterDriftSpeed: 0.32,
@@ -288,7 +285,7 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-const STORAGE_KEY = 'catan-style-config-v13';
+const STORAGE_KEY = 'catan-style-config-v14';
 
 export function loadStyleConfig(): StyleConfig {
   try {

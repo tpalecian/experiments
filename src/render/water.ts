@@ -13,7 +13,7 @@ export const WATER_MAX_HEXES = 64;
  * Bruno's folio uses WebGPU/TSL: flat plane + shore ripples + blurred
  * viewport sampling. We approximate that here with:
  *   - mirrored scene reflection RT (distorted + multi-tap blur)
- *   - soft hex-SDF shore fade (no hard land mask)
+ *   - hex-SDF shore / discard (keep Catan tiles readable)
  *   - sparse irregular shore ripples (few random blotches → coast)
  *   - soft drifting wave patches across open water
  *   - soft tropical depth colour underneath the reflection
@@ -123,7 +123,6 @@ uniform float uShoreFoam;
 uniform float uFoamWidth;
 uniform float uFoamPulse;
 uniform float uFoamPulseSpeed;
-uniform float uShoreFade;
 uniform float uShoreGlow;
 uniform float uColorWave;
 uniform float uCausticIntensity;
@@ -224,12 +223,8 @@ void main() {
   float shore = max(uShoreWidth, 0.001);
   float deepSpan = max(uDeepFade, 0.001);
 
-  // Soft land cut — water washes gently onto the tile base and fades out
-  // (no hard discard at shoreDist==0; that reads as a cardboard mask).
-  float fade = max(uShoreFade, 0.12);
-  float landAlpha = smoothstep(-fade * 0.55, fade * 1.15, shoreDist);
-  landAlpha = landAlpha * landAlpha * (3.0 - 2.0 * landAlpha);
-  if (landAlpha < 0.02) discard;
+  // Under land tiles — keep water out so hex edges stay crisp
+  if (shoreDist < 0.0) discard;
 
   // 1. Depth gradient measured from actual tile coasts
   float d0 = 0.0;
@@ -239,11 +234,11 @@ void main() {
   float d4 = shore + deepSpan * 0.45;
   float d5 = shore + deepSpan;
 
-  float tShelf = 1.0 - smoothstep(d0, d1, max(shoreDist, 0.0));
-  float tShallow = smoothstep(d0, d1, max(shoreDist, 0.0)) * (1.0 - smoothstep(d1, d2, max(shoreDist, 0.0)));
-  float tLagoon = smoothstep(d1, d2, max(shoreDist, 0.0)) * (1.0 - smoothstep(d2, d3, max(shoreDist, 0.0)));
-  float tOcean = smoothstep(d2, d3, max(shoreDist, 0.0)) * (1.0 - smoothstep(d3, d4, max(shoreDist, 0.0)));
-  float tDeep = smoothstep(d3, d5, max(shoreDist, 0.0));
+  float tShelf = 1.0 - smoothstep(d0, d1, shoreDist);
+  float tShallow = smoothstep(d0, d1, shoreDist) * (1.0 - smoothstep(d1, d2, shoreDist));
+  float tLagoon = smoothstep(d1, d2, shoreDist) * (1.0 - smoothstep(d2, d3, shoreDist));
+  float tOcean = smoothstep(d2, d3, shoreDist) * (1.0 - smoothstep(d3, d4, shoreDist));
+  float tDeep = smoothstep(d3, d5, shoreDist);
 
   float wSum = max(tShelf + tShallow + tLagoon + tOcean + tDeep, 0.001);
   vec3 col = (
@@ -253,13 +248,9 @@ void main() {
      uOcean * tOcean +
      uDeepOcean * tDeep) / wSum;
 
-  // Soft beach wash right against the hex wall (hides the hard geometry cut)
-  float wallWash = 1.0 - smoothstep(-fade * 0.2, fade * 0.85, shoreDist);
-  col = mix(col, uBeachEdge, wallWash * 0.55 * landAlpha);
-
   // 2. Soft near-shore glow
-  float shoreGlow = 1.0 - smoothstep(0.0, shore * 0.45, max(shoreDist, 0.0));
-  shoreGlow = pow(max(shoreGlow, 0.0), 1.6) * landAlpha;
+  float shoreGlow = 1.0 - smoothstep(0.0, shore * 0.45, shoreDist);
+  shoreGlow = pow(max(shoreGlow, 0.0), 1.6);
   col = mix(col, uShallow, shoreGlow * uShoreGlow);
 
   // 3. Gentle colour motion
@@ -304,7 +295,7 @@ void main() {
   float haze = max(edgeFade, max(distFade * 0.92, max(horizonFade, graze)));
   haze = clamp(haze, 0.0, 1.0);
   haze = haze * haze * (3.0 - 2.0 * haze);
-  float keep = (1.0 - haze) * landAlpha;
+  float keep = 1.0 - haze;
 
   // 5. Bruno-like blurred reflection (projector UV + wobble + multi-tap)
   vec2 ruv = vReflectCoord.xy / max(vReflectCoord.w, 0.0001);
@@ -353,24 +344,23 @@ void main() {
   float n = valueNoise(nUv);
   float nWarp = valueNoise(vWorldPos.xz * 1.1 + vec2(bandIdx * 0.33, -bandIdx * 0.19));
   float nDetail = valueNoise(vWorldPos.xz * 1.8 + vec2(bandIdx * 0.13, bandIdx * 0.61));
-  // Soft crest, warped into an organic shape (not a clean ring)
+  // Thin crest warped into an organic shape (not a clean ring)
   float crestCenter = mix(0.62, 0.88, n * 0.55 + nWarp * 0.45);
-  float crest = 1.0 - abs(bandFrac - crestCenter) * mix(2.0, 3.0, nDetail);
-  crest = pow(max(crest, 0.0), 2.4);
-  float nearShore = 1.0 - smoothstep(0.0, 2.8, max(shoreDist, 0.0));
-  // Soft blotches — smooth gates, not binary step masks
-  float blotchForm = smoothstep(0.34, 0.58, n) * smoothstep(0.22, 0.5, nDetail);
-  float sparse = smoothstep(0.42, 0.62, n * 0.5 + nWarp * 0.3 + nDetail * 0.2);
-  float ripple = crest * blotchForm * sparse * nearShore * uRippleIntensity * landAlpha;
+  float crest = 1.0 - abs(bandFrac - crestCenter) * mix(2.4, 3.6, nDetail);
+  crest = pow(max(crest, 0.0), 3.2);
+  float nearShore = 1.0 - smoothstep(0.0, 2.6, shoreDist);
+  // Sparse but visible: ~25–35% of each crest becomes a blotch
+  float blotchForm = smoothstep(0.38, 0.62, n) * smoothstep(0.25, 0.55, nDetail);
+  float sparse = step(0.55, n * 0.5 + nWarp * 0.3 + nDetail * 0.2);
+  float ripple = crest * blotchForm * sparse * nearShore * uRippleIntensity;
 
-  // Soft shore wash — faint, never a hard white hex outline
-  float foamSpan = max(uFoamWidth * 2.0, fade * 1.5);
-  float shoreEdge = 1.0 - smoothstep(0.0, foamSpan, max(shoreDist, 0.0));
-  shoreEdge = pow(max(shoreEdge, 0.0), 3.4) * landAlpha * 0.22;
+  // Soft shore lip
+  float shoreEdge = 1.0 - smoothstep(0.0, max(uFoamWidth * 0.5, 0.07), shoreDist);
+  shoreEdge = pow(max(shoreEdge, 0.0), 1.45) * 0.85;
 
-  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 1.6 + wave * 2.5));
-  float foam = (ripple * 0.7 + shoreEdge * uShoreFoam * foamPulse) * landAlpha;
-  col = mix(col, mix(col, uFoamColor, 0.5), clamp(foam, 0.0, 0.4) * keep);
+  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 2.0 + wave * 2.5));
+  float foam = max(ripple, shoreEdge * uShoreFoam * foamPulse);
+  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.92) * keep);
 
   // 9. Horizon dissolve
   vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);
@@ -461,7 +451,6 @@ export class WaterSurface {
         uFoamWidth: { value: this.config.waterFoamWidth },
         uFoamPulse: { value: this.config.waterFoamPulse },
         uFoamPulseSpeed: { value: this.config.waterFoamPulseSpeed },
-        uShoreFade: { value: this.config.waterShoreFade },
         uShoreGlow: { value: this.config.waterShoreGlow },
         uColorWave: { value: this.config.waterColorWave },
         uCausticIntensity: { value: this.config.waterCausticIntensity },
@@ -484,7 +473,7 @@ export class WaterSurface {
         uHexApothem: { value: HEX_SIZE * Math.sqrt(3) * 0.5 },
       },
       transparent: true,
-      depthWrite: false,
+      depthWrite: true,
       side: THREE.DoubleSide,
     });
 
@@ -527,7 +516,6 @@ export class WaterSurface {
     u.uFoamWidth.value = config.waterFoamWidth;
     u.uFoamPulse.value = config.waterFoamPulse;
     u.uFoamPulseSpeed.value = config.waterFoamPulseSpeed;
-    u.uShoreFade.value = config.waterShoreFade;
     u.uShoreGlow.value = config.waterShoreGlow;
     u.uColorWave.value = config.waterColorWave;
     u.uCausticIntensity.value = config.waterCausticIntensity;
