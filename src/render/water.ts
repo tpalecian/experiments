@@ -15,7 +15,7 @@ export const WATER_MAX_HEXES = 64;
  *   - hex-SDF shore / discard (keep Catan tiles readable)
  *   - thin glowing shore lip flush to hex coast (Bruno `shoreNode`)
  *   - sparse thin arc ripples marching coastbound (Bruno `ripplesNode`)
- *   - random open-water sea-wave wisps (drift patches)
+ *   - quiet open-water brightness drift (no foam shards)
  *   - depth colour underneath (navy → cyan shelf)
  *
  * Reference: https://github.com/brunosimon/folio-2025/blob/main/sources/Game/World/WaterSurface.js
@@ -326,61 +326,42 @@ void main() {
   float cau = softCaustic(vWorldPos.xz * uCausticScale, uTime * uCausticSpeed);
   col += mix(uBeachEdge, uShallow, 0.4) * cau * uCausticIntensity * shallowMask * keep;
 
-  // 7b. Random sea waves — irregular foam wisps + soft swell patches on open water
-  float openWater = smoothstep(0.5, 1.8, shoreDist);
-  vec2 driftUvA = vWorldPos.xz * uDriftScale + vec2(uTime * uDriftSpeed * 0.15, -uTime * uDriftSpeed * 0.1);
-  vec2 driftUvB = vWorldPos.xz * uDriftScale * 1.8 + vec2(-uTime * uDriftSpeed * 0.09, uTime * uDriftSpeed * 0.12);
+  // 7b. Soft open-water drift — quiet brightness only (no foam marks)
+  float openWater = smoothstep(1.6, 5.0, shoreDist);
+  vec2 driftUvA = vWorldPos.xz * uDriftScale + vec2(uTime * uDriftSpeed * 0.08, -uTime * uDriftSpeed * 0.05);
+  vec2 driftUvB = vWorldPos.xz * uDriftScale * 1.5 + vec2(-uTime * uDriftSpeed * 0.04, uTime * uDriftSpeed * 0.06);
   float dnA = valueNoise(driftUvA);
   float dnB = valueNoise(driftUvB + vec2(2.7, 5.1));
-  float dnC = valueNoise(driftUvA * 2.1 + vec2(uTime * 0.03, -1.3));
-  // Anisotropic stretch → elongated whitecap wisps (readable on navy)
-  vec2 wispUv = vec2(
-    dot(vWorldPos.xz, normalize(vec2(0.95, 0.28))) * uDriftScale * 2.4,
-    dot(vWorldPos.xz, normalize(vec2(-0.28, 0.95))) * uDriftScale * 0.4
-  ) + vec2(uTime * uDriftSpeed * 0.11, -uTime * uDriftSpeed * 0.05);
-  float wispN = valueNoise(wispUv);
-  float wispN2 = valueNoise(wispUv * 1.7 + vec2(4.1, uTime * 0.02));
-  float wispN3 = valueNoise(wispUv * 0.55 + vec2(-uTime * uDriftSpeed * 0.04, 2.2));
+  float dnC = valueNoise(driftUvA * 2.1 + vec2(uTime * 0.01, -1.3));
+  float driftPatch = smoothstep(0.64, 0.88, dnA) * (1.0 - smoothstep(0.6, 0.9, dnB));
+  driftPatch *= 0.45 + 0.55 * dnC;
+  float driftPatch2 = smoothstep(0.7, 0.93, valueNoise(driftUvB * 0.65 + vec2(4.2, uTime * 0.008)));
+  float driftWaves = max(driftPatch * 0.55, driftPatch2 * 0.25);
+  col += vec3(0.028) * driftWaves * openWater * uDriftIntensity * keep;
 
-  // Soft broad swell patches (dark/light breathing across open sea)
-  float swellPatch = smoothstep(0.35, 0.7, dnA) * (0.5 + 0.5 * dnC);
-  swellPatch = max(swellPatch, smoothstep(0.4, 0.75, dnB) * 0.6);
-  col += mix(uOcean, uLagoon, 0.5) * swellPatch * openWater * uDriftIntensity * 0.12 * keep;
-  col = mix(col, uDeepOcean, swellPatch * openWater * uDriftIntensity * 0.08 * keep);
-
-  // Sparse elongated white foam wisps
-  float wispBody = smoothstep(0.52, 0.78, wispN) * (1.0 - smoothstep(0.5, 0.85, wispN2));
-  wispBody *= smoothstep(0.25, 0.6, wispN3);
-  float wispBody2 = smoothstep(0.58, 0.82, valueNoise(wispUv.yx * 0.8 + vec2(uTime * 0.03, 1.7)));
-  float seaWisps = max(wispBody, wispBody2 * 0.55);
-  // Keep wisps out of the immediate shore lip so they read as open-sea waves
-  seaWisps *= openWater;
-  col = mix(col, uFoamColor, clamp(seaWisps * uDriftIntensity * 0.7, 0.0, 0.85) * keep);
-  col += uFoamColor * seaWisps * uDriftIntensity * 0.15 * keep;
-
-  // 8. Bruno ripplesNode — sparse arcs that travel INTO the shore
-  // band = (shoreDist + time) → crests move coastbound; keep them tight to land.
-  float rippleRange = 2.2;
+  // 8. Bruno ripplesNode — soft sparse arcs traveling INTO the shore
+  // Soft alpha (not hard white decals); stay near the coast.
+  float rippleRange = 2.4;
   float b = clamp(shoreDist / rippleRange, 0.0, 1.0);
-  float slopeFreq = max(uRippleFreq, 0.05) * 5.5;
-  float band = (b + uTime * uRippleSpeed * 0.55) * slopeFreq;
+  float slopeFreq = max(uRippleFreq, 0.05) * 5.0;
+  float band = (b + uTime * uRippleSpeed * 0.5) * slopeFreq;
   float bandIdx = floor(band);
   float bandFrac = fract(band);
 
-  vec2 coastUv = vWorldPos.xz * 0.55;
+  vec2 coastUv = vWorldPos.xz * 0.5;
   float n1 = valueNoise(coastUv + vec2(bandIdx * 2.9, bandIdx * 1.1));
-  float n2 = valueNoise(coastUv * 2.4 + vec2(-bandIdx * 0.7, bandIdx * 2.4));
-  float n3 = valueNoise(vWorldPos.xz * 0.9 + vec2(bandIdx * 3.3, -1.8));
-  // High-frequency breaker so arcs stay short (not full iso-contours)
-  float nBreak = valueNoise(vWorldPos.xz * 1.6 + vec2(bandIdx * 0.41, -bandIdx * 0.27));
+  float n2 = valueNoise(coastUv * 2.2 + vec2(-bandIdx * 0.7, bandIdx * 2.4));
+  float n3 = valueNoise(vWorldPos.xz * 0.85 + vec2(bandIdx * 3.3, -1.8));
+  float nBreak = valueNoise(vWorldPos.xz * 1.45 + vec2(bandIdx * 0.41, -bandIdx * 0.27));
 
-  float atten = mix(0.05, 1.35, b);
-  float rippleField = bandFrac - atten + n1 * 0.45 + n2 * 0.2;
-  float accept = step(-0.35, rippleField);
-  float arcGate = step(0.7, nBreak * 0.55 + n1 * 0.25 + n2 * 0.2);
-  float crest = 1.0 - abs(bandFrac - mix(0.55, 0.82, n3));
-  crest = pow(max(crest, 0.0), 5.2);
-  float nearShore = smoothstep(0.0, 0.08, b) * (1.0 - smoothstep(0.32, 0.7, b));
+  float atten = mix(0.08, 1.4, b);
+  float rippleField = bandFrac - atten + n1 * 0.4 + n2 * 0.18;
+  float accept = step(-0.32, rippleField);
+  float arcGate = step(0.74, nBreak * 0.55 + n1 * 0.25 + n2 * 0.2);
+  float crest = 1.0 - abs(bandFrac - mix(0.52, 0.8, n3));
+  crest = pow(max(crest, 0.0), 3.8);
+  // Tight to coast — do not scatter hard marks into open sea
+  float nearShore = smoothstep(0.0, 0.05, b) * (1.0 - smoothstep(0.28, 0.58, b));
   float ripple = accept * arcGate * crest * nearShore * clamp(uRippleIntensity, 0.0, 1.2);
 
   // Shore foam flush to hex edge
@@ -395,9 +376,9 @@ void main() {
 
   col = mix(col, mix(uShallow, uFoamColor, 0.22), clamp(shoreGlowRim, 0.0, 0.6) * keep);
 
-  float foam = max(ripple * 0.95, shoreFoam);
-  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.92) * keep);
-  col += uFoamColor * foam * 0.1 * keep;
+  // Soft mix — ripples are translucent strokes, not opaque shards
+  float foam = max(ripple * 0.5, shoreFoam);
+  col = mix(col, mix(col, uFoamColor, 0.85), clamp(foam, 0.0, 0.7) * keep);
 
   // 9. Horizon dissolve
   vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);

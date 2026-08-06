@@ -171,13 +171,13 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterReflectStrength: 0.48,
   waterReflectDistort: 0.022,
   waterReflectBlur: 0.018,
-  // Sparse coastbound arcs + visible random open-water waves
+  // Open-water drift off by default (craft knob still available)
   waterRippleFreq: 0.9,
   waterRippleSpeed: 0.28,
-  waterRippleIntensity: 0.75,
-  waterDriftIntensity: 1.0,
-  waterDriftScale: 0.22,
-  waterDriftSpeed: 0.35,
+  waterRippleIntensity: 0.7,
+  waterDriftIntensity: 0,
+  waterDriftScale: 0.16,
+  waterDriftSpeed: 0.18,
 
   exposure: 1.15,
   sunIntensity: 1.45,
@@ -221,7 +221,7 @@ export const STYLE_PRESETS: StylePreset[] = [
       waterBandIntensity: 0.02,
       waterShoreFoam: 0.7,
       waterRippleIntensity: 0.75,
-      waterDriftIntensity: 0.85,
+      waterDriftIntensity: 0.4,
       waterCausticIntensity: 0.04,
       exposure: 1.15,
       sunIntensity: 1.45,
@@ -241,7 +241,7 @@ export const STYLE_PRESETS: StylePreset[] = [
       waterBandIntensity: 0.02,
       waterShoreFoam: 0.7,
       waterRippleIntensity: 0.7,
-      waterDriftIntensity: 0.7,
+      waterDriftIntensity: 0.35,
       waterCausticIntensity: 0.03,
       exposure: 1.05,
       sunIntensity: 1.2,
@@ -262,8 +262,7 @@ export const STYLE_PRESETS: StylePreset[] = [
       waterShoreFoam: 0.8,
       waterShoreGlow: 0.28,
       waterRippleIntensity: 0.75,
-      waterDriftIntensity: 0.65,
-      waterCausticIntensity: 0.02,
+      waterDriftIntensity: 0.3,
       waterFresnelStrength: 0.18,
       waterReflectStrength: 0.4,
       exposure: 0.95,
@@ -284,7 +283,7 @@ export const STYLE_PRESETS: StylePreset[] = [
       waterShoreFoam: 0.9,
       waterFoamPulse: 0.22,
       waterRippleIntensity: 0.95,
-      waterDriftIntensity: 0.9,
+      waterDriftIntensity: 0.45,
       waterCausticIntensity: 0.05,
       motionPieceSpawnSec: 0.42,
       motionRobberHopSec: 0.58,
@@ -295,7 +294,7 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-const STORAGE_KEY = 'catan-style-config-v16';
+const STORAGE_KEY = 'catan-style-config-v19';
 
 export function loadStyleConfig(): StyleConfig {
   try {
