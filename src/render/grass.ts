@@ -10,10 +10,10 @@ import { STYLIZED_TERRAIN } from './style';
  * uniform carpet.
  */
 
-// Folio defaults are 0.1 × 0.6; scaled for hex size 1
-const BLADE_WIDTH = 0.028;
-const BLADE_HEIGHT = 0.14;
-const BLADE_HEIGHT_RANDOMNESS = 0.65;
+// Diorama scale on hex size 1 — fine short grass, not waist-high tufts
+const BLADE_WIDTH = 0.012;
+const BLADE_HEIGHT = 0.045;
+const BLADE_HEIGHT_RANDOMNESS = 0.55;
 const SQRT3 = Math.sqrt(3);
 
 const terrainColor = new THREE.Color(STYLIZED_TERRAIN.sheep);
@@ -157,8 +157,8 @@ function makeTufts(count: number, radius: number): Tuft[] {
     tufts.push({
       lx,
       lz,
-      radius: 0.1 + Math.random() * 0.22,
-      strength: 0.5 + Math.random() * 0.5,
+      radius: 0.18 + Math.random() * 0.35,
+      strength: 0.45 + Math.random() * 0.55,
     });
   }
   return tufts;
@@ -198,13 +198,13 @@ export class GrassField {
 
     for (const patch of patches) {
       groundY = patch.y;
-      // 5–9 random tufts + noise field → irregular meadow patterns
-      const tuftCount = 5 + Math.floor(Math.random() * 5);
+      // Broader soft patches — many tiny blades reading as meadow texture
+      const tuftCount = 6 + Math.floor(Math.random() * 5);
       const tufts = makeTufts(tuftCount, scatterRadius);
 
       let placed = 0;
       let attempts = 0;
-      while (placed < bladesPerHex && attempts < bladesPerHex * 16) {
+      while (placed < bladesPerHex && attempts < bladesPerHex * 24) {
         attempts++;
         const lx = (Math.random() * 2 - 1) * scatterRadius;
         const lz = (Math.random() * 2 - 1) * scatterRadius;
@@ -213,16 +213,15 @@ export class GrassField {
 
         const noise = patchNoise(patch.x + lx, patch.z + lz);
         const tuft = tuftCover(lx, lz, tufts);
-        // Prefer tufts; allow sparse blades in noisy open patches
-        const cover = Math.max(tuft, noise > 0.62 ? (noise - 0.55) * 1.4 : 0);
-        if (cover < 0.22) continue;
-        // Stochastic reject so patterns stay open
-        if (Math.random() > cover * 0.95) continue;
+        // Soft meadow: tufts + noisy fill so tiny blades form irregular grassy areas
+        const cover = Math.max(tuft * 0.9, noise * 0.75);
+        if (cover < 0.28) continue;
+        if (Math.random() > cover * 0.9) continue;
 
         bladeXZ[count * 2] = patch.x + lx;
         bladeXZ[count * 2 + 1] = patch.z + lz;
         heightRandomness[count] = Math.random();
-        covers[count] = Math.min(1, 0.45 + cover * 0.7);
+        covers[count] = Math.min(1, 0.55 + cover * 0.5);
         count++;
         placed++;
       }
@@ -258,7 +257,7 @@ export class GrassField {
         uBladeWidth: { value: BLADE_WIDTH },
         uBladeHeight: { value: BLADE_HEIGHT },
         uBladeHeightRandomness: { value: BLADE_HEIGHT_RANDOMNESS },
-        uWindStrength: { value: 0.35 },
+        uWindStrength: { value: 0.2 },
         uWindDirection: {
           value: new THREE.Vector2(Math.sin(windAngle), Math.cos(windAngle)),
         },
