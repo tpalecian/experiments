@@ -161,11 +161,11 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterSpecularIntensity: 0.28,
   waterSpecularPower: 14,
 
-  waterShoreFoam: 0.22,
-  waterFoamWidth: 1.0,
-  waterFoamPulse: 0.22,
+  waterShoreFoam: 0.16,
+  waterFoamWidth: 1.25,
+  waterFoamPulse: 0.18,
   waterFoamPulseSpeed: 0.7,
-  waterShoreFade: 0.95,
+  waterShoreFade: 1.15,
 
   waterCausticIntensity: 0.05,
   waterCausticScale: 0.55,
@@ -175,9 +175,9 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterReflectDistort: 0.035,
   waterReflectBlur: 0.01,
   // Sparse blotches (not full rings); open-water drift stays visible
-  waterRippleFreq: 0.95,
-  waterRippleSpeed: 0.2,
-  waterRippleIntensity: 0.62,
+  waterRippleFreq: 0.85,
+  waterRippleSpeed: 0.18,
+  waterRippleIntensity: 0.48,
   waterDriftIntensity: 0.72,
   waterDriftScale: 0.2,
   waterDriftSpeed: 0.32,
