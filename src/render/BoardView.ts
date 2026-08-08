@@ -6,6 +6,7 @@ import {
   STYLIZED_PLAYER,
   STYLIZED_TERRAIN,
   STYLIZED_TERRAIN_SIDE,
+  getMeadowFloorMaterial,
   getToonGradient,
   toonMat,
 } from './style';
@@ -29,6 +30,25 @@ function hexShape(size: number): THREE.Shape {
   }
   shape.closePath();
   return shape;
+}
+
+/**
+ * ExtrudeGeometry lid UVs are raw shape XY (≈[-r,r]), so textures never sample.
+ * Remap materialIndex 0 (top/bottom lids in three@r172) into 0–1 from world XZ after rotateX.
+ * materialIndex 1 is the vertical sides.
+ */
+function remapExtrudeLidUVs(geom: THREE.BufferGeometry, radius: number): void {
+  const pos = geom.attributes.position;
+  const uv = geom.attributes.uv;
+  if (!pos || !uv) return;
+  const span = radius * 2;
+  for (const group of geom.groups) {
+    if (group.materialIndex !== 0) continue;
+    for (let i = group.start; i < group.start + group.count; i++) {
+      uv.setXY(i, pos.getX(i) / span + 0.5, pos.getZ(i) / span + 0.5);
+    }
+  }
+  uv.needsUpdate = true;
 }
 
 /**
@@ -110,7 +130,16 @@ interface HexVisual {
   baseEmissive: number;
   numberToken: THREE.Mesh | null;
   numberRestY: number;
-  baseColor?: THREE.Color;
+  baseColors?: THREE.Color[];
+}
+
+/** MeshToonMaterials on a hex (single or Extrude side+lid pair). */
+function hexToonMats(mesh: THREE.Mesh): THREE.MeshToonMaterial[] {
+  const m = mesh.material;
+  if (Array.isArray(m)) {
+    return m.filter((x): x is THREE.MeshToonMaterial => x instanceof THREE.MeshToonMaterial);
+  }
+  return m instanceof THREE.MeshToonMaterial ? [m] : [];
 }
 
 export class BoardView {
@@ -231,10 +260,13 @@ export class BoardView {
     const mix = atm.boardTintMix;
     const tint = atm.beachTint;
     for (const vis of this.hexVisuals.values()) {
-      const mat = vis.mesh.material as THREE.MeshToonMaterial;
-      const base = vis.baseColor ?? mat.color.clone();
-      vis.baseColor = base;
-      mat.color.copy(base).lerp(tint, mix);
+      const mats = hexToonMats(vis.mesh);
+      if (!vis.baseColors) vis.baseColors = mats.map((mat) => mat.color.clone());
+      mats.forEach((mat, i) => {
+        const base = vis.baseColors![i] ?? mat.color.clone();
+        vis.baseColors![i] = base;
+        mat.color.copy(base).lerp(tint, mix);
+      });
     }
     for (const child of this.propsGroup.children) {
       child.traverse((obj) => {
@@ -271,13 +303,21 @@ export class BoardView {
     geom.rotateX(-Math.PI / 2);
     // Soften normals for chunkier toon look on sides
     geom.computeVertexNormals();
+    // Pasture map needs 0–1 lid UVs (Extrude defaults to raw shape coords).
+    remapExtrudeLidUVs(geom, tileRadius);
     const rimGeom = hexRimGeometry(tileRadius * 0.9, tileRadius * 0.985);
+    const meadowTopProto = getMeadowFloorMaterial();
 
     for (const hex of board.hexes.values()) {
       const { x, z } = axialToWorld(hex.q, hex.r);
       const terrain = hex.terrain as Terrain;
 
-      const mat = toonMat(STYLIZED_TERRAIN[terrain]);
+      // Sheep: Extrude groups are [lids=0, sides=1] in three@r172 — meadow on top.
+      // Clone lid mat so emissive/hover stays per-hex (map texture still shared).
+      const mat: THREE.Material | THREE.Material[] =
+        terrain === 'sheep'
+          ? [meadowTopProto.clone(), toonMat(STYLIZED_TERRAIN_SIDE.sheep)]
+          : toonMat(STYLIZED_TERRAIN[terrain]);
       const mesh = new THREE.Mesh(geom, mat);
       mesh.position.set(x, 0, z);
       mesh.castShadow = true;
@@ -869,8 +909,9 @@ export class BoardView {
     }
     for (const [id, vis] of this.hexVisuals) {
       const on = this.legalHexes.has(id);
-      const mat = vis.mesh.material as THREE.MeshToonMaterial;
-      mat.emissive.set(on ? 0x665522 : 0x000000);
+      for (const mat of hexToonMats(vis.mesh)) {
+        mat.emissive.set(on ? 0x665522 : 0x000000);
+      }
     }
   }
 
@@ -898,9 +939,10 @@ export class BoardView {
     }
 
     for (const [id, vis] of this.hexVisuals) {
-      const mat = vis.mesh.material as THREE.MeshToonMaterial;
       const target = this.legalHexes.has(id) ? 0.42 * pulse : 0;
-      mat.emissiveIntensity += (target - mat.emissiveIntensity) * step;
+      for (const mat of hexToonMats(vis.mesh)) {
+        mat.emissiveIntensity += (target - mat.emissiveIntensity) * step;
+      }
     }
   }
 
@@ -913,11 +955,13 @@ export class BoardView {
       vis.mesh.position.y = vis.restingY;
 
       const hovered = this.hoverHexId === id;
-      const mat = vis.mesh.material as THREE.MeshToonMaterial;
+      const mats = hexToonMats(vis.mesh);
       if (hovered && !this.legalHexes.has(id)) {
         const lift = Math.min(0.22, this.motion.hoverLift * 4);
-        mat.emissive.set(0x445566);
-        mat.emissiveIntensity = Math.max(mat.emissiveIntensity, lift);
+        for (const mat of mats) {
+          mat.emissive.set(0x445566);
+          mat.emissiveIntensity = Math.max(mat.emissiveIntensity, lift);
+        }
       }
 
       let pulse = this.productionPulse.get(id) ?? 0;
@@ -927,8 +971,10 @@ export class BoardView {
         const wave = Math.sin((this.motion.productionPulseSec - pulse) * Math.PI * 3) * Math.min(1, pulse * 2);
         const boost = Math.max(0, wave) * this.motion.productionPulseStrength;
         if (!this.legalHexes.has(id)) {
-          mat.emissive.set(0x886622);
-          mat.emissiveIntensity = Math.max(mat.emissiveIntensity, boost);
+          for (const mat of mats) {
+            mat.emissive.set(0x886622);
+            mat.emissiveIntensity = Math.max(mat.emissiveIntensity, boost);
+          }
         }
         if (vis.numberToken) {
           const bob = Math.max(0, wave) * 0.08;
