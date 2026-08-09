@@ -469,7 +469,7 @@ export class BoardView {
           this.propsGroup.add(wall);
         }
 
-        const bushCount = 2 + Math.floor(rand() * 3);
+        const bushCount = 1 + Math.floor(rand() * 2);
         for (let i = 0; i < bushCount; i++) {
           const bush = makeBush({ variant: Math.floor(rand() * 3), scale: 0.85 + rand() * 0.35 });
           const a = rand() * Math.PI * 2;
@@ -479,7 +479,7 @@ export class BoardView {
           this.propsGroup.add(bush);
         }
 
-        const rockCount = 1 + Math.floor(rand() * 3);
+        const rockCount = 1 + Math.floor(rand() * 2);
         for (let i = 0; i < rockCount; i++) {
           const rock = makePastureRock({
             variant: Math.floor(rand() * 4),
@@ -492,15 +492,12 @@ export class BoardView {
           this.propsGroup.add(rock);
         }
 
-        if (rand() > 0.35) {
-          const flowers = 1 + Math.floor(rand() * 2);
-          for (let i = 0; i < flowers; i++) {
-            const tuft = makeFlowerTuft({ variant: Math.floor(rand() * 2) });
-            const a = rand() * Math.PI * 2;
-            const d = 0.25 + rand() * 0.4;
-            tuft.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
-            this.propsGroup.add(tuft);
-          }
+        if (rand() > 0.55) {
+          const tuft = makeFlowerTuft({ variant: Math.floor(rand() * 2) });
+          const a = rand() * Math.PI * 2;
+          const d = 0.25 + rand() * 0.4;
+          tuft.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
+          this.propsGroup.add(tuft);
         }
 
         if (rand() > 0.4) {
