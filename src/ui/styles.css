@@ -708,6 +708,243 @@ button:disabled {
   margin-top: 0.35rem;
 }
 
+/* ——— Asset Lab ——— */
+
+#asset-lab {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#asset-lab.hidden {
+  display: none;
+}
+
+body.asset-lab-mode #lobby,
+body.asset-lab-mode #hud,
+body.asset-lab-mode #style-config-root {
+  display: none !important;
+}
+
+.lobby-dev {
+  margin-top: 1.35rem;
+  text-align: center;
+  border-top: 1px dashed var(--panel-border);
+  padding-top: 1rem;
+}
+
+.lobby-asset-lab {
+  display: inline-flex;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.asset-lab-panel {
+  pointer-events: auto;
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  bottom: 5.5rem;
+  width: min(300px, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1rem 1rem 0.85rem;
+  border: 3px solid var(--panel-border);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: 0 10px 0 rgba(92, 61, 46, 0.16);
+  overflow: hidden;
+}
+
+.asset-lab-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.asset-lab-eyebrow {
+  margin: 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.asset-lab-header h1 {
+  margin: 0.1rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+
+.asset-lab-back {
+  text-decoration: none;
+  white-space: nowrap;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.asset-lab-lede {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.asset-lab-list {
+  flex: 1;
+  overflow: auto;
+  padding-right: 0.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.asset-lab-section h2 {
+  margin: 0 0 0.4rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.asset-lab-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.asset-lab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  border: 2px solid var(--panel-border);
+  background: #fff8e8;
+  color: var(--ink);
+  text-align: left;
+  box-shadow: none;
+}
+
+.asset-lab-item:hover {
+  border-color: rgba(232, 168, 56, 0.7);
+}
+
+.asset-lab-item.active {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-ink);
+}
+
+.asset-lab-item-name {
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.asset-lab-item-id {
+  font-size: 0.72rem;
+  opacity: 0.7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.asset-lab-toolbar {
+  pointer-events: auto;
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.85rem 1rem;
+  border: 3px solid var(--panel-border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 8px 0 rgba(92, 61, 46, 0.14);
+}
+
+.asset-lab-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: min(240px, 100%);
+}
+
+.asset-lab-meta strong {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+
+.asset-lab-meta span {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.asset-lab-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 0.85rem;
+}
+
+.asset-lab-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.asset-lab-field select,
+.asset-lab-field input[type='range'] {
+  accent-color: var(--accent);
+}
+
+.asset-lab-field select {
+  border: 2px solid var(--panel-border);
+  border-radius: 8px;
+  background: #fff8e8;
+  color: var(--ink);
+  padding: 0.25rem 0.35rem;
+  font-family: var(--font-body);
+}
+
+.asset-lab-val {
+  min-width: 2.6rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.asset-lab-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .asset-lab-panel {
+    bottom: auto;
+    max-height: 42vh;
+  }
+
+  .asset-lab-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 @media (max-width: 720px) {
   .style-config {
     top: auto;

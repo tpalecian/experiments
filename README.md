@@ -20,11 +20,14 @@ Live modules:
 
 ```
 src/game/        rules engine · board graph
-src/render/      BoardView · water · grass · sky · atmosphere · tweens
+src/render/      BoardView · assets · water · grass · sky · atmosphere · tweens
 src/input/       picker
-src/ui/          HUD · Style configurator
+src/ui/          HUD · Style configurator · Asset Lab
 ```
 
+## Asset Lab
+
+Open `/?view=assets` (or use **Asset Lab** on the lobby) to orbit and inspect procedural pieces, props, and hex meshes in isolation.
 ## Run
 
 ```bash

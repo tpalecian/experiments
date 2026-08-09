@@ -2,6 +2,23 @@ import * as THREE from 'three';
 import { HEX_SIZE, axialToWorld } from '../game/board';
 import type { BoardState, PlayerId, Terrain } from '../game/types';
 import {
+  TILE_HEIGHT,
+  hexShape,
+  makeCactus,
+  makeCity,
+  makeFence,
+  makeLabelSprite,
+  makeMesa,
+  makeRoad,
+  makeRobber,
+  makeRock,
+  makeSettlement,
+  makeSheep,
+  makeTree,
+  makeWheatStalk,
+  numberTexture,
+} from './assets';
+import {
   STYLE,
   STYLIZED_PLAYER,
   STYLIZED_TERRAIN,
@@ -15,22 +32,6 @@ import type { StyleConfig } from './styleConfig';
 import { DEFAULT_STYLE_CONFIG } from './styleConfig';
 import { TweenPlayer, ease } from './tween';
 import { WaterSurface } from './water';
-
-const TILE_HEIGHT = 0.28;
-
-/** Pointy-top hex in the XY plane (matches board hexCorner angles). */
-function hexShape(size: number): THREE.Shape {
-  const shape = new THREE.Shape();
-  for (let i = 0; i < 6; i++) {
-    const angle = (Math.PI / 180) * (60 * i - 30);
-    const x = size * Math.cos(angle);
-    const y = size * Math.sin(angle);
-    if (i === 0) shape.moveTo(x, y);
-    else shape.lineTo(x, y);
-  }
-  shape.closePath();
-  return shape;
-}
 
 /**
  * ExtrudeGeometry lid UVs are raw shape XY (≈[-r,r]), so textures never sample.
@@ -71,33 +72,6 @@ function hexRimGeometry(inner: number, outer: number): THREE.BufferGeometry {
   const geom = new THREE.ShapeGeometry(shape);
   geom.rotateX(-Math.PI / 2);
   return geom;
-}
-
-function numberTexture(n: number): THREE.CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 128;
-  const ctx = c.getContext('2d')!;
-  ctx.clearRect(0, 0, 128, 128);
-  // Wooden token look
-  ctx.beginPath();
-  ctx.arc(64, 64, 56, 0, Math.PI * 2);
-  const g = ctx.createRadialGradient(48, 44, 10, 64, 64, 56);
-  g.addColorStop(0, '#ffe7b0');
-  g.addColorStop(1, '#d4a45a');
-  ctx.fillStyle = g;
-  ctx.fill();
-  ctx.strokeStyle = '#5c3d2e';
-  ctx.lineWidth = 7;
-  ctx.stroke();
-  ctx.fillStyle = n === 6 || n === 8 ? '#d62828' : '#3a2a18';
-  ctx.font = 'bold 58px Fraunces, Georgia, serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(String(n), 64, 70);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
 }
 
 function seeded(n: number): () => number {
@@ -179,7 +153,7 @@ export class BoardView {
   };
 
   constructor() {
-    this.robber = this.makeRobber();
+    this.robber = makeRobber();
     this.root.add(this.water.mesh);
     this.root.add(this.harborGroup);
     this.root.add(this.propsGroup);
@@ -420,7 +394,7 @@ export class BoardView {
 
     if (terrain === 'wood') {
       for (let i = 0; i < 3; i++) {
-        const tree = this.makeTree(0.7 + rand() * 0.4);
+        const tree = makeTree({ scale: 0.7 + rand() * 0.4 });
         const a = rand() * Math.PI * 2;
         const d = 0.25 + rand() * 0.4;
         tree.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
@@ -429,53 +403,35 @@ export class BoardView {
       }
     } else if (terrain === 'wheat') {
       for (let i = 0; i < 5; i++) {
-        const stalk = new THREE.Mesh(
-          new THREE.ConeGeometry(0.05, 0.28, 4),
-          toonMat(0xf5d56a),
-        );
+        const stalk = makeWheatStalk();
         const a = rand() * Math.PI * 2;
         const d = 0.2 + rand() * 0.45;
-        stalk.position.set(x + Math.cos(a) * d, y + 0.14, z + Math.sin(a) * d);
-        stalk.castShadow = true;
+        stalk.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
         this.propsGroup.add(stalk);
       }
     } else if (terrain === 'ore') {
       for (let i = 0; i < 3; i++) {
-        const rock = new THREE.Mesh(
-          new THREE.DodecahedronGeometry(0.12 + rand() * 0.1, 0),
-          toonMat(0x9aa3b5),
-        );
+        const rockScale = 0.85 + rand() * 0.7;
+        const rock = makeRock({ scale: rockScale });
         const a = rand() * Math.PI * 2;
         const d = 0.2 + rand() * 0.4;
-        rock.position.set(x + Math.cos(a) * d, y + 0.1, z + Math.sin(a) * d);
+        rock.position.set(x + Math.cos(a) * d, y + rock.position.y, z + Math.sin(a) * d);
         rock.rotation.set(rand(), rand(), rand());
-        rock.castShadow = true;
         this.propsGroup.add(rock);
       }
     } else if (terrain === 'brick') {
-      const mesa = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.28, 0.35, 0.22, 5),
-        toonMat(0xc4683a),
-      );
-      mesa.position.set(x + (rand() - 0.5) * 0.3, y + 0.11, z + (rand() - 0.5) * 0.3);
-      mesa.castShadow = true;
+      const mesa = makeMesa();
+      mesa.position.set(x + (rand() - 0.5) * 0.3, y + mesa.position.y, z + (rand() - 0.5) * 0.3);
       this.propsGroup.add(mesa);
     } else if (terrain === 'desert') {
-      const cactus = new THREE.Group();
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.28, 5), toonMat(0x4aa05a));
-      trunk.position.y = 0.14;
-      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.14, 5), toonMat(0x4aa05a));
-      arm.position.set(0.08, 0.18, 0);
-      arm.rotation.z = -0.8;
-      cactus.add(trunk, arm);
+      const cactus = makeCactus();
       cactus.position.set(x + 0.25, y, z - 0.15);
-      cactus.castShadow = true;
       this.propsGroup.add(cactus);
     } else if (terrain === 'sheep') {
       // Classic Enhanced pasture: tiny sheep + short fences on soft green ground
       const sheepCount = 3 + Math.floor(rand() * 3);
       for (let i = 0; i < sheepCount; i++) {
-        const sheep = this.makeSheep();
+        const sheep = makeSheep();
         const a = rand() * Math.PI * 2;
         const d = 0.28 + rand() * 0.42;
         sheep.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
@@ -486,7 +442,7 @@ export class BoardView {
 
       const fenceCount = 1 + Math.floor(rand() * 2);
       for (let i = 0; i < fenceCount; i++) {
-        const fence = this.makeFence();
+        const fence = makeFence();
         const a = rand() * Math.PI * 2;
         const d = 0.55 + rand() * 0.18;
         fence.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
@@ -495,7 +451,7 @@ export class BoardView {
       }
 
       if (rand() > 0.55) {
-        const tree = this.makeTree(0.38 + rand() * 0.12);
+        const tree = makeTree({ scale: 0.38 + rand() * 0.12 });
         const a = rand() * Math.PI * 2;
         const d = 0.35 + rand() * 0.3;
         tree.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
@@ -503,68 +459,6 @@ export class BoardView {
         this.propsGroup.add(tree);
       }
     }
-  }
-
-  /** Tiny low-poly sheep for Classic Enhanced pasture hexes. */
-  private makeSheep(): THREE.Object3D {
-    const g = new THREE.Group();
-    const wool = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.075, 0.07), toonMat(0xf4f0e6));
-    wool.position.y = 0.055;
-    wool.castShadow = true;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.035, 0.04), toonMat(0xe8e0d4));
-    head.position.set(0.055, 0.06, 0);
-    head.castShadow = true;
-    const legGeo = new THREE.BoxGeometry(0.015, 0.03, 0.015);
-    const legMat = toonMat(0x5c4a3a);
-    const legs: [number, number][] = [
-      [-0.03, 0.02],
-      [-0.03, -0.02],
-      [0.03, 0.02],
-      [0.03, -0.02],
-    ];
-    for (const [lx, lz] of legs) {
-      const leg = new THREE.Mesh(legGeo, legMat);
-      leg.position.set(lx, 0.015, lz);
-      g.add(leg);
-    }
-    g.add(wool, head);
-    return g;
-  }
-
-  /** Short wooden fence segment for pasture hexes. */
-  private makeFence(): THREE.Object3D {
-    const g = new THREE.Group();
-    const postMat = toonMat(STYLE.woodTrim);
-    const postGeo = new THREE.BoxGeometry(0.025, 0.1, 0.025);
-    for (const px of [-0.09, 0.09]) {
-      const post = new THREE.Mesh(postGeo, postMat);
-      post.position.set(px, 0.05, 0);
-      post.castShadow = true;
-      g.add(post);
-    }
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.018), postMat);
-    rail.position.set(0, 0.07, 0);
-    rail.castShadow = true;
-    const rail2 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.018, 0.016), postMat);
-    rail2.position.set(0, 0.04, 0);
-    g.add(rail, rail2);
-    return g;
-  }
-
-  private makeTree(scale: number): THREE.Object3D {
-    const g = new THREE.Group();
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.16, 5), toonMat(STYLE.woodTrim));
-    trunk.position.y = 0.08;
-    trunk.castShadow = true;
-    const canopy = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.32, 5), toonMat(0x3d9a4a));
-    canopy.position.y = 0.3;
-    canopy.castShadow = true;
-    const canopy2 = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.24, 5), toonMat(0x52b85c));
-    canopy2.position.y = 0.42;
-    canopy2.castShadow = true;
-    g.add(trunk, canopy, canopy2);
-    g.scale.setScalar(scale);
-    return g;
   }
 
   private drawHarbors(board: BoardState): void {
@@ -588,7 +482,7 @@ export class BoardView {
       this.harborGroup.add(pier);
 
       const label = h.type === 'generic' ? '3:1' : `2:1 ${h.type[0].toUpperCase()}`;
-      const sprite = this.makeLabelSprite(label, h.type === 'generic' ? '#ffe8c0' : '#fff0a8');
+      const sprite = makeLabelSprite(label, h.type === 'generic' ? '#ffe8c0' : '#fff0a8');
       const bobBaseY = TILE_HEIGHT + 0.4;
       sprite.position.set(px, bobBaseY, pz);
       sprite.userData.bobPhase = Math.atan2(pz, px);
@@ -596,46 +490,6 @@ export class BoardView {
       this.harborSprites.push(sprite);
       this.harborGroup.add(sprite);
     }
-  }
-
-  private makeLabelSprite(text: string, bg: string): THREE.Sprite {
-    const c = document.createElement('canvas');
-    c.width = 256;
-    c.height = 96;
-    const ctx = c.getContext('2d')!;
-    ctx.fillStyle = bg;
-    ctx.strokeStyle = '#5c3d2e';
-    ctx.lineWidth = 8;
-    roundRect(ctx, 8, 8, 240, 80, 20);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#3a2a18';
-    ctx.font = 'bold 36px Fraunces, Georgia, serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, 128, 52);
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-    const s = new THREE.Sprite(mat);
-    s.scale.set(1.15, 0.42, 1);
-    return s;
-  }
-
-  private makeRobber(): THREE.Object3D {
-    const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.42, 6), toonMat(0x2a2430));
-    body.position.y = 0.24;
-    body.castShadow = true;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), toonMat(0x3a3444));
-    head.position.y = 0.52;
-    head.castShadow = true;
-    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffee88 }));
-    eyeL.position.set(-0.05, 0.54, 0.12);
-    const eyeR = eyeL.clone();
-    eyeR.position.x = 0.05;
-    g.add(body, head, eyeL, eyeR);
-    return g;
   }
 
   syncPieces(board: BoardState, animate = true): void {
@@ -657,13 +511,9 @@ export class BoardView {
       }
 
       const e = board.edges.get(road.edgeId)!;
-      const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(0.92, 0.12, 0.2),
-        toonMat(STYLIZED_PLAYER[road.owner]),
-      );
+      const mesh = makeRoad({ color: STYLIZED_PLAYER[road.owner] });
       mesh.position.set(e.midX, TILE_HEIGHT + 0.09, e.midZ);
       mesh.rotation.y = -e.angle;
-      mesh.castShadow = true;
       const restingScale = 1;
       mesh.scale.set(0.15, 0.15, 0.15);
       this.roads.set(road.edgeId, { mesh, owner: road.owner, restingScale });
@@ -710,7 +560,7 @@ export class BoardView {
       // Upgrade settlement → city with a short morph.
       if (existing && existing.kind === 'settlement' && b.kind === 'city' && existing.owner === b.owner) {
         const old = existing.mesh;
-        const city = this.makeCity(color);
+        const city = makeCity({ color });
         const restingScale = 1.1;
         city.position.set(v.x, TILE_HEIGHT, v.z);
         city.scale.setScalar(0.01);
@@ -753,7 +603,7 @@ export class BoardView {
         this.buildings.delete(b.vertexId);
       }
 
-      const piece = b.kind === 'city' ? this.makeCity(color) : this.makeSettlement(color);
+      const piece = b.kind === 'city' ? makeCity({ color }) : makeSettlement({ color });
       // makeSettlement/City already bake scale — animate from near-zero up to that.
       const baked = piece.scale.x;
       piece.scale.setScalar(0.01);
@@ -854,40 +704,6 @@ export class BoardView {
         },
       },
     );
-  }
-
-  private makeSettlement(color: number): THREE.Object3D {
-    const g = new THREE.Group();
-    const base = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.26, 0.32), toonMat(color));
-    base.position.y = 0.16;
-    base.castShadow = true;
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.26, 4), toonMat(STYLE.roof));
-    roof.position.y = 0.4;
-    roof.rotation.y = Math.PI / 4;
-    roof.castShadow = true;
-    const door = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.02), toonMat(STYLE.woodTrim));
-    door.position.set(0, 0.12, 0.17);
-    g.add(base, roof, door);
-    g.scale.setScalar(1.15);
-    return g;
-  }
-
-  private makeCity(color: number): THREE.Object3D {
-    const g = new THREE.Group();
-    const keep = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.42, 0.36), toonMat(color));
-    keep.position.y = 0.24;
-    keep.castShadow = true;
-    const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.55, 6), toonMat(color));
-    tower.position.set(0.2, 0.3, 0.05);
-    tower.castShadow = true;
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.18, 6), toonMat(STYLE.roof));
-    roof.position.set(0.2, 0.64, 0.05);
-    roof.castShadow = true;
-    const flag = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.02), toonMat(STYLE.highlight));
-    flag.position.set(0.28, 0.72, 0.05);
-    g.add(keep, tower, roof, flag);
-    g.scale.setScalar(1.1);
-    return g;
   }
 
   syncHighlights(vertices: string[], edges: string[], hexes: string[]): void {
@@ -1018,27 +834,10 @@ export class BoardView {
     this.robberTargetHex = null;
     this.harborGroup = new THREE.Group();
     this.propsGroup = new THREE.Group();
-    this.robber = this.makeRobber();
+    this.robber = makeRobber();
     this.root.add(this.water.mesh);
     this.root.add(this.harborGroup);
     this.root.add(this.propsGroup);
     this.root.add(this.robber);
   }
-}
-
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
 }
