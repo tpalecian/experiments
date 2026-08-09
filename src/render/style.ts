@@ -25,7 +25,7 @@ export const STYLE = {
 export const STYLIZED_TERRAIN: Record<Terrain, number> = {
   wood: 0x3f8f4a,
   brick: 0xd4784a,
-  sheep: 0x7bc95a,
+  sheep: 0x6fbf52,
   wheat: 0xf0c84a,
   ore: 0x8a92a6,
   desert: 0xe8c988,
@@ -75,9 +75,25 @@ function meadowRand(seed: { n: number }): number {
   return seed.n / 0xffffffff;
 }
 
+/** Sheep-grassland concept palette (floor paint + prop cues). */
+export const MEADOW = {
+  base: '#6fbf52',
+  lime: '#9fd45a',
+  olive: '#6a8f45',
+  deep: '#2f6b38',
+  tan: '#c4a66a',
+  dry: '#a88850',
+  flowerWhite: '#f4f0e8',
+  flowerYellow: '#e8d070',
+  flowerPink: '#e8c4c8',
+  stone: '#9aa0a8',
+  wool: '#f2efe8',
+  face: '#3a3a42',
+} as const;
+
 /**
- * Soft miniature meadow floor for pasture hex tops — grass strokes / patches
- * so the green ground reads textured (Classic Enhanced), not flat plastic.
+ * Hand-painted sheep-grassland floor — lush greens, dry tan patches,
+ * and tiny white/yellow flower flecks (matches concept texture).
  */
 export function getMeadowFloorTexture(): THREE.CanvasTexture {
   if (meadowFloorTex) return meadowFloorTex;
@@ -90,38 +106,64 @@ export function getMeadowFloorTexture(): THREE.CanvasTexture {
   const seed = { n: 0x5eed };
   const rnd = () => meadowRand(seed);
 
-  // Base pasture green (matches STYLIZED_TERRAIN.sheep)
-  ctx.fillStyle = '#7bc95a';
+  // Vibrant meadow base
+  ctx.fillStyle = MEADOW.base;
   ctx.fillRect(0, 0, size, size);
 
-  // Soft large-scale meadow patches — readable “flow” at tabletop distance
-  for (let i = 0; i < 28; i++) {
+  // Soft large-scale green / olive flow
+  for (let i = 0; i < 32; i++) {
     const x = rnd() * size;
     const y = rnd() * size;
-    const r = 40 + rnd() * 70;
+    const r = 36 + rnd() * 72;
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    const light = rnd() > 0.45;
-    g.addColorStop(0, light ? 'rgba(175, 225, 105, 0.65)' : 'rgba(55, 125, 48, 0.5)');
-    g.addColorStop(0.55, light ? 'rgba(155, 210, 95, 0.25)' : 'rgba(70, 140, 55, 0.2)');
-    g.addColorStop(1, 'rgba(123, 201, 90, 0)');
+    const kind = rnd();
+    if (kind > 0.55) {
+      g.addColorStop(0, 'rgba(159, 212, 90, 0.7)');
+      g.addColorStop(0.55, 'rgba(140, 200, 80, 0.28)');
+      g.addColorStop(1, 'rgba(111, 191, 82, 0)');
+    } else if (kind > 0.22) {
+      g.addColorStop(0, 'rgba(80, 140, 58, 0.55)');
+      g.addColorStop(0.55, 'rgba(90, 150, 65, 0.22)');
+      g.addColorStop(1, 'rgba(111, 191, 82, 0)');
+    } else {
+      g.addColorStop(0, 'rgba(47, 107, 56, 0.45)');
+      g.addColorStop(0.5, 'rgba(70, 130, 60, 0.18)');
+      g.addColorStop(1, 'rgba(111, 191, 82, 0)');
+    }
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Soft directional turf strokes (shared wind lean) — not dense noise
-  const lean = -0.35;
-  for (let i = 0; i < 900; i++) {
+  // Dry tan / soil patches (concept floor)
+  for (let i = 0; i < 14; i++) {
     const x = rnd() * size;
     const y = rnd() * size;
-    const len = 8 + rnd() * 14;
+    const r = 18 + rnd() * 36;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const warm = rnd() > 0.4;
+    g.addColorStop(0, warm ? 'rgba(196, 166, 106, 0.55)' : 'rgba(168, 136, 80, 0.48)');
+    g.addColorStop(0.6, warm ? 'rgba(196, 166, 106, 0.18)' : 'rgba(168, 136, 80, 0.14)');
+    g.addColorStop(1, 'rgba(196, 166, 106, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Soft directional turf strokes (shared wind lean)
+  const lean = -0.35;
+  for (let i = 0; i < 780; i++) {
+    const x = rnd() * size;
+    const y = rnd() * size;
+    const len = 7 + rnd() * 12;
     const ang = lean + (rnd() - 0.5) * 0.7;
     const bright = rnd() > 0.5;
     ctx.strokeStyle = bright
-      ? `rgba(200, 240, 130, ${0.28 + rnd() * 0.28})`
-      : `rgba(45, 110, 40, ${0.22 + rnd() * 0.28})`;
-    ctx.lineWidth = 1.5 + rnd() * 1.8;
+      ? `rgba(200, 240, 130, ${0.26 + rnd() * 0.28})`
+      : `rgba(45, 110, 40, ${0.2 + rnd() * 0.26})`;
+    ctx.lineWidth = 1.4 + rnd() * 1.6;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -129,13 +171,43 @@ export function getMeadowFloorTexture(): THREE.CanvasTexture {
     ctx.stroke();
   }
 
-  // Sparse lighter tip flecks
-  for (let i = 0; i < 140; i++) {
+  // Darker grass-clump dots
+  for (let i = 0; i < 55; i++) {
     const x = rnd() * size;
     const y = rnd() * size;
-    ctx.fillStyle = `rgba(230, 255, 175, ${0.3 + rnd() * 0.35})`;
+    ctx.fillStyle = `rgba(40, 100, 48, ${0.28 + rnd() * 0.35})`;
     ctx.beginPath();
-    ctx.arc(x, y, 1.2 + rnd() * 1.6, 0, Math.PI * 2);
+    ctx.ellipse(x, y, 2.5 + rnd() * 3.5, 1.6 + rnd() * 2.2, rnd() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // White / yellow / pink flower flecks in tiny clusters
+  for (let i = 0; i < 48; i++) {
+    const cx = rnd() * size;
+    const cy = rnd() * size;
+    const petals = 3 + Math.floor(rnd() * 4);
+    const tone = rnd();
+    const color =
+      tone > 0.88 ? MEADOW.flowerPink : tone > 0.72 ? MEADOW.flowerYellow : MEADOW.flowerWhite;
+    for (let p = 0; p < petals; p++) {
+      const ox = (rnd() - 0.5) * 6;
+      const oy = (rnd() - 0.5) * 6;
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.75 + rnd() * 0.25;
+      ctx.beginPath();
+      ctx.arc(cx + ox, cy + oy, 1.1 + rnd() * 1.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Sparse pale tip flecks
+  for (let i = 0; i < 100; i++) {
+    const x = rnd() * size;
+    const y = rnd() * size;
+    ctx.fillStyle = `rgba(230, 255, 175, ${0.28 + rnd() * 0.32})`;
+    ctx.beginPath();
+    ctx.arc(x, y, 1.1 + rnd() * 1.5, 0, Math.PI * 2);
     ctx.fill();
   }
 

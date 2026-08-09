@@ -4,7 +4,14 @@
  */
 import * as THREE from 'three';
 import type { Terrain } from '../game/types';
-import { STYLE, STYLIZED_PLAYER, STYLIZED_TERRAIN, STYLIZED_TERRAIN_SIDE, toonMat } from './style';
+import {
+  STYLE,
+  STYLIZED_PLAYER,
+  STYLIZED_TERRAIN,
+  STYLIZED_TERRAIN_SIDE,
+  getMeadowFloorMaterial,
+  toonMat,
+} from './style';
 
 export type AssetCategory = 'pieces' | 'props' | 'board';
 
@@ -23,6 +30,8 @@ export interface AssetCreateOptions {
   harborLabel?: string;
   /** Harbor label background. */
   harborBg?: string;
+  /** Prop look variant (sheep pose, rock/bush cluster, wall piece). */
+  variant?: number;
 }
 
 export interface AssetDefinition {
@@ -163,33 +172,71 @@ export function makeRobber(_opts?: AssetCreateOptions): THREE.Object3D {
   return g;
 }
 
-/** Tiny low-poly sheep for Classic Enhanced pasture hexes. */
-export function makeSheep(_opts?: AssetCreateOptions): THREE.Object3D {
+/** Fluffy cloud-wool sheep with dark face/legs (sheep-grassland concept). */
+export function makeSheep(opts?: AssetCreateOptions): THREE.Object3D {
+  const variant = Math.abs(Math.floor(opts?.variant ?? 0)) % 4;
   const g = new THREE.Group();
-  const wool = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.075, 0.07), toonMat(0xf4f0e6));
-  wool.position.y = 0.055;
-  wool.castShadow = true;
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.035, 0.04), toonMat(0xe8e0d4));
-  head.position.set(0.055, 0.06, 0);
+  const woolMat = toonMat(0xf2efe8);
+  const faceMat = toonMat(0x3a3a42);
+  const legMat = toonMat(0x2e2e34);
+
+  // Soft wool body — overlapping spheres read as cloud fluff at tabletop scale
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), woolMat);
+  body.position.y = 0.062;
+  body.scale.set(1.15, 0.95, 1.05);
+  body.castShadow = true;
+  g.add(body);
+
+  const bumps: [number, number, number, number][] = [
+    [0.04, 0.078, 0.015, 0.032],
+    [-0.035, 0.072, -0.02, 0.03],
+    [0.01, 0.088, -0.03, 0.028],
+    [-0.01, 0.055, 0.035, 0.026],
+    [0.03, 0.06, -0.035, 0.024],
+  ];
+  for (const [bx, by, bz, r] of bumps) {
+    const fluff = new THREE.Mesh(new THREE.SphereGeometry(r, 6, 5), woolMat);
+    fluff.position.set(bx, by, bz);
+    fluff.castShadow = true;
+    g.add(fluff);
+  }
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.024, 7, 6), faceMat);
+  // Pose variants: head lean / forward bias
+  const headX = 0.062 + (variant === 1 ? 0.008 : variant === 2 ? -0.004 : 0);
+  const headY = 0.068 + (variant === 3 ? 0.01 : 0);
+  const headZ = variant === 2 ? 0.012 : variant === 1 ? -0.01 : 0;
+  head.position.set(headX, headY, headZ);
   head.castShadow = true;
-  const legGeo = new THREE.BoxGeometry(0.015, 0.03, 0.015);
-  const legMat = toonMat(0x5c4a3a);
+  g.add(head);
+
+  const earGeo = new THREE.SphereGeometry(0.01, 5, 4);
+  const earL = new THREE.Mesh(earGeo, faceMat);
+  earL.position.set(headX - 0.005, headY + 0.012, headZ + 0.018);
+  earL.scale.set(0.7, 1.1, 0.5);
+  const earR = earL.clone();
+  earR.position.z = headZ - 0.018;
+  g.add(earL, earR);
+
+  const legGeo = new THREE.CylinderGeometry(0.007, 0.009, 0.032, 5);
   const legs: [number, number][] = [
-    [-0.03, 0.02],
-    [-0.03, -0.02],
-    [0.03, 0.02],
-    [0.03, -0.02],
+    [-0.028, 0.018],
+    [-0.028, -0.018],
+    [0.03, 0.018],
+    [0.03, -0.018],
   ];
   for (const [lx, lz] of legs) {
     const leg = new THREE.Mesh(legGeo, legMat);
-    leg.position.set(lx, 0.015, lz);
+    leg.position.set(lx, 0.016, lz);
+    leg.castShadow = true;
     g.add(leg);
   }
-  g.add(wool, head);
+
+  if (opts?.scale !== undefined) g.scale.setScalar(opts.scale);
   return g;
 }
 
-/** Short wooden fence segment for pasture hexes. */
+/** Short wooden fence segment (legacy pasture prop; kept for Asset Lab). */
 export function makeFence(_opts?: AssetCreateOptions): THREE.Object3D {
   const g = new THREE.Group();
   const postMat = toonMat(STYLE.woodTrim);
@@ -206,6 +253,164 @@ export function makeFence(_opts?: AssetCreateOptions): THREE.Object3D {
   const rail2 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.018, 0.016), postMat);
   rail2.position.set(0, 0.04, 0);
   g.add(rail, rail2);
+  return g;
+}
+
+/**
+ * Low weathered stone wall segment for sheep-grassland enclosure.
+ * variant 0 = straight edge, 1 = corner bend cue, 2 = thicker rubble.
+ */
+export function makeStoneWall(opts?: AssetCreateOptions): THREE.Object3D {
+  const variant = Math.abs(Math.floor(opts?.variant ?? 0)) % 3;
+  const g = new THREE.Group();
+  const greys = [0x9aa0a8, 0x8e949c, 0xa8adb4, 0x7d838c];
+  const count = variant === 2 ? 5 : 4;
+  const span = variant === 1 ? 0.22 : 0.28;
+  for (let i = 0; i < count; i++) {
+    const t = i / (count - 1);
+    const x = (t - 0.5) * span;
+    const h = 0.055 + ((i * 17 + variant * 9) % 5) * 0.006;
+    const w = 0.055 + ((i * 13) % 3) * 0.008;
+    const d = 0.04 + ((i * 11) % 3) * 0.006;
+    const stone = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      toonMat(greys[(i + variant) % greys.length]!),
+    );
+    stone.position.set(x, h * 0.5, variant === 1 ? (t - 0.5) * 0.08 : 0);
+    stone.rotation.y = ((i % 3) - 1) * 0.08;
+    stone.castShadow = true;
+    g.add(stone);
+  }
+  // Cap stones
+  const cap = new THREE.Mesh(
+    new THREE.BoxGeometry(span * 0.92, 0.022, 0.045),
+    toonMat(0xb0b5bc),
+  );
+  cap.position.set(0, 0.078, variant === 1 ? 0.02 : 0);
+  cap.castShadow = true;
+  g.add(cap);
+
+  if (opts?.scale !== undefined) g.scale.setScalar(opts.scale);
+  return g;
+}
+
+/** Rounded dark-green shrub for meadow clutter. */
+export function makeBush(opts?: AssetCreateOptions): THREE.Object3D {
+  const variant = Math.abs(Math.floor(opts?.variant ?? 0)) % 3;
+  const g = new THREE.Group();
+  const greens = [0x3d7a3a, 0x4a8f42, 0x2f6b38];
+  const clusters: [number, number, number, number][] =
+    variant === 0
+      ? [
+          [0, 0.04, 0, 0.045],
+          [0.03, 0.035, 0.02, 0.032],
+          [-0.028, 0.032, -0.015, 0.03],
+        ]
+      : variant === 1
+        ? [
+            [0, 0.05, 0, 0.05],
+            [0.035, 0.04, -0.01, 0.034],
+            [-0.03, 0.038, 0.025, 0.036],
+            [0.01, 0.055, 0.02, 0.028],
+          ]
+        : [
+            [0, 0.035, 0, 0.038],
+            [0.025, 0.03, 0.015, 0.028],
+          ];
+  clusters.forEach(([x, y, z, r], i) => {
+    const leaf = new THREE.Mesh(
+      new THREE.SphereGeometry(r, 7, 6),
+      toonMat(greens[i % greens.length]!),
+    );
+    leaf.position.set(x, y, z);
+    leaf.scale.set(1.1, 0.85, 1.05);
+    leaf.castShadow = true;
+    g.add(leaf);
+  });
+  if (opts?.scale !== undefined) g.scale.setScalar(opts.scale);
+  return g;
+}
+
+/** Small pasture stone cluster (not ore mountain rocks). */
+export function makePastureRock(opts?: AssetCreateOptions): THREE.Object3D {
+  const variant = Math.abs(Math.floor(opts?.variant ?? 0)) % 4;
+  const g = new THREE.Group();
+  const tones = [0x9aa0a8, 0xb0a898, 0x8a9098, 0xa8a49c];
+  const layouts: [number, number, number, number][][] = [
+    [
+      [0, 0.02, 0, 0.028],
+      [0.03, 0.015, 0.01, 0.02],
+    ],
+    [
+      [0, 0.022, 0, 0.032],
+      [-0.025, 0.014, 0.015, 0.018],
+      [0.02, 0.012, -0.02, 0.016],
+    ],
+    [[0, 0.018, 0, 0.024]],
+    [
+      [0, 0.025, 0, 0.03],
+      [0.028, 0.016, -0.012, 0.02],
+      [-0.02, 0.014, -0.018, 0.017],
+      [0.01, 0.012, 0.025, 0.015],
+    ],
+  ];
+  for (const [x, y, z, r] of layouts[variant]!) {
+    const rock = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(r, 0),
+      toonMat(tones[(variant + Math.round(x * 40)) % tones.length]!),
+    );
+    rock.position.set(x, y, z);
+    rock.rotation.set(0.3 * variant, 0.5 + variant, 0.2);
+    rock.castShadow = true;
+    g.add(rock);
+  }
+  if (opts?.scale !== undefined) g.scale.setScalar(opts.scale);
+  return g;
+}
+
+/** Conical pine for pasture corners (darker stacked cones). */
+export function makePine(opts?: AssetCreateOptions): THREE.Object3D {
+  const scale = opts?.scale ?? 1;
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.022, 0.028, 0.12, 5),
+    toonMat(STYLE.woodTrim),
+  );
+  trunk.position.y = 0.06;
+  trunk.castShadow = true;
+  const bot = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.2, 6), toonMat(0x2d6b3a));
+  bot.position.y = 0.18;
+  bot.castShadow = true;
+  const mid = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.17, 6), toonMat(0x3a7f42));
+  mid.position.y = 0.3;
+  mid.castShadow = true;
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.14, 6), toonMat(0x245530));
+  tip.position.y = 0.4;
+  tip.castShadow = true;
+  g.add(trunk, bot, mid, tip);
+  g.scale.setScalar(scale);
+  return g;
+}
+
+/** Tiny white/yellow flower tuft prop. */
+export function makeFlowerTuft(opts?: AssetCreateOptions): THREE.Object3D {
+  const variant = Math.abs(Math.floor(opts?.variant ?? 0)) % 2;
+  const g = new THREE.Group();
+  const petalMat = toonMat(variant === 0 ? 0xf4f0e8 : 0xe8d070);
+  const centerMat = toonMat(variant === 0 ? 0xe8d070 : 0xf4f0e8);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.005, 0.04, 4), toonMat(0x4a8f42));
+    stem.position.set(Math.cos(a) * 0.018, 0.02, Math.sin(a) * 0.018);
+    const blossom = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 5), petalMat);
+    blossom.position.set(Math.cos(a) * 0.018, 0.042, Math.sin(a) * 0.018);
+    blossom.scale.set(1.2, 0.7, 1.2);
+    const center = new THREE.Mesh(new THREE.SphereGeometry(0.005, 5, 4), centerMat);
+    center.position.copy(blossom.position);
+    center.position.y += 0.004;
+    g.add(stem, blossom, center);
+  }
+  if (opts?.scale !== undefined) g.scale.setScalar(opts.scale);
   return g;
 }
 
@@ -329,7 +534,28 @@ export function makeHexTile(opts?: AssetCreateOptions): THREE.Object3D {
   });
   geom.rotateX(-Math.PI / 2);
   geom.computeVertexNormals();
-  const mesh = new THREE.Mesh(geom, toonMat(STYLIZED_TERRAIN[terrain]));
+
+  // Pasture uses meadow map — remap Extrude lid UVs into 0–1 (three@r172 lids = group 0).
+  if (terrain === 'sheep') {
+    const pos = geom.attributes.position;
+    const uv = geom.attributes.uv;
+    if (pos && uv) {
+      const span = tileRadius * 2;
+      for (const group of geom.groups) {
+        if (group.materialIndex !== 0) continue;
+        for (let i = group.start; i < group.start + group.count; i++) {
+          uv.setXY(i, pos.getX(i) / span + 0.5, pos.getZ(i) / span + 0.5);
+        }
+      }
+      uv.needsUpdate = true;
+    }
+  }
+
+  const mat: THREE.Material | THREE.Material[] =
+    terrain === 'sheep'
+      ? [getMeadowFloorMaterial().clone(), toonMat(STYLIZED_TERRAIN_SIDE.sheep)]
+      : toonMat(STYLIZED_TERRAIN[terrain]);
+  const mesh = new THREE.Mesh(geom, mat);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
 
@@ -397,14 +623,21 @@ export const ASSET_CATALOG: AssetDefinition[] = [
     id: 'tree',
     name: 'Tree',
     category: 'props',
-    description: 'Forest canopy prop (wood / pasture).',
+    description: 'Forest canopy prop (wood hexes).',
     create: (opts) => makeTree({ ...opts, scale: opts?.scale ?? 1 }),
+  },
+  {
+    id: 'pine',
+    name: 'Pine',
+    category: 'props',
+    description: 'Dark conical pine for pasture corners.',
+    create: (opts) => makePine({ ...opts, scale: opts?.scale ?? 0.85 }),
   },
   {
     id: 'sheep',
     name: 'Sheep',
     category: 'props',
-    description: 'Tiny pasture sheep.',
+    description: 'Fluffy pasture sheep with dark face.',
     create: makeSheep,
   },
   {
@@ -413,6 +646,34 @@ export const ASSET_CATALOG: AssetDefinition[] = [
     category: 'props',
     description: 'Short wooden fence segment.',
     create: makeFence,
+  },
+  {
+    id: 'stone-wall',
+    name: 'Stone wall',
+    category: 'props',
+    description: 'Low grey stone enclosure segment.',
+    create: makeStoneWall,
+  },
+  {
+    id: 'bush',
+    name: 'Bush',
+    category: 'props',
+    description: 'Rounded meadow shrub.',
+    create: makeBush,
+  },
+  {
+    id: 'pasture-rock',
+    name: 'Pasture rock',
+    category: 'props',
+    description: 'Small grey/tan stone cluster.',
+    create: makePastureRock,
+  },
+  {
+    id: 'flower-tuft',
+    name: 'Flower tuft',
+    category: 'props',
+    description: 'Tiny white/yellow meadow flowers.',
+    create: makeFlowerTuft,
   },
   {
     id: 'wheat',
@@ -488,7 +749,7 @@ export const ASSET_CATALOG: AssetDefinition[] = [
     id: 'hex-sheep',
     name: 'Hex · sheep',
     category: 'board',
-    description: 'Extruded pasture tile + rim.',
+    description: 'Pasture tile with meadow floor texture.',
     create: () => makeHexTile({ terrain: 'sheep' }),
   },
   {

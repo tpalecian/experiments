@@ -146,13 +146,17 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(house.children.length >= 2, 'settlement has meshes');
   const tree = makeTree({ scale: 0.8 });
   assert(Math.abs(tree.scale.x - 0.8) < 0.001, 'tree scale applied');
-  // Skip canvas-backed sprites/tokens in headless Node (no document).
-  const headlessSkip = new Set(['number-token', 'harbor-label']);
+  // Skip canvas-backed sprites/tokens/meadow maps in headless Node (no document).
+  const headlessSkip = new Set(['number-token', 'harbor-label', 'hex-sheep']);
   for (const def of ASSET_CATALOG) {
     if (headlessSkip.has(def.id)) continue;
-    const obj = def.create({ playerIndex: 1, number: 6 });
+    const obj = def.create({ playerIndex: 1, number: 6, variant: 1 });
     assert(obj instanceof THREE.Object3D, `${def.id} creates Object3D`);
   }
+  assert(getAssetById('stone-wall'), 'stone wall asset registered');
+  assert(getAssetById('pine'), 'pine asset registered');
+  assert(getAssetById('bush'), 'bush asset registered');
+  assert(getAssetById('pasture-rock'), 'pasture rock asset registered');
   console.log(`ok asset catalog (${ASSET_CATALOG.length} assets)`);
 }
 
