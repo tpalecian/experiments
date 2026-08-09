@@ -121,8 +121,11 @@ export function startAssetLab(): void {
 
   const grid = new THREE.GridHelper(6, 12, 0x8b6a42, 0xc9b090);
   grid.position.y = 0.002;
-  (grid.material as THREE.Material).transparent = true;
-  (grid.material as THREE.Material).opacity = 0.45;
+  const gridMats = Array.isArray(grid.material) ? grid.material : [grid.material];
+  for (const m of gridMats) {
+    m.transparent = true;
+    m.opacity = 0.45;
+  }
   stage.add(grid);
 
   const pedestal = new THREE.Mesh(
