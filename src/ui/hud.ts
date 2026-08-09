@@ -19,6 +19,7 @@ export class Hud {
   private discardDraft: ResourceBank = emptyBank();
   private selectedMap: MapSizeId = 'standard';
   private lastDiceKey = '';
+  private assetLabHref = '?view=assets';
 
   constructor(
     hudEl: HTMLElement,
@@ -29,6 +30,11 @@ export class Hud {
     this.lobby = lobbyEl;
     this.renderLobby();
     this.engine.subscribe(() => this.render());
+  }
+
+  setAssetLabHref(href: string): void {
+    this.assetLabHref = href;
+    if (this.engine.snapshot().phase === 'lobby') this.renderLobby();
   }
 
   private renderLobby(): void {
@@ -58,6 +64,9 @@ export class Hud {
             <button class="btn" data-players="3">3 Players</button>
             <button class="btn" data-players="4">4 Players</button>
           </div>
+        </div>
+        <div class="lobby-section lobby-dev">
+          <a class="btn secondary lobby-asset-lab" href="${escapeHtml(this.assetLabHref)}">Asset Lab</a>
         </div>
       </div>
     `;

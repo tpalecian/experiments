@@ -13,6 +13,12 @@ import {
   lerpAtmosphere,
   sampleAtmosphereAtPhase,
 } from '../src/render/atmosphere';
+import {
+  ASSET_CATALOG,
+  getAssetById,
+  makeSettlement,
+  makeTree,
+} from '../src/render/assets';
 import { TweenPlayer, ease } from '../src/render/tween';
 import {
   DEFAULT_STYLE_CONFIG,
@@ -130,6 +136,24 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   const cine = applyStylePreset(DEFAULT_STYLE_CONFIG, 'cinematic');
   assert(cine.timeOfDay === 'cycle', 'cinematic uses cycle');
   console.log('ok style craft presets');
+}
+
+{
+  assert(ASSET_CATALOG.length >= 10, 'asset catalog populated');
+  assert(getAssetById('settlement'), 'settlement asset registered');
+  assert(getAssetById('hex-wood'), 'hex tile asset registered');
+  const house = makeSettlement({ playerIndex: 0 });
+  assert(house.children.length >= 2, 'settlement has meshes');
+  const tree = makeTree({ scale: 0.8 });
+  assert(Math.abs(tree.scale.x - 0.8) < 0.001, 'tree scale applied');
+  // Skip canvas-backed sprites/tokens in headless Node (no document).
+  const headlessSkip = new Set(['number-token', 'harbor-label']);
+  for (const def of ASSET_CATALOG) {
+    if (headlessSkip.has(def.id)) continue;
+    const obj = def.create({ playerIndex: 1, number: 6 });
+    assert(obj instanceof THREE.Object3D, `${def.id} creates Object3D`);
+  }
+  console.log(`ok asset catalog (${ASSET_CATALOG.length} assets)`);
 }
 
 console.log('smoke ok');
