@@ -12,7 +12,7 @@ type Listener = (config: StyleConfig) => void;
 interface FieldDef {
   key: keyof StyleConfig;
   label: string;
-  kind: 'range' | 'color' | 'select';
+  kind: 'range' | 'color' | 'select' | 'toggle';
   min?: number;
   max?: number;
   step?: number;
@@ -192,6 +192,37 @@ const CATEGORIES: CategoryDef[] = [
     ],
   },
   {
+    id: 'audio',
+    title: 'Audio',
+    blurb: 'Biome loops on click, hover previews, random wind & sea gusts.',
+    fields: [
+      {
+        key: 'audioAmbientVolume',
+        label: 'Ambient volume',
+        kind: 'range',
+        min: 0,
+        max: 1,
+        step: 0.05,
+        tags: ['biome', 'loop'],
+      },
+      {
+        key: 'audioSfxVolume',
+        label: 'Wind & sea volume',
+        kind: 'range',
+        min: 0,
+        max: 1,
+        step: 0.05,
+        tags: ['gust', 'sfx'],
+      },
+      {
+        key: 'audioHoverPreview',
+        label: 'Hover preview',
+        kind: 'toggle',
+        tags: ['hover', 'biome'],
+      },
+    ],
+  },
+  {
     id: 'motion',
     title: 'Motion & Feedback',
     blurb: 'Piece tweens, robber hop, highlights, camera nudge.',
@@ -254,7 +285,7 @@ export class StyleConfigurator {
     for (const fn of this.listeners) fn(this.config);
   }
 
-  private setValue(key: keyof StyleConfig, value: string | number, rerender = false): void {
+  private setValue(key: keyof StyleConfig, value: string | number | boolean, rerender = false): void {
     const next = { ...this.config, [key]: value } as StyleConfig;
     if (next.cloudOrbitMax < next.cloudOrbitMin) next.cloudOrbitMax = next.cloudOrbitMin;
     if (next.cloudHeightMax < next.cloudHeightMin) next.cloudHeightMax = next.cloudHeightMin;
@@ -395,7 +426,9 @@ export class StyleConfigurator {
     this.panel.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-key]').forEach((el) => {
       const key = el.dataset.key as keyof StyleConfig;
       const apply = () => {
-        if (el instanceof HTMLInputElement && el.type === 'range') {
+        if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+          this.setValue(key, el.checked, false);
+        } else if (el instanceof HTMLInputElement && el.type === 'range') {
           this.setValue(key, Number(el.value), false);
         } else if (el instanceof HTMLInputElement && el.type === 'color') {
           this.setValue(key, el.value, false);
@@ -410,6 +443,14 @@ export class StyleConfigurator {
 
   private fieldHtml(f: FieldDef): string {
     const val = this.config[f.key];
+    if (f.kind === 'toggle') {
+      const checked = Boolean(val);
+      return `
+        <label class="style-field style-field-toggle">
+          <span>${f.label}</span>
+          <input type="checkbox" data-key="${f.key}" ${checked ? 'checked' : ''} />
+        </label>`;
+    }
     if (f.kind === 'color') {
       return `
         <label class="style-field">

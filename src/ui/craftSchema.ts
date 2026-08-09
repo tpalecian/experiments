@@ -16,6 +16,7 @@ export type CraftCategoryId =
   | 'water'
   | 'hexBoard'
   | 'motion'
+  | 'audio'
   | 'camera'
   | 'debug';
 
@@ -113,6 +114,16 @@ export const CRAFT_CATEGORIES: CraftCategory[] = [
       { id: 'robber', title: 'Robber' },
       { id: 'highlights', title: 'Highlights' },
       { id: 'cameraNudge', title: 'Camera nudge' },
+    ],
+  },
+  {
+    id: 'audio',
+    title: 'Audio',
+    blurb: 'Biome ambient beds, wind & sea gusts, hover previews.',
+    rebuildsWorld: false,
+    subsections: [
+      { id: 'levels', title: 'Volume' },
+      { id: 'hover', title: 'Hover preview' },
     ],
   },
   {
