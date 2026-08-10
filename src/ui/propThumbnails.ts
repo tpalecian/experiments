@@ -132,6 +132,10 @@ export function warmBiomeThumbnails(): Map<Terrain, string> {
   const overrides: Partial<Record<Terrain, string>> = {
     wood: '/biome-icons/forest.png',
     brick: '/biome-icons/hills.png',
+    sheep: '/biome-icons/pasture.png',
+    wheat: '/biome-icons/fields.png',
+    ore: '/biome-icons/mountains.png',
+    desert: '/biome-icons/desert.png',
   };
   for (const t of TERRAIN_ORDER) {
     map.set(t, overrides[t] ?? renderBiomeThumbnail(t));
