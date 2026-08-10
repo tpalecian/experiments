@@ -983,18 +983,19 @@ body.biome-editor-mode #style-config-root {
 .biome-editor-panel {
   pointer-events: auto;
   position: absolute;
-  top: 1rem;
-  left: 1rem;
-  bottom: 5.5rem;
-  width: min(320px, calc(100vw - 2rem));
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(320px, 92vw);
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  padding: 1rem 1rem 0.85rem;
-  border: 3px solid var(--panel-border);
-  border-radius: 16px;
+  padding: 1rem 1rem 1rem;
+  border: none;
+  border-right: 3px solid var(--panel-border);
+  border-radius: 0;
   background: var(--panel);
-  box-shadow: 0 10px 0 rgba(92, 61, 46, 0.16);
+  box-shadow: none;
   overflow: auto;
 }
 
@@ -1003,6 +1004,7 @@ body.biome-editor-mode #style-config-root {
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .biome-editor-eyebrow {
@@ -1029,6 +1031,7 @@ body.biome-editor-mode #style-config-root {
   font-size: 0.82rem;
   color: var(--muted);
   line-height: 1.35;
+  flex-shrink: 0;
 }
 
 .biome-terrain-tabs {
@@ -1065,7 +1068,8 @@ body.biome-editor-mode #style-config-root {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  max-height: 140px;
+  flex: 1 1 auto;
+  min-height: 120px;
   overflow: auto;
 }
 
@@ -1147,13 +1151,15 @@ body.biome-editor-mode #style-config-root {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
-  margin-top: 0.25rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+  flex-shrink: 0;
 }
 
 .biome-editor-toolbar {
   pointer-events: auto;
   position: absolute;
-  left: 1rem;
+  left: calc(min(320px, 92vw) + 1rem);
   right: 1rem;
   bottom: 1rem;
   display: flex;
@@ -1211,11 +1217,12 @@ body.biome-editor-mode #style-config-root {
 
 @media (max-width: 720px) {
   .biome-editor-panel {
-    bottom: auto;
-    max-height: 48vh;
+    width: min(280px, 85vw);
   }
 
   .biome-editor-toolbar {
+    left: calc(min(280px, 85vw) + 0.5rem);
+    right: 0.5rem;
     flex-direction: column;
     align-items: stretch;
   }
