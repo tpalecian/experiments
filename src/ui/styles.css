@@ -1206,15 +1206,16 @@ body.biome-editor-mode #style-config-root {
 }
 
 .be-biome-thumb {
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: 8px;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 10px;
   background-color: #101418;
   background-size: contain;
   background-position: center;
   background-repeat: no-repeat;
   flex-shrink: 0;
   border: 1px solid rgba(92, 61, 46, 0.12);
+  image-rendering: auto;
 }
 
 .be-biome-label {
