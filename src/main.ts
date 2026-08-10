@@ -11,11 +11,14 @@ import { STYLE } from './render/style';
 import type { StyleConfig } from './render/styleConfig';
 import { TweenPlayer, ease } from './render/tween';
 import { assetLabHref, isAssetLabRoute, startAssetLab } from './ui/assetLab';
+import { biomeEditorHref, isBiomeEditorRoute, startBiomeEditor } from './ui/biomeEditor';
 import { StyleConfigurator } from './ui/configurator';
 import { Hud } from './ui/hud';
 
 if (isAssetLabRoute()) {
   startAssetLab();
+} else if (isBiomeEditorRoute()) {
+  startBiomeEditor();
 } else {
   bootGame();
 }
@@ -95,6 +98,7 @@ function bootGame(): void {
   const picker = new Picker(camera, canvas);
   const hud = new Hud(hudEl, lobbyEl, engine);
   hud.setAssetLabHref(assetLabHref());
+  hud.setBiomeEditorHref(biomeEditorHref());
 
   let boardBuilt = false;
   let sunAnchor = 10;

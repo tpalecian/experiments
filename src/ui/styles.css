@@ -732,6 +732,10 @@ body.asset-lab-mode #style-config-root {
   text-align: center;
   border-top: 1px dashed var(--panel-border);
   padding-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
 }
 
 .lobby-asset-lab {
@@ -954,5 +958,265 @@ body.asset-lab-mode #style-config-root {
 
   .style-config-panel {
     max-height: 45vh;
+  }
+}
+
+/* ——— Biome Editor ——— */
+
+#biome-editor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#biome-editor.hidden {
+  display: none;
+}
+
+body.biome-editor-mode #lobby,
+body.biome-editor-mode #hud,
+body.biome-editor-mode #style-config-root {
+  display: none !important;
+}
+
+.biome-editor-panel {
+  pointer-events: auto;
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  bottom: 5.5rem;
+  width: min(320px, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 1rem 1rem 0.85rem;
+  border: 3px solid var(--panel-border);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: 0 10px 0 rgba(92, 61, 46, 0.16);
+  overflow: auto;
+}
+
+.biome-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.biome-editor-eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.biome-editor-header h1 {
+  margin: 0.1rem 0 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.35rem;
+}
+
+.biome-editor-back {
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.biome-editor-lede {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.biome-terrain-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.biome-terrain-tab {
+  border: 2px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.45);
+  border-radius: 8px;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.72rem;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.biome-terrain-tab.active {
+  background: var(--accent, #e8a838);
+  border-color: var(--panel-border);
+  font-weight: 600;
+}
+
+.biome-layout-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.biome-layout-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 140px;
+  overflow: auto;
+}
+
+.biome-layout-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  text-align: left;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.biome-layout-item:hover {
+  border-color: rgba(92, 61, 46, 0.25);
+}
+
+.biome-layout-item.active {
+  border-color: var(--panel-border);
+  background: rgba(232, 168, 56, 0.25);
+}
+
+.biome-layout-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.biome-layout-count {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.biome-layout-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.biome-name-input {
+  flex: 1 1 100%;
+  border: 2px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.biome-palette strong,
+.biome-layout-toolbar strong {
+  font-size: 0.8rem;
+}
+
+.biome-palette-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+
+.biome-palette-item {
+  border: 2px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.72rem;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.biome-palette-item:hover {
+  background: rgba(232, 168, 56, 0.3);
+}
+
+.biome-io {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.biome-editor-toolbar {
+  pointer-events: auto;
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  padding: 0.65rem 0.85rem;
+  border: 3px solid var(--panel-border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 8px 0 rgba(92, 61, 46, 0.14);
+}
+
+.biome-tool-group {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.biome-tool.active {
+  background: var(--accent, #e8a838);
+  font-weight: 600;
+}
+
+.biome-editor-status {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.biome-inspector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+.biome-inspector.muted {
+  color: var(--muted);
+}
+
+.biome-inspector label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.biome-inspector input[type='number'] {
+  width: 4.2rem;
+  border: 2px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 0.2rem 0.3rem;
+  font: inherit;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+@media (max-width: 720px) {
+  .biome-editor-panel {
+    bottom: auto;
+    max-height: 48vh;
+  }
+
+  .biome-editor-toolbar {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
