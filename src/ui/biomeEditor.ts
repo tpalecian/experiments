@@ -25,6 +25,7 @@ import {
   type BiomePropInstance,
   type BiomePropKind,
 } from '../render/biomeLayouts';
+import { warmPropThumbnails } from './propThumbnails';
 
 export function isBiomeEditorRoute(): boolean {
   const params = new URLSearchParams(window.location.search);
@@ -91,6 +92,7 @@ export function startBiomeEditor(): void {
   let selectedPropId: string | null = null;
   let tool: ToolMode = 'move';
   let statusMsg = 'Drag props on the hex · tools: Move / Rotate / Scale';
+  const propThumbs = warmPropThumbnails();
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -422,7 +424,12 @@ export function startBiomeEditor(): void {
           <div class="biome-palette-items">
             ${BIOME_PROP_KINDS.map((k) => {
               const def = getAssetById(k);
-              return `<button type="button" class="biome-palette-item" data-add="${k}">${escapeHtml(def?.name ?? k)}</button>`;
+              const thumb = propThumbs.get(k) ?? '';
+              const label = def?.name ?? k;
+              return `<button type="button" class="biome-palette-item" data-add="${k}" title="${escapeHtml(label)}">
+                <span class="biome-palette-thumb"${thumb ? ` style="background-image:url('${thumb}')"` : ''}></span>
+                <span class="biome-palette-tag">${escapeHtml(label)}</span>
+              </button>`;
             }).join('')}
           </div>
         </div>
@@ -450,6 +457,7 @@ export function startBiomeEditor(): void {
         ${
           selected
             ? `<div class="biome-inspector">
+                <span class="biome-inspector-thumb"${propThumbs.get(selected.kind) ? ` style="background-image:url('${propThumbs.get(selected.kind)}')"` : ''}></span>
                 <strong>${escapeHtml(getAssetById(selected.kind)?.name ?? selected.kind)}</strong>
                 <label>X <input type="number" step="0.01" data-insp="x" value="${selected.x.toFixed(3)}" /></label>
                 <label>Z <input type="number" step="0.01" data-insp="z" value="${selected.z.toFixed(3)}" /></label>
