@@ -19,6 +19,17 @@ import {
   makeSettlement,
   makeTree,
 } from '../src/render/assets';
+import {
+  BIOME_PROP_KINDS,
+  TERRAIN_ORDER,
+  createPropObject,
+  defaultBiomeLibrary,
+  exportBiomeLayoutsJson,
+  importBiomeLayoutsJson,
+  layoutsForTerrain,
+  pickLayout,
+  stampLayout,
+} from '../src/render/biomeLayouts';
 import { TweenPlayer, ease } from '../src/render/tween';
 import {
   DEFAULT_STYLE_CONFIG,
@@ -158,6 +169,48 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(getAssetById('bush'), 'bush asset registered');
   assert(getAssetById('pasture-rock'), 'pasture rock asset registered');
   console.log(`ok asset catalog (${ASSET_CATALOG.length} assets)`);
+}
+
+{
+  const lib = defaultBiomeLibrary();
+  assert(lib.version === 1, 'biome library version');
+  assert(lib.layouts.length >= 6, 'default layouts present');
+  for (const t of TERRAIN_ORDER) {
+    const list = layoutsForTerrain(lib, t);
+    assert(list.length >= 1, `layout for ${t}`);
+  }
+  const a = pickLayout(lib, 'wood', 'hex-0-0');
+  const b = pickLayout(lib, 'wood', 'hex-0-0');
+  const c = pickLayout(lib, 'wood', 'hex-1-0');
+  assert(a.id === b.id, 'pickLayout deterministic');
+  assert(a.terrain === 'wood', 'picked wood layout');
+  // Different hex ids may still collide on small pools — just ensure pick returns a layout.
+  assert(c.terrain === 'wood', 'other seed still wood');
+
+  const group = new THREE.Group();
+  stampLayout(a, group, 1, 0.28, 2);
+  assert(group.children.length === a.props.length, 'stamp creates prop meshes');
+
+  for (const kind of BIOME_PROP_KINDS) {
+    if (kind === 'flower-tuft') {
+      // flower-tuft is fine without canvas
+    }
+    const obj = createPropObject({
+      id: `t-${kind}`,
+      kind,
+      x: 0,
+      z: 0,
+      yaw: 0,
+      scale: 1,
+      variant: 1,
+    });
+    assert(obj instanceof THREE.Object3D, `biome prop ${kind} instantiates`);
+  }
+
+  const json = exportBiomeLayoutsJson(lib);
+  const roundTrip = importBiomeLayoutsJson(json);
+  assert(roundTrip.layouts.length === lib.layouts.length, 'import/export round-trip');
+  console.log(`ok biome layouts (${lib.layouts.length} defaults)`);
 }
 
 console.log('smoke ok');

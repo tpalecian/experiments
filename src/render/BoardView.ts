@@ -4,24 +4,14 @@ import type { BoardState, PlayerId, Terrain } from '../game/types';
 import {
   TILE_HEIGHT,
   hexShape,
-  makeBush,
-  makeCactus,
   makeCity,
-  makeFlowerTuft,
   makeLabelSprite,
-  makeMesa,
-  makePastureRock,
-  makePine,
   makeRoad,
   makeRobber,
-  makeRock,
   makeSettlement,
-  makeSheep,
-  makeStoneWall,
-  makeTree,
-  makeWheatStalk,
   numberTexture,
 } from './assets';
+import { loadBiomeLayouts, pickLayout, stampLayout, type BiomeLayoutLibrary } from './biomeLayouts';
 import {
   STYLE,
   STYLIZED_PLAYER,
@@ -78,14 +68,6 @@ function hexRimGeometry(inner: number, outer: number): THREE.BufferGeometry {
   return geom;
 }
 
-function seeded(n: number): () => number {
-  let s = (n * 16807) % 2147483647;
-  return () => {
-    s = (s * 16807) % 2147483647;
-    return (s - 1) / 2147483646;
-  };
-}
-
 type BuildingKind = 'settlement' | 'city';
 
 interface BuildingEntry {
@@ -135,6 +117,7 @@ export class BoardView {
   private pickables: THREE.Object3D[] = [];
   private water = new WaterSurface();
   private tweens = new TweenPlayer();
+  private biomeLibrary: BiomeLayoutLibrary = loadBiomeLayouts();
 
   private legalVertices = new Set<string>();
   private legalEdges = new Set<string>();
@@ -263,6 +246,7 @@ export class BoardView {
     this.clearDynamic();
     this.pickables = [];
     this.tweens.clear();
+    this.biomeLibrary = loadBiomeLayouts();
 
     this.water.resize(board.rings);
     const landCenters: { x: number; z: number }[] = [];
@@ -393,129 +377,8 @@ export class BoardView {
   }
 
   private addTerrainProps(terrain: Terrain, x: number, z: number, id: string): void {
-    const rand = seeded(id.split('').reduce((a, c) => a + c.charCodeAt(0), 1));
-    const y = TILE_HEIGHT;
-
-    switch (terrain) {
-      case 'wood': {
-        for (let i = 0; i < 3; i++) {
-          const tree = makeTree({ scale: 0.7 + rand() * 0.4 });
-          const a = rand() * Math.PI * 2;
-          const d = 0.25 + rand() * 0.4;
-          tree.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
-          tree.rotation.y = rand() * Math.PI;
-          this.propsGroup.add(tree);
-        }
-        break;
-      }
-      case 'wheat': {
-        for (let i = 0; i < 5; i++) {
-          const stalk = makeWheatStalk();
-          const a = rand() * Math.PI * 2;
-          const d = 0.2 + rand() * 0.45;
-          stalk.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
-          this.propsGroup.add(stalk);
-        }
-        break;
-      }
-      case 'ore': {
-        for (let i = 0; i < 3; i++) {
-          const rockScale = 0.85 + rand() * 0.7;
-          const rock = makeRock({ scale: rockScale });
-          const a = rand() * Math.PI * 2;
-          const d = 0.2 + rand() * 0.4;
-          rock.position.set(x + Math.cos(a) * d, y + rock.position.y, z + Math.sin(a) * d);
-          rock.rotation.set(rand(), rand(), rand());
-          this.propsGroup.add(rock);
-        }
-        break;
-      }
-      case 'brick': {
-        const mesa = makeMesa();
-        mesa.position.set(x + (rand() - 0.5) * 0.3, y + mesa.position.y, z + (rand() - 0.5) * 0.3);
-        this.propsGroup.add(mesa);
-        break;
-      }
-      case 'desert': {
-        const cactus = makeCactus();
-        cactus.position.set(x + 0.25, y, z - 0.15);
-        this.propsGroup.add(cactus);
-        break;
-      }
-      case 'sheep': {
-        // Sheep grassland concept: flock + stone enclosure + meadow clutter
-        const sheepCount = 4 + Math.floor(rand() * 3);
-        for (let i = 0; i < sheepCount; i++) {
-          const sheep = makeSheep({ variant: Math.floor(rand() * 4) });
-          const a = rand() * Math.PI * 2;
-          const d = 0.22 + rand() * 0.4;
-          sheep.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
-          sheep.rotation.y = rand() * Math.PI * 2;
-          sheep.scale.setScalar(0.9 + rand() * 0.28);
-          this.propsGroup.add(sheep);
-        }
-
-        // Low stone walls along hex edges (inset so roads/settlements stay clear)
-        for (let e = 0; e < 6; e++) {
-          if (rand() > 0.62) continue;
-          const a = (e * Math.PI) / 3;
-          const d = HEX_SIZE * 0.72;
-          const wall = makeStoneWall({
-            variant: rand() > 0.7 ? 1 : rand() > 0.5 ? 2 : 0,
-            scale: 0.95 + rand() * 0.15,
-          });
-          wall.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
-          wall.rotation.y = a + Math.PI * 0.5;
-          this.propsGroup.add(wall);
-        }
-
-        const bushCount = 1 + Math.floor(rand() * 2);
-        for (let i = 0; i < bushCount; i++) {
-          const bush = makeBush({ variant: Math.floor(rand() * 3), scale: 0.85 + rand() * 0.35 });
-          const a = rand() * Math.PI * 2;
-          const d = 0.35 + rand() * 0.38;
-          bush.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
-          bush.rotation.y = rand() * Math.PI;
-          this.propsGroup.add(bush);
-        }
-
-        const rockCount = 1 + Math.floor(rand() * 2);
-        for (let i = 0; i < rockCount; i++) {
-          const rock = makePastureRock({
-            variant: Math.floor(rand() * 4),
-            scale: 0.85 + rand() * 0.4,
-          });
-          const a = rand() * Math.PI * 2;
-          const d = 0.3 + rand() * 0.4;
-          rock.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
-          rock.rotation.y = rand() * Math.PI;
-          this.propsGroup.add(rock);
-        }
-
-        if (rand() > 0.55) {
-          const tuft = makeFlowerTuft({ variant: Math.floor(rand() * 2) });
-          const a = rand() * Math.PI * 2;
-          const d = 0.25 + rand() * 0.4;
-          tuft.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
-          this.propsGroup.add(tuft);
-        }
-
-        if (rand() > 0.4) {
-          const pine = makePine({ scale: 0.55 + rand() * 0.25 });
-          const a = rand() * Math.PI * 2;
-          const d = 0.42 + rand() * 0.28;
-          pine.position.set(x + Math.cos(a) * d, y, z + Math.sin(a) * d);
-          pine.rotation.y = rand() * Math.PI;
-          this.propsGroup.add(pine);
-        }
-        break;
-      }
-      default: {
-        const _exhaustive: never = terrain;
-        void _exhaustive;
-        break;
-      }
-    }
+    const layout = pickLayout(this.biomeLibrary, terrain, id);
+    stampLayout(layout, this.propsGroup, x, TILE_HEIGHT, z);
   }
 
   private drawHarbors(board: BoardState): void {

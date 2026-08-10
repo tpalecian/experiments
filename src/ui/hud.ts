@@ -20,6 +20,7 @@ export class Hud {
   private selectedMap: MapSizeId = 'standard';
   private lastDiceKey = '';
   private assetLabHref = '?view=assets';
+  private biomeEditorHref = '?view=biome-editor';
 
   constructor(
     hudEl: HTMLElement,
@@ -34,6 +35,11 @@ export class Hud {
 
   setAssetLabHref(href: string): void {
     this.assetLabHref = href;
+    if (this.engine.snapshot().phase === 'lobby') this.renderLobby();
+  }
+
+  setBiomeEditorHref(href: string): void {
+    this.biomeEditorHref = href;
     if (this.engine.snapshot().phase === 'lobby') this.renderLobby();
   }
 
@@ -67,6 +73,7 @@ export class Hud {
         </div>
         <div class="lobby-section lobby-dev">
           <a class="btn secondary lobby-asset-lab" href="${escapeHtml(this.assetLabHref)}">Asset Lab</a>
+          <a class="btn secondary lobby-asset-lab" href="${escapeHtml(this.biomeEditorHref)}">Biome Editor</a>
         </div>
       </div>
     `;
