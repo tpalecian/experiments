@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import type { Terrain } from '../game/types';
-import { getAssetById, makeHexTile, TILE_HEIGHT } from '../render/assets';
+import { getAssetById, hexShape, makeHexTile, TILE_HEIGHT } from '../render/assets';
 import { STYLE } from '../render/style';
 import {
   BIOME_PROP_KINDS,
@@ -176,14 +176,75 @@ export function startBiomeEditor(): void {
   ground.receiveShadow = true;
   stage.add(ground);
 
-  const grid = new THREE.GridHelper(4, 16, 0x8b6a42, 0xc9b090);
-  grid.position.y = TILE_HEIGHT + 0.005;
-  const gridMats = Array.isArray(grid.material) ? grid.material : [grid.material];
-  for (const m of gridMats) {
-    m.transparent = true;
-    m.opacity = 0.35;
-  }
+  const grid = makeEditorGrid();
+  grid.position.y = TILE_HEIGHT + 0.014;
   stage.add(grid);
+
+  function makeEditorGrid(): THREE.Group {
+    const group = new THREE.Group();
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, size, size);
+
+    const cells = 8;
+    const step = size / cells;
+    ctx.fillStyle = 'rgba(255, 248, 235, 0.32)';
+    ctx.fillRect(0, 0, size, size);
+
+    const drawGrid = (width: number, color: string, every: number) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineCap = 'square';
+      for (let i = 0; i <= cells; i += every) {
+        const p = i * step + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(p, 0);
+        ctx.lineTo(p, size);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, p);
+        ctx.lineTo(size, p);
+        ctx.stroke();
+      }
+    };
+
+    // Halo then ink — keeps lines readable on light and dark terrains.
+    drawGrid(7, 'rgba(255, 255, 255, 0.85)', 1);
+    drawGrid(3.5, 'rgba(28, 18, 10, 0.9)', 1);
+    drawGrid(10, 'rgba(255, 255, 255, 0.95)', 2);
+    drawGrid(5.5, 'rgba(18, 10, 4, 0.98)', 2);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+
+    const radius = 0.98;
+    const shape = hexShape(radius);
+    const geom = new THREE.ShapeGeometry(shape);
+    // ShapeGeometry UVs are raw shape XY — remap into 0–1 over the hex bounds.
+    const pos = geom.attributes.position;
+    const uv = geom.attributes.uv;
+    if (pos && uv) {
+      const span = radius * 2;
+      for (let i = 0; i < pos.count; i++) {
+        uv.setXY(i, pos.getX(i) / span + 0.5, pos.getY(i) / span + 0.5);
+      }
+      uv.needsUpdate = true;
+    }
+    geom.rotateX(-Math.PI / 2);
+
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    group.add(new THREE.Mesh(geom, mat));
+    return group;
+  }
 
   const hexRoot = new THREE.Group();
   stage.add(hexRoot);
