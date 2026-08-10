@@ -128,8 +128,12 @@ export function warmPropThumbnails(): Map<BiomePropKind, string> {
 
 export function warmBiomeThumbnails(): Map<Terrain, string> {
   const map = new Map<Terrain, string>();
+  /** Static art overrides (served from /public). */
+  const overrides: Partial<Record<Terrain, string>> = {
+    wood: '/biome-icons/forest.png',
+  };
   for (const t of TERRAIN_ORDER) {
-    map.set(t, renderBiomeThumbnail(t));
+    map.set(t, overrides[t] ?? renderBiomeThumbnail(t));
   }
   return map;
 }
