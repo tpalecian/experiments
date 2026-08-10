@@ -1209,7 +1209,7 @@ body.biome-editor-mode #style-config-root {
   width: 2.75rem;
   height: 2.75rem;
   border-radius: 10px;
-  background-color: #101418;
+  background-color: transparent;
   background-size: contain;
   background-position: center;
   background-repeat: no-repeat;
