@@ -1,9 +1,10 @@
 /**
- * Biome Layout Editor — author prop placements per hex terrain.
+ * Biome Layout Editor — Unity-style authoring for hex decoration layouts.
  * Open via ?view=biome-editor (also linked from the lobby).
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import type { Terrain } from '../game/types';
 import { getAssetById, makeHexTile, TILE_HEIGHT } from '../render/assets';
 import { STYLE } from '../render/style';
@@ -25,7 +26,7 @@ import {
   type BiomePropInstance,
   type BiomePropKind,
 } from '../render/biomeLayouts';
-import { warmPropThumbnails } from './propThumbnails';
+import { warmBiomeThumbnails, warmPropThumbnails } from './propThumbnails';
 
 export function isBiomeEditorRoute(): boolean {
   const params = new URLSearchParams(window.location.search);
@@ -42,7 +43,9 @@ export function gameHref(): string {
   return window.location.pathname || '/';
 }
 
-type ToolMode = 'move' | 'rotate' | 'scale';
+type ToolMode = 'select' | 'move' | 'rotate' | 'scale';
+type InspectorTab = 'transform' | 'details';
+type CameraPreset = 'isometric' | 'orbit';
 
 function disposeObject(root: THREE.Object3D): void {
   root.traverse((obj) => {
@@ -66,12 +69,21 @@ function clampHex(x: number, z: number, radius = 0.82): { x: number; z: number }
   return { x: x * s, z: z * s };
 }
 
+function snapValue(v: number, step: number): number {
+  if (step <= 0) return v;
+  return Math.round(v / step) * step;
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function cloneLibrary(lib: BiomeLayoutLibrary): BiomeLayoutLibrary {
+  return JSON.parse(JSON.stringify(lib)) as BiomeLayoutLibrary;
 }
 
 export function startBiomeEditor(): void {
@@ -87,12 +99,28 @@ export function startBiomeEditor(): void {
   root.classList.remove('hidden');
 
   let library: BiomeLayoutLibrary = loadBiomeLayouts();
-  let terrain: Terrain = 'wood';
+  let terrain: Terrain = 'wheat';
   let layoutId = layoutsForTerrain(library, terrain)[0]?.id ?? '';
   let selectedPropId: string | null = null;
   let tool: ToolMode = 'move';
-  let statusMsg = 'Drag props on the hex · tools: Move / Rotate / Scale';
+  let inspectorTab: InspectorTab = 'transform';
+  let propQuery = '';
+  let snapStep = 0.1;
+  let snapEnabled = true;
+  let showGrid = true;
+  let showWater = true;
+  let dayMode = true;
+  let cameraPreset: CameraPreset = 'isometric';
+  let layoutMenuOpen = false;
+  let menuOpen = false;
+  let statusMsg = '';
+
+  const undoStack: BiomeLayoutLibrary[] = [];
+  const redoStack: BiomeLayoutLibrary[] = [];
+  const MAX_HISTORY = 40;
+
   const propThumbs = warmPropThumbnails();
+  const biomeThumbs = warmBiomeThumbnails();
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -104,11 +132,12 @@ export function startBiomeEditor(): void {
   renderer.toneMappingExposure = 1.15;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xb8d8e8);
-  scene.fog = new THREE.Fog(0xb8d8e8, 22, 48);
+  const dayBg = 0xb8d8e8;
+  const nightBg = 0x1a2433;
+  scene.background = new THREE.Color(dayBg);
+  scene.fog = new THREE.Fog(dayBg, 22, 48);
 
   const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.05, 200);
-  camera.position.set(2.8, 3.2, 3.4);
 
   const controls = new OrbitControls(camera, canvas);
   controls.target.set(0, TILE_HEIGHT * 0.5, 0);
@@ -117,7 +146,6 @@ export function startBiomeEditor(): void {
   controls.minDistance = 1.2;
   controls.maxDistance = 12;
   controls.maxPolarAngle = Math.PI * 0.48;
-  controls.update();
 
   const hemi = new THREE.HemisphereLight(STYLE.ambientSky, STYLE.ambientGround, 0.95);
   scene.add(hemi);
@@ -149,20 +177,59 @@ export function startBiomeEditor(): void {
   ground.receiveShadow = true;
   stage.add(ground);
 
+  const waterRing = new THREE.Mesh(
+    new THREE.RingGeometry(1.35, 4.2, 48),
+    new THREE.MeshToonMaterial({ color: 0x4aa8c8, transparent: true, opacity: 0.72 }),
+  );
+  waterRing.rotation.x = -Math.PI / 2;
+  waterRing.position.y = -0.04;
+  stage.add(waterRing);
+
+  const grid = new THREE.GridHelper(4, 16, 0x8b6a42, 0xc9b090);
+  grid.position.y = TILE_HEIGHT + 0.005;
+  const gridMats = Array.isArray(grid.material) ? grid.material : [grid.material];
+  for (const m of gridMats) {
+    m.transparent = true;
+    m.opacity = 0.35;
+  }
+  stage.add(grid);
+
   const hexRoot = new THREE.Group();
   stage.add(hexRoot);
   const propsRoot = new THREE.Group();
   propsRoot.position.y = TILE_HEIGHT;
   stage.add(propsRoot);
 
-  const selectionRing = new THREE.Mesh(
-    new THREE.RingGeometry(0.08, 0.11, 24),
-    new THREE.MeshBasicMaterial({ color: 0xe8a838, side: THREE.DoubleSide, depthTest: false }),
+  const placementGhost = new THREE.Mesh(
+    new THREE.RingGeometry(0.1, 0.14, 28),
+    new THREE.MeshBasicMaterial({ color: 0x5bc4e8, side: THREE.DoubleSide, depthTest: false }),
   );
-  selectionRing.rotation.x = -Math.PI / 2;
-  selectionRing.position.y = TILE_HEIGHT + 0.01;
-  selectionRing.visible = false;
-  stage.add(selectionRing);
+  placementGhost.rotation.x = -Math.PI / 2;
+  placementGhost.position.y = TILE_HEIGHT + 0.02;
+  placementGhost.visible = false;
+  stage.add(placementGhost);
+
+  const transform = new TransformControls(camera, canvas);
+  transform.setSize(0.85);
+  transform.setTranslationSnap(snapStep);
+  transform.setRotationSnap(THREE.MathUtils.degToRad(15));
+  transform.setScaleSnap(0.05);
+  scene.add(transform.getHelper());
+
+  transform.addEventListener('dragging-changed', (ev) => {
+    const dragging = Boolean((ev as { value?: boolean }).value);
+    controls.enabled = !dragging;
+    if (dragging) pushHistory();
+    else {
+      syncSelectedFromMesh();
+      persist();
+      renderUi();
+    }
+  });
+
+  transform.addEventListener('objectChange', () => {
+    syncSelectedFromMesh(false);
+  });
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -172,13 +239,47 @@ export function startBiomeEditor(): void {
   let hexTile: THREE.Object3D | null = null;
   const propMeshes = new Map<string, THREE.Object3D>();
 
-  let dragging = false;
-  let dragPropId: string | null = null;
-  let dragStartXZ = { x: 0, z: 0 };
-  let dragStartYaw = 0;
-  let dragStartScale = 1;
-  let dragStartPointerAngle = 0;
-  let dragStartPointerDist = 0;
+  function applyCameraPreset(preset: CameraPreset): void {
+    cameraPreset = preset;
+    if (preset === 'isometric') {
+      camera.position.set(3.2, 3.6, 3.2);
+      controls.target.set(0, TILE_HEIGHT * 0.4, 0);
+      controls.enableRotate = true;
+    } else {
+      camera.position.set(2.4, 2.2, 3.6);
+      controls.target.set(0, TILE_HEIGHT * 0.5, 0);
+    }
+    controls.update();
+  }
+  applyCameraPreset('isometric');
+
+  function applyDayNight(day: boolean): void {
+    dayMode = day;
+    const bg = day ? dayBg : nightBg;
+    scene.background = new THREE.Color(bg);
+    scene.fog = new THREE.Fog(bg, day ? 22 : 14, day ? 48 : 36);
+    hemi.intensity = day ? 0.95 : 0.35;
+    sun.intensity = day ? 1.35 : 0.35;
+    fill.intensity = day ? 0.35 : 0.15;
+    renderer.toneMappingExposure = day ? 1.15 : 0.85;
+  }
+
+  function applyGridWater(): void {
+    grid.visible = showGrid;
+    waterRing.visible = showWater;
+  }
+
+  function applySnap(): void {
+    if (snapEnabled) {
+      transform.setTranslationSnap(snapStep);
+      transform.setRotationSnap(THREE.MathUtils.degToRad(15));
+      transform.setScaleSnap(0.05);
+    } else {
+      transform.setTranslationSnap(null);
+      transform.setRotationSnap(null);
+      transform.setScaleSnap(null);
+    }
+  }
 
   function currentLayout(): BiomeLayout | undefined {
     return library.layouts.find((l) => l.id === layoutId);
@@ -188,10 +289,38 @@ export function startBiomeEditor(): void {
     saveBiomeLayouts(library);
   }
 
+  function pushHistory(): void {
+    undoStack.push(cloneLibrary(library));
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack.length = 0;
+  }
+
+  function undo(): void {
+    if (undoStack.length === 0) return;
+    redoStack.push(cloneLibrary(library));
+    library = undoStack.pop()!;
+    ensureLayoutSelection();
+    selectedPropId = null;
+    persist();
+    rebuildProps();
+    renderUi();
+  }
+
+  function redo(): void {
+    if (redoStack.length === 0) return;
+    undoStack.push(cloneLibrary(library));
+    library = redoStack.pop()!;
+    ensureLayoutSelection();
+    selectedPropId = null;
+    persist();
+    rebuildProps();
+    renderUi();
+  }
+
   function ensureLayoutSelection(): void {
     const list = layoutsForTerrain(library, terrain);
     if (list.length === 0) {
-      const created = createEmptyLayout(terrain);
+      const created = createEmptyLayout(terrain, `${TERRAIN_LABELS[terrain]} layout`);
       library.layouts.push(created);
       layoutId = created.id;
       persist();
@@ -212,7 +341,22 @@ export function startBiomeEditor(): void {
     hexRoot.add(hexTile);
   }
 
+  function remountProp(inst: BiomePropInstance): void {
+    const prev = propMeshes.get(inst.id);
+    if (prev) {
+      if (transform.object === prev) transform.detach();
+      propsRoot.remove(prev);
+      disposeObject(prev);
+      propMeshes.delete(inst.id);
+    }
+    const obj = createPropObject(inst);
+    if (!obj) return;
+    propsRoot.add(obj);
+    propMeshes.set(inst.id, obj);
+  }
+
   function rebuildProps(): void {
+    if (transform.object) transform.detach();
     for (const obj of propMeshes.values()) {
       propsRoot.remove(obj);
       disposeObject(obj);
@@ -223,25 +367,88 @@ export function startBiomeEditor(): void {
     for (const instance of layout.props) {
       const obj = createPropObject(instance);
       if (!obj) continue;
-      // createPropObject places at local xz with factory y; propsRoot already at TILE_HEIGHT
       propsRoot.add(obj);
       propMeshes.set(instance.id, obj);
     }
-    updateSelectionVisual();
+    attachTransform();
   }
 
-  function updateSelectionVisual(): void {
-    const layout = currentLayout();
-    const inst = layout?.props.find((p) => p.id === selectedPropId);
-    if (!inst) {
-      selectionRing.visible = false;
+  function applyToolToTransform(): void {
+    switch (tool) {
+      case 'select':
+      case 'move':
+        transform.setMode('translate');
+        transform.showX = true;
+        transform.showY = false;
+        transform.showZ = true;
+        break;
+      case 'rotate':
+        transform.setMode('rotate');
+        transform.showX = false;
+        transform.showY = true;
+        transform.showZ = false;
+        break;
+      case 'scale':
+        transform.setMode('scale');
+        transform.showX = true;
+        transform.showY = true;
+        transform.showZ = true;
+        break;
+      default: {
+        const _exhaustive: never = tool;
+        void _exhaustive;
+      }
+    }
+    transform.enabled = tool !== 'select' && selectedPropId !== null;
+    transform.getHelper().visible = tool !== 'select' && selectedPropId !== null;
+  }
+
+  function attachTransform(): void {
+    if (!selectedPropId) {
+      transform.detach();
+      transform.getHelper().visible = false;
       return;
     }
-    selectionRing.visible = true;
-    selectionRing.position.set(inst.x, TILE_HEIGHT + 0.01, inst.z);
-    const r = 0.06 + Math.max(0.04, 0.05 * inst.scale);
-    selectionRing.geometry.dispose();
-    selectionRing.geometry = new THREE.RingGeometry(r, r + 0.03, 24);
+    const mesh = propMeshes.get(selectedPropId);
+    if (!mesh) {
+      transform.detach();
+      return;
+    }
+    transform.attach(mesh);
+    applyToolToTransform();
+  }
+
+  function syncSelectedFromMesh(clamp = true): void {
+    if (!selectedPropId || !transform.object) return;
+    const layout = currentLayout();
+    const inst = layout?.props.find((p) => p.id === selectedPropId);
+    const mesh = transform.object;
+    if (!inst || !mesh) return;
+
+    let x = mesh.position.x;
+    let z = mesh.position.z;
+    if (clamp) {
+      const c = clampHex(x, z);
+      x = c.x;
+      z = c.z;
+    }
+    if (snapEnabled && tool === 'move') {
+      x = snapValue(x, snapStep);
+      z = snapValue(z, snapStep);
+    }
+    inst.x = x;
+    inst.z = z;
+    inst.yaw = mesh.rotation.y;
+    const s = (mesh.scale.x + mesh.scale.y + mesh.scale.z) / 3;
+    inst.scale = Math.max(0.15, Math.min(3, s));
+    mesh.position.x = inst.x;
+    mesh.position.z = inst.z;
+  }
+
+  function selectProp(id: string | null): void {
+    selectedPropId = id;
+    attachTransform();
+    renderUi();
   }
 
   function findPropId(obj: THREE.Object3D | null): string | null {
@@ -254,121 +461,182 @@ export function startBiomeEditor(): void {
     return null;
   }
 
-  function setPointerFromEvent(ev: PointerEvent): void {
+  function setPointerFromEvent(ev: PointerEvent | DragEvent): void {
     pointer.x = (ev.clientX / window.innerWidth) * 2 - 1;
     pointer.y = -(ev.clientY / window.innerHeight) * 2 + 1;
   }
 
-  function planeHit(ev: PointerEvent): THREE.Vector3 | null {
+  function planeHit(ev: PointerEvent | DragEvent): THREE.Vector3 | null {
     setPointerFromEvent(ev);
     raycaster.setFromCamera(pointer, camera);
     if (!raycaster.ray.intersectPlane(dragPlane, hitPoint)) return null;
     return hitPoint.clone();
   }
 
+  function addPropAt(kind: BiomePropKind, x: number, z: number): void {
+    pushHistory();
+    const layout = currentLayout();
+    if (!layout) return;
+    const c = clampHex(x, z);
+    let px = c.x;
+    let pz = c.z;
+    if (snapEnabled) {
+      px = snapValue(px, snapStep);
+      pz = snapValue(pz, snapStep);
+    }
+    const inst = createPropInstance(kind, px, pz);
+    layout.props.push(inst);
+    selectedPropId = inst.id;
+    persist();
+    remountProp(inst);
+    attachTransform();
+    statusMsg = `Added ${getAssetById(kind)?.name ?? kind}`;
+    renderUi();
+  }
+
   function onPointerDown(ev: PointerEvent): void {
     if (ev.button !== 0) return;
+    if (transform.dragging) return;
     setPointerFromEvent(ev);
     raycaster.setFromCamera(pointer, camera);
     const hits = raycaster.intersectObjects([...propMeshes.values()], true);
     const id = findPropId(hits[0]?.object ?? null);
-    if (!id) {
-      selectedPropId = null;
-      updateSelectionVisual();
-      renderUi();
+    if (id) {
+      selectProp(id);
       return;
     }
-    selectedPropId = id;
-    const layout = currentLayout();
-    const inst = layout?.props.find((p) => p.id === id);
-    if (!inst) return;
-
-    dragging = true;
-    dragPropId = id;
-    dragStartXZ = { x: inst.x, z: inst.z };
-    dragStartYaw = inst.yaw;
-    dragStartScale = inst.scale;
-    const hit = planeHit(ev);
-    if (hit) {
-      dragStartPointerAngle = Math.atan2(hit.z - inst.z, hit.x - inst.x);
-      dragStartPointerDist = Math.hypot(hit.x - inst.x, hit.z - inst.z) || 0.01;
-    }
-    controls.enabled = false;
-    updateSelectionVisual();
-    renderUi();
-  }
-
-  function onPointerMove(ev: PointerEvent): void {
-    if (!dragging || !dragPropId) return;
-    const layout = currentLayout();
-    const inst = layout?.props.find((p) => p.id === dragPropId);
-    if (!inst || !layout) return;
-    const hit = planeHit(ev);
-    if (!hit) return;
-
-    if (tool === 'move') {
-      const clamped = clampHex(hit.x, hit.z);
-      inst.x = clamped.x;
-      inst.z = clamped.z;
-    } else if (tool === 'rotate') {
-      const angle = Math.atan2(hit.z - inst.z, hit.x - inst.x);
-      inst.yaw = dragStartYaw + (angle - dragStartPointerAngle);
-    } else if (tool === 'scale') {
-      const dist = Math.hypot(hit.x - dragStartXZ.x, hit.z - dragStartXZ.z) || 0.01;
-      const ratio = dist / dragStartPointerDist;
-      inst.scale = Math.max(0.15, Math.min(3, dragStartScale * ratio));
-    } else {
-      const _exhaustive: never = tool;
-      void _exhaustive;
-    }
-
-    const mesh = propMeshes.get(inst.id);
-    if (mesh) {
-      const localY = mesh.position.y;
-      mesh.position.set(inst.x, localY, inst.z);
-      mesh.rotation.y = inst.yaw;
-      // Re-create is safer for scale-via-opts kinds, but live scale works for preview:
-      mesh.scale.setScalar(1);
-      // Remount for accurate scale from factory
-    }
-    // Live remount selected prop for correct scale baking
-    remountProp(inst);
-    updateSelectionVisual();
-  }
-
-  function remountProp(inst: BiomePropInstance): void {
-    const prev = propMeshes.get(inst.id);
-    if (prev) {
-      propsRoot.remove(prev);
-      disposeObject(prev);
-      propMeshes.delete(inst.id);
-    }
-    const obj = createPropObject(inst);
-    if (!obj) return;
-    propsRoot.add(obj);
-    propMeshes.set(inst.id, obj);
-  }
-
-  function onPointerUp(): void {
-    if (!dragging) return;
-    dragging = false;
-    dragPropId = null;
-    controls.enabled = true;
-    persist();
-    renderUi();
+    // Click empty — deselect (unless over UI)
+    selectProp(null);
   }
 
   canvas.addEventListener('pointerdown', onPointerDown);
-  window.addEventListener('pointermove', onPointerMove);
-  window.addEventListener('pointerup', onPointerUp);
 
-  function mutateLayout(fn: (layout: BiomeLayout) => void): void {
+  canvas.addEventListener('dragover', (ev) => {
+    ev.preventDefault();
+    const hit = planeHit(ev);
+    if (!hit) {
+      placementGhost.visible = false;
+      return;
+    }
+    const c = clampHex(hit.x, hit.z);
+    placementGhost.position.set(c.x, TILE_HEIGHT + 0.02, c.z);
+    placementGhost.visible = true;
+  });
+
+  canvas.addEventListener('dragleave', () => {
+    placementGhost.visible = false;
+  });
+
+  canvas.addEventListener('drop', (ev) => {
+    ev.preventDefault();
+    placementGhost.visible = false;
+    const kind = ev.dataTransfer?.getData('text/biome-prop') as BiomePropKind;
+    if (!kind || !(BIOME_PROP_KINDS as readonly string[]).includes(kind)) return;
+    const hit = planeHit(ev);
+    if (!hit) return;
+    addPropAt(kind, hit.x, hit.z);
+  });
+
+  window.addEventListener('keydown', (ev) => {
+    const tag = (ev.target as HTMLElement | null)?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+    if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'z') {
+      ev.preventDefault();
+      if (ev.shiftKey) redo();
+      else undo();
+      return;
+    }
+    if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'y') {
+      ev.preventDefault();
+      redo();
+      return;
+    }
+    if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 's') {
+      ev.preventDefault();
+      persist();
+      statusMsg = 'Saved';
+      renderUi();
+      return;
+    }
+
+    switch (ev.key.toLowerCase()) {
+      case 'q':
+        tool = 'select';
+        applyToolToTransform();
+        renderUi();
+        break;
+      case 'g':
+        tool = 'move';
+        applyToolToTransform();
+        renderUi();
+        break;
+      case 'r':
+        tool = 'rotate';
+        applyToolToTransform();
+        renderUi();
+        break;
+      case 's':
+        if (!ev.metaKey && !ev.ctrlKey) {
+          tool = 'scale';
+          applyToolToTransform();
+          renderUi();
+        }
+        break;
+      case 'delete':
+      case 'backspace':
+        if (selectedPropId) {
+          deleteSelectedProp();
+        }
+        break;
+      default:
+        break;
+    }
+  });
+
+  function deleteSelectedProp(): void {
+    if (!selectedPropId) return;
+    pushHistory();
+    const id = selectedPropId;
     const layout = currentLayout();
     if (!layout) return;
-    fn(layout);
+    layout.props = layout.props.filter((p) => p.id !== id);
+    selectedPropId = null;
     persist();
     rebuildProps();
     renderUi();
+  }
+
+  function duplicateSelectedProp(): void {
+    if (!selectedPropId) return;
+    const layout = currentLayout();
+    const src = layout?.props.find((p) => p.id === selectedPropId);
+    if (!layout || !src) return;
+    pushHistory();
+    const copy: BiomePropInstance = {
+      ...src,
+      id: `prop-${src.kind}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e4)}`,
+      x: src.x + 0.12,
+      z: src.z + 0.08,
+    };
+    const c = clampHex(copy.x, copy.z);
+    copy.x = c.x;
+    copy.z = c.z;
+    layout.props.push(copy);
+    selectedPropId = copy.id;
+    persist();
+    remountProp(copy);
+    attachTransform();
+    renderUi();
+  }
+
+  function filteredProps(): BiomePropKind[] {
+    const q = propQuery.trim().toLowerCase();
+    if (!q) return [...BIOME_PROP_KINDS];
+    return BIOME_PROP_KINDS.filter((k) => {
+      const def = getAssetById(k);
+      return k.includes(q) || (def?.name.toLowerCase().includes(q) ?? false);
+    });
   }
 
   function renderUi(): void {
@@ -376,105 +644,190 @@ export function startBiomeEditor(): void {
     const layout = currentLayout()!;
     const terrainLayouts = layoutsForTerrain(library, terrain);
     const selected = layout.props.find((p) => p.id === selectedPropId) ?? null;
+    const props = filteredProps();
 
     root.innerHTML = `
-      <aside class="biome-editor-panel" aria-label="Biome layouts">
-        <header class="biome-editor-header">
-          <div>
-            <p class="biome-editor-eyebrow">Dev tools</p>
-            <h1>Biome Editor</h1>
+      <header class="be-topbar" aria-label="Editor toolbar">
+        <div class="be-topbar-left">
+          <a class="be-icon-btn" href="${gameHref()}" title="Back to game">←</a>
+          <button type="button" class="be-icon-btn" data-act="undo" title="Undo" ${undoStack.length ? '' : 'disabled'}>↺</button>
+          <button type="button" class="be-icon-btn" data-act="redo" title="Redo" ${redoStack.length ? '' : 'disabled'}>↻</button>
+        </div>
+        <div class="be-topbar-center">
+          <button type="button" class="be-chip${dayMode ? ' active' : ''}" data-act="toggle-day">${dayMode ? '☀ Day' : '☾ Night'}</button>
+          <button type="button" class="be-chip${showGrid ? ' active' : ''}" data-act="toggle-grid">Grid</button>
+          <button type="button" class="be-chip${showWater ? ' active' : ''}" data-act="toggle-water">Water</button>
+          <label class="be-chip be-select-chip">
+            Camera
+            <select data-field="camera">
+              <option value="isometric"${cameraPreset === 'isometric' ? ' selected' : ''}>Isometric</option>
+              <option value="orbit"${cameraPreset === 'orbit' ? ' selected' : ''}>Orbit</option>
+            </select>
+          </label>
+        </div>
+        <div class="be-topbar-right">
+          ${statusMsg ? `<span class="be-status">${escapeHtml(statusMsg)}</span>` : ''}
+          <button type="button" class="be-btn" data-act="save">Save</button>
+          <button type="button" class="be-btn primary" data-act="preview">▶ Preview</button>
+          <div class="be-menu-wrap">
+            <button type="button" class="be-icon-btn" data-act="toggle-menu" title="Menu">☰</button>
+            ${
+              menuOpen
+                ? `<div class="be-menu">
+                    <button type="button" data-act="export">Export JSON</button>
+                    <button type="button" data-act="import">Import JSON</button>
+                    <button type="button" data-act="reset">Reset defaults</button>
+                  </div>`
+                : ''
+            }
           </div>
-          <a class="btn secondary biome-editor-back" href="${gameHref()}">← Game</a>
-        </header>
-        <p class="biome-editor-lede">Author hex decoration layouts. Each hex of a type randomly picks one layout when the board builds.</p>
-
-        <div class="biome-terrain-tabs" role="tablist">
-          ${TERRAIN_ORDER.map(
-            (t) => `
-            <button type="button" class="biome-terrain-tab${t === terrain ? ' active' : ''}" data-terrain="${t}" title="${escapeHtml(TERRAIN_LABELS[t])}">
-              ${escapeHtml(TERRAIN_LABELS[t])}
-            </button>`,
-          ).join('')}
         </div>
+      </header>
 
-        <div class="biome-layout-toolbar">
-          <strong>${escapeHtml(TERRAIN_LABELS[terrain])} layouts</strong>
-          <button type="button" class="btn secondary" data-act="new-layout">+ New</button>
-        </div>
-        <div class="biome-layout-list">
-          ${terrainLayouts
-            .map(
-              (l) => `
-            <button type="button" class="biome-layout-item${l.id === layoutId ? ' active' : ''}" data-layout="${escapeHtml(l.id)}">
-              <span class="biome-layout-name">${escapeHtml(l.name)}</span>
-              <span class="biome-layout-count">${l.props.length} props</span>
-            </button>`,
-            )
-            .join('')}
-        </div>
-
-        <div class="biome-layout-actions">
-          <input class="biome-name-input" data-field="layout-name" value="${escapeHtml(layout.name)}" />
-          <button type="button" class="btn secondary" data-act="dup-layout">Duplicate</button>
-          <button type="button" class="btn secondary" data-act="del-layout">Delete</button>
-        </div>
-
-        <div class="biome-palette">
-          <strong>Add prop</strong>
-          <div class="biome-palette-items">
-            ${BIOME_PROP_KINDS.map((k) => {
-              const def = getAssetById(k);
-              const thumb = propThumbs.get(k) ?? '';
-              const label = def?.name ?? k;
-              return `<button type="button" class="biome-palette-item" data-add="${k}" title="${escapeHtml(label)}">
-                <span class="biome-palette-thumb"${thumb ? ` style="background-image:url('${thumb}')"` : ''}></span>
-                <span class="biome-palette-tag">${escapeHtml(label)}</span>
+      <aside class="be-left" aria-label="Biomes and props">
+        <div class="be-section">
+          <h2>Biomes</h2>
+          <div class="be-biome-list">
+            ${TERRAIN_ORDER.map((t) => {
+              const thumb = biomeThumbs.get(t) ?? '';
+              return `<button type="button" class="be-biome-item${t === terrain ? ' active' : ''}" data-terrain="${t}">
+                <span class="be-biome-thumb"${thumb ? ` style="background-image:url('${thumb}')"` : ''}></span>
+                <span class="be-biome-label">${escapeHtml(TERRAIN_LABELS[t])}</span>
               </button>`;
             }).join('')}
           </div>
         </div>
 
-        <div class="biome-io">
-          <button type="button" class="btn secondary" data-act="export">Export JSON</button>
-          <button type="button" class="btn secondary" data-act="import">Import JSON</button>
-          <button type="button" class="btn secondary" data-act="reset">Reset defaults</button>
+        <div class="be-section be-section-grow">
+          <h2>Props</h2>
+          <input class="be-search" data-field="prop-search" placeholder="Search props…" value="${escapeHtml(propQuery)}" />
+          <div class="be-prop-grid">
+            ${props
+              .map((k) => {
+                const def = getAssetById(k);
+                const thumb = propThumbs.get(k) ?? '';
+                const label = def?.name ?? k;
+                return `<button type="button" class="be-prop-card" data-add="${k}" draggable="true" title="Drag onto hex or click to place">
+                  <span class="be-prop-thumb"${thumb ? ` style="background-image:url('${thumb}')"` : ''}></span>
+                  <span class="be-prop-tag">${escapeHtml(label)}</span>
+                </button>`;
+              })
+              .join('')}
+          </div>
         </div>
-        <input type="file" accept="application/json,.json" data-import-file style="display:none" />
+
+        <div class="be-section">
+          <div class="be-section-head">
+            <h2>${escapeHtml(TERRAIN_LABELS[terrain])} layouts</h2>
+          </div>
+          <div class="be-layout-list">
+            ${terrainLayouts
+              .map((l) => {
+                const active = l.id === layoutId;
+                return `<div class="be-layout-row${active ? ' active' : ''}">
+                  <button type="button" class="be-layout-main" data-layout="${escapeHtml(l.id)}">
+                    <span class="be-layout-name">${escapeHtml(l.name)}</span>
+                    <span class="be-layout-meta">${l.props.length} props</span>
+                  </button>
+                  ${
+                    active
+                      ? `<button type="button" class="be-icon-btn be-layout-more" data-act="toggle-layout-menu" title="Layout options">⋮</button>`
+                      : ''
+                  }
+                </div>`;
+              })
+              .join('')}
+          </div>
+          ${
+            layoutMenuOpen
+              ? `<div class="be-layout-menu">
+                  <button type="button" data-act="rename-layout">Rename</button>
+                  <button type="button" data-act="dup-layout">Duplicate</button>
+                  <button type="button" data-act="del-layout">Delete</button>
+                </div>`
+              : ''
+          }
+          <button type="button" class="be-btn block" data-act="new-layout">+ New ${escapeHtml(TERRAIN_LABELS[terrain])} layout</button>
+        </div>
       </aside>
 
-      <div class="biome-editor-toolbar" aria-label="Transform tools">
-        <div class="biome-tool-group">
-          ${(['move', 'rotate', 'scale'] as ToolMode[])
-            .map(
-              (m) => `
-            <button type="button" class="btn secondary biome-tool${tool === m ? ' active' : ''}" data-tool="${m}">
-              ${m[0]!.toUpperCase()}${m.slice(1)}
-            </button>`,
-            )
-            .join('')}
-        </div>
-        <div class="biome-editor-status">${escapeHtml(statusMsg)}</div>
+      <aside class="be-right" aria-label="Inspector">
         ${
           selected
-            ? `<div class="biome-inspector">
-                <span class="biome-inspector-thumb"${propThumbs.get(selected.kind) ? ` style="background-image:url('${propThumbs.get(selected.kind)}')"` : ''}></span>
-                <strong>${escapeHtml(getAssetById(selected.kind)?.name ?? selected.kind)}</strong>
-                <label>X <input type="number" step="0.01" data-insp="x" value="${selected.x.toFixed(3)}" /></label>
-                <label>Z <input type="number" step="0.01" data-insp="z" value="${selected.z.toFixed(3)}" /></label>
-                <label>Yaw° <input type="number" step="1" data-insp="yaw" value="${((selected.yaw * 180) / Math.PI).toFixed(1)}" /></label>
-                <label>Scale <input type="number" step="0.05" min="0.15" max="3" data-insp="scale" value="${selected.scale.toFixed(2)}" /></label>
-                <label>Variant <input type="number" step="1" min="0" max="8" data-insp="variant" value="${selected.variant ?? 0}" /></label>
-                <button type="button" class="btn secondary" data-act="del-prop">Delete prop</button>
-              </div>`
-            : `<div class="biome-inspector muted">Select a prop on the hex to edit.</div>`
+            ? `
+          <div class="be-insp-head">
+            <span class="be-insp-thumb"${propThumbs.get(selected.kind) ? ` style="background-image:url('${propThumbs.get(selected.kind)}')"` : ''}></span>
+            <div>
+              <strong>${escapeHtml(getAssetById(selected.kind)?.name ?? selected.kind)}</strong>
+              <span class="be-insp-kind">Prop</span>
+            </div>
+          </div>
+          <div class="be-insp-tabs">
+            <button type="button" class="be-insp-tab${inspectorTab === 'transform' ? ' active' : ''}" data-tab="transform">Transform</button>
+            <button type="button" class="be-insp-tab${inspectorTab === 'details' ? ' active' : ''}" data-tab="details">Details</button>
+          </div>
+          ${
+            inspectorTab === 'transform'
+              ? `<div class="be-insp-body">
+                  <label class="be-field"><span>Position X</span><input type="number" step="${snapStep}" data-insp="x" value="${selected.x.toFixed(3)}" /></label>
+                  <label class="be-field"><span>Position Y</span><input type="number" step="0.01" value="0" disabled title="Props stay on hex surface" /></label>
+                  <label class="be-field"><span>Position Z</span><input type="number" step="${snapStep}" data-insp="z" value="${selected.z.toFixed(3)}" /></label>
+                  <label class="be-field"><span>Rotation Y°</span><input type="number" step="1" data-insp="yaw" value="${((selected.yaw * 180) / Math.PI).toFixed(1)}" /></label>
+                  <label class="be-field"><span>Scale</span><input type="number" step="0.05" min="0.15" max="3" data-insp="scale" value="${selected.scale.toFixed(2)}" /></label>
+                </div>`
+              : `<div class="be-insp-body">
+                  <label class="be-field"><span>Asset</span><input type="text" value="${escapeHtml(selected.kind)}" disabled /></label>
+                  <label class="be-field"><span>Variant</span><input type="number" step="1" min="0" max="8" data-insp="variant" value="${selected.variant ?? 0}" /></label>
+                  <p class="be-insp-note">${escapeHtml(getAssetById(selected.kind)?.description ?? '')}</p>
+                </div>`
+          }
+          <div class="be-insp-actions">
+            <button type="button" class="be-btn" data-act="dup-prop">Duplicate</button>
+            <button type="button" class="be-btn danger" data-act="del-prop">Delete</button>
+          </div>`
+            : `<div class="be-insp-empty">
+              <strong>Inspector</strong>
+              <p>Select a prop on the hex to edit transform and details.</p>
+              <p class="be-insp-hint">Drag props from the library, or click a prop card to drop it at center.</p>
+            </div>`
         }
+      </aside>
+
+      <div class="be-stage-chrome" aria-hidden="false">
+        <div class="be-layout-chip">
+          <button type="button" class="be-layout-chip-btn" data-act="rename-layout" title="Rename layout">
+            <strong>${escapeHtml(layout.name)}</strong>
+            <span>${layout.props.length} props</span>
+            <span class="be-layout-chip-edit">✎</span>
+          </button>
+        </div>
+        <div class="be-tool-dock" aria-label="Transform tools">
+          <button type="button" class="be-tool${tool === 'select' ? ' active' : ''}" data-tool="select" title="Select (Q)">Select</button>
+          <button type="button" class="be-tool${tool === 'move' ? ' active' : ''}" data-tool="move" title="Move (G)">Move</button>
+          <button type="button" class="be-tool${tool === 'rotate' ? ' active' : ''}" data-tool="rotate" title="Rotate (R)">Rotate</button>
+          <button type="button" class="be-tool${tool === 'scale' ? ' active' : ''}" data-tool="scale" title="Scale (S)">Scale</button>
+          <button type="button" class="be-tool be-snap${snapEnabled ? ' active' : ''}" data-act="toggle-snap" title="Snap">🧲 ${snapStep.toFixed(1)}</button>
+          <select class="be-snap-select" data-field="snap-step" title="Snap step">
+            <option value="0.05"${snapStep === 0.05 ? ' selected' : ''}>0.05</option>
+            <option value="0.1"${snapStep === 0.1 ? ' selected' : ''}>0.1</option>
+            <option value="0.25"${snapStep === 0.25 ? ' selected' : ''}>0.25</option>
+            <option value="0.5"${snapStep === 0.5 ? ' selected' : ''}>0.5</option>
+          </select>
+        </div>
       </div>
+
+      <input type="file" accept="application/json,.json" data-import-file style="display:none" />
     `;
 
+    wireUi();
+  }
+
+  function wireUi(): void {
     root.querySelectorAll<HTMLButtonElement>('[data-terrain]').forEach((btn) => {
       btn.addEventListener('click', () => {
         terrain = btn.dataset.terrain as Terrain;
         selectedPropId = null;
+        layoutMenuOpen = false;
         ensureLayoutSelection();
         rebuildHex();
         rebuildProps();
@@ -486,6 +839,7 @@ export function startBiomeEditor(): void {
       btn.addEventListener('click', () => {
         layoutId = btn.dataset.layout!;
         selectedPropId = null;
+        layoutMenuOpen = false;
         rebuildProps();
         renderUi();
       });
@@ -494,37 +848,133 @@ export function startBiomeEditor(): void {
     root.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((btn) => {
       btn.addEventListener('click', () => {
         tool = btn.dataset.tool as ToolMode;
-        statusMsg =
-          tool === 'move'
-            ? 'Drag to move on the hex plane'
-            : tool === 'rotate'
-              ? 'Drag around the prop to rotate yaw'
-              : 'Drag away/toward the prop to scale';
+        applyToolToTransform();
+        renderUi();
+      });
+    });
+
+    root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        inspectorTab = btn.dataset.tab as InspectorTab;
         renderUi();
       });
     });
 
     root.querySelectorAll<HTMLButtonElement>('[data-add]').forEach((btn) => {
+      const kind = btn.dataset.add as BiomePropKind;
+      btn.addEventListener('dragstart', (ev) => {
+        ev.dataTransfer?.setData('text/biome-prop', kind);
+        ev.dataTransfer!.effectAllowed = 'copy';
+      });
       btn.addEventListener('click', () => {
-        const kind = btn.dataset.add as BiomePropKind;
-        mutateLayout((l) => {
-          const inst = createPropInstance(kind, 0, 0);
-          l.props.push(inst);
-          selectedPropId = inst.id;
-        });
-        statusMsg = `Added ${getAssetById(kind)?.name ?? kind}`;
+        addPropAt(kind, 0, 0);
       });
     });
 
-    root.querySelector<HTMLInputElement>('[data-field="layout-name"]')?.addEventListener('change', (ev) => {
-      const v = (ev.target as HTMLInputElement).value.trim() || 'Untitled';
-      mutateLayout((l) => {
-        l.name = v;
-      });
+    root.querySelector<HTMLInputElement>('[data-field="prop-search"]')?.addEventListener('input', (ev) => {
+      propQuery = (ev.target as HTMLInputElement).value;
+      renderUi();
+      const input = root.querySelector<HTMLInputElement>('[data-field="prop-search"]');
+      input?.focus();
+      input?.setSelectionRange(propQuery.length, propQuery.length);
     });
 
-    root.querySelector<HTMLButtonElement>('[data-act="new-layout"]')?.addEventListener('click', () => {
-      const created = createEmptyLayout(terrain, `Layout ${layoutsForTerrain(library, terrain).length + 1}`);
+    root.querySelector<HTMLSelectElement>('[data-field="camera"]')?.addEventListener('change', (ev) => {
+      applyCameraPreset((ev.target as HTMLSelectElement).value as CameraPreset);
+      renderUi();
+    });
+
+    root.querySelector<HTMLSelectElement>('[data-field="snap-step"]')?.addEventListener('change', (ev) => {
+      snapStep = Number((ev.target as HTMLSelectElement).value);
+      applySnap();
+      renderUi();
+    });
+
+    const act = (name: string, fn: () => void) => {
+      root.querySelectorAll(`[data-act="${name}"]`).forEach((el) => {
+        el.addEventListener('click', fn);
+      });
+    };
+
+    act('undo', undo);
+    act('redo', redo);
+    act('toggle-day', () => {
+      applyDayNight(!dayMode);
+      renderUi();
+    });
+    act('toggle-grid', () => {
+      showGrid = !showGrid;
+      applyGridWater();
+      renderUi();
+    });
+    act('toggle-water', () => {
+      showWater = !showWater;
+      applyGridWater();
+      renderUi();
+    });
+    act('toggle-snap', () => {
+      snapEnabled = !snapEnabled;
+      applySnap();
+      renderUi();
+    });
+    act('toggle-menu', () => {
+      menuOpen = !menuOpen;
+      layoutMenuOpen = false;
+      renderUi();
+    });
+    act('toggle-layout-menu', () => {
+      layoutMenuOpen = !layoutMenuOpen;
+      menuOpen = false;
+      renderUi();
+    });
+    act('save', () => {
+      persist();
+      statusMsg = 'Saved layouts';
+      renderUi();
+    });
+    act('preview', () => {
+      // Cycle layouts for this terrain to preview variety
+      const list = layoutsForTerrain(library, terrain);
+      if (list.length === 0) return;
+      const idx = list.findIndex((l) => l.id === layoutId);
+      layoutId = list[(idx + 1) % list.length]!.id;
+      selectedPropId = null;
+      rebuildProps();
+      statusMsg = `Preview: ${currentLayout()?.name ?? ''}`;
+      renderUi();
+    });
+    act('export', () => {
+      const blob = new Blob([exportBiomeLayoutsJson(library)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'biome-layouts.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      menuOpen = false;
+      statusMsg = 'Exported JSON';
+      renderUi();
+    });
+    act('import', () => {
+      root.querySelector<HTMLInputElement>('[data-import-file]')?.click();
+    });
+    act('reset', () => {
+      pushHistory();
+      library = resetBiomeLayouts();
+      ensureLayoutSelection();
+      selectedPropId = null;
+      menuOpen = false;
+      rebuildHex();
+      rebuildProps();
+      statusMsg = 'Reset to defaults';
+      renderUi();
+    });
+    act('new-layout', () => {
+      pushHistory();
+      const created = createEmptyLayout(
+        terrain,
+        `${TERRAIN_LABELS[terrain]} ${layoutsForTerrain(library, terrain).length + 1}`,
+      );
       library.layouts.push(created);
       layoutId = created.id;
       selectedPropId = null;
@@ -532,10 +982,10 @@ export function startBiomeEditor(): void {
       rebuildProps();
       renderUi();
     });
-
-    root.querySelector<HTMLButtonElement>('[data-act="dup-layout"]')?.addEventListener('click', () => {
+    act('dup-layout', () => {
       const src = currentLayout();
       if (!src) return;
+      pushHistory();
       const copy: BiomeLayout = {
         id: `layout-${terrain}-${Date.now().toString(36)}`,
         name: `${src.name} copy`,
@@ -548,33 +998,62 @@ export function startBiomeEditor(): void {
       library.layouts.push(copy);
       layoutId = copy.id;
       selectedPropId = null;
+      layoutMenuOpen = false;
       persist();
       rebuildProps();
       renderUi();
     });
-
-    root.querySelector<HTMLButtonElement>('[data-act="del-layout"]')?.addEventListener('click', () => {
+    act('del-layout', () => {
       const list = layoutsForTerrain(library, terrain);
       if (list.length <= 1) {
-        statusMsg = 'Keep at least one layout per hex type';
+        statusMsg = 'Keep at least one layout per biome';
+        layoutMenuOpen = false;
         renderUi();
         return;
       }
+      pushHistory();
       library.layouts = library.layouts.filter((l) => l.id !== layoutId);
       selectedPropId = null;
+      layoutMenuOpen = false;
       ensureLayoutSelection();
       persist();
       rebuildProps();
       renderUi();
     });
+    act('rename-layout', () => {
+      const layout = currentLayout();
+      if (!layout) return;
+      const next = window.prompt('Layout name', layout.name);
+      if (!next || !next.trim()) return;
+      pushHistory();
+      layout.name = next.trim();
+      layoutMenuOpen = false;
+      persist();
+      renderUi();
+    });
+    act('dup-prop', duplicateSelectedProp);
+    act('del-prop', deleteSelectedProp);
 
-    root.querySelector<HTMLButtonElement>('[data-act="del-prop"]')?.addEventListener('click', () => {
-      if (!selectedPropId) return;
-      const id = selectedPropId;
-      selectedPropId = null;
-      mutateLayout((l) => {
-        l.props = l.props.filter((p) => p.id !== id);
-      });
+    const fileInput = root.querySelector<HTMLInputElement>('[data-import-file]');
+    fileInput?.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      try {
+        pushHistory();
+        library = importBiomeLayoutsJson(await file.text());
+        persist();
+        ensureLayoutSelection();
+        selectedPropId = null;
+        menuOpen = false;
+        rebuildHex();
+        rebuildProps();
+        statusMsg = 'Imported layouts';
+        renderUi();
+      } catch {
+        statusMsg = 'Import failed';
+        renderUi();
+      }
+      fileInput.value = '';
     });
 
     root.querySelectorAll<HTMLInputElement>('[data-insp]').forEach((input) => {
@@ -585,17 +1064,18 @@ export function startBiomeEditor(): void {
         if (!inst || !layout) return;
         const n = Number(input.value);
         if (!Number.isFinite(n)) return;
+        pushHistory();
         switch (field) {
           case 'x': {
             const c = clampHex(n, inst.z);
-            inst.x = c.x;
+            inst.x = snapEnabled ? snapValue(c.x, snapStep) : c.x;
             inst.z = c.z;
             break;
           }
           case 'z': {
             const c = clampHex(inst.x, n);
             inst.x = c.x;
-            inst.z = c.z;
+            inst.z = snapEnabled ? snapValue(c.z, snapStep) : c.z;
             break;
           }
           case 'yaw':
@@ -612,58 +1092,14 @@ export function startBiomeEditor(): void {
         }
         persist();
         remountProp(inst);
-        updateSelectionVisual();
+        attachTransform();
         renderUi();
       });
     });
-
-    root.querySelector<HTMLButtonElement>('[data-act="export"]')?.addEventListener('click', () => {
-      const blob = new Blob([exportBiomeLayoutsJson(library)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'biome-layouts.json';
-      a.click();
-      URL.revokeObjectURL(url);
-      statusMsg = 'Exported biome-layouts.json';
-      renderUi();
-    });
-
-    const fileInput = root.querySelector<HTMLInputElement>('[data-import-file]')!;
-    root.querySelector<HTMLButtonElement>('[data-act="import"]')?.addEventListener('click', () => {
-      fileInput.click();
-    });
-    fileInput.addEventListener('change', async () => {
-      const file = fileInput.files?.[0];
-      if (!file) return;
-      try {
-        const text = await file.text();
-        library = importBiomeLayoutsJson(text);
-        persist();
-        ensureLayoutSelection();
-        selectedPropId = null;
-        rebuildHex();
-        rebuildProps();
-        statusMsg = 'Imported layouts';
-        renderUi();
-      } catch {
-        statusMsg = 'Import failed — invalid JSON';
-        renderUi();
-      }
-      fileInput.value = '';
-    });
-
-    root.querySelector<HTMLButtonElement>('[data-act="reset"]')?.addEventListener('click', () => {
-      library = resetBiomeLayouts();
-      ensureLayoutSelection();
-      selectedPropId = null;
-      rebuildHex();
-      rebuildProps();
-      statusMsg = 'Reset to defaults';
-      renderUi();
-    });
   }
 
+  applyGridWater();
+  applySnap();
   ensureLayoutSelection();
   rebuildHex();
   rebuildProps();
