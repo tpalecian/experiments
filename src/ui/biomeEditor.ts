@@ -712,48 +712,6 @@ export function startBiomeEditor(): void {
         </div>
       </aside>
 
-      <aside class="be-right" aria-label="Inspector">
-        ${
-          selected
-            ? `
-          <div class="be-insp-head">
-            <span class="be-insp-thumb"${propThumbs.get(selected.kind) ? ` style="background-image:url('${propThumbs.get(selected.kind)}')"` : ''}></span>
-            <div>
-              <strong>${escapeHtml(getAssetById(selected.kind)?.name ?? selected.kind)}</strong>
-              <span class="be-insp-kind">Prop</span>
-            </div>
-          </div>
-          <div class="be-insp-tabs">
-            <button type="button" class="be-insp-tab${inspectorTab === 'transform' ? ' active' : ''}" data-tab="transform">Transform</button>
-            <button type="button" class="be-insp-tab${inspectorTab === 'details' ? ' active' : ''}" data-tab="details">Details</button>
-          </div>
-          ${
-            inspectorTab === 'transform'
-              ? `<div class="be-insp-body">
-                  <label class="be-field"><span>Position X</span><input type="number" step="${snapStep}" data-insp="x" value="${selected.x.toFixed(3)}" /></label>
-                  <label class="be-field"><span>Position Y</span><input type="number" step="0.01" value="0" disabled title="Props stay on hex surface" /></label>
-                  <label class="be-field"><span>Position Z</span><input type="number" step="${snapStep}" data-insp="z" value="${selected.z.toFixed(3)}" /></label>
-                  <label class="be-field"><span>Rotation Y°</span><input type="number" step="1" data-insp="yaw" value="${((selected.yaw * 180) / Math.PI).toFixed(1)}" /></label>
-                  <label class="be-field"><span>Scale</span><input type="number" step="0.05" min="0.15" max="3" data-insp="scale" value="${selected.scale.toFixed(2)}" /></label>
-                </div>`
-              : `<div class="be-insp-body">
-                  <label class="be-field"><span>Asset</span><input type="text" value="${escapeHtml(selected.kind)}" disabled /></label>
-                  <label class="be-field"><span>Variant</span><input type="number" step="1" min="0" max="8" data-insp="variant" value="${selected.variant ?? 0}" /></label>
-                  <p class="be-insp-note">${escapeHtml(getAssetById(selected.kind)?.description ?? '')}</p>
-                </div>`
-          }
-          <div class="be-insp-actions">
-            <button type="button" class="be-btn" data-act="dup-prop">Duplicate</button>
-            <button type="button" class="be-btn danger" data-act="del-prop">Delete</button>
-          </div>`
-            : `<div class="be-insp-empty">
-              <strong>Inspector</strong>
-              <p>Select a prop on the hex to edit transform and details.</p>
-              <p class="be-insp-hint">Drag props from the library, or click a prop card to drop it at center.</p>
-            </div>`
-        }
-      </aside>
-
       <div class="be-stage-chrome">
         <div class="be-float-top">
           <div class="be-float-dock" aria-label="History">
@@ -811,6 +769,44 @@ export function startBiomeEditor(): void {
             <option value="0.5"${snapStep === 0.5 ? ' selected' : ''}>0.5</option>
           </select>
         </div>
+
+        ${
+          selected
+            ? `<aside class="be-inspector" aria-label="Inspector">
+          <div class="be-insp-head">
+            <span class="be-insp-thumb"${propThumbs.get(selected.kind) ? ` style="background-image:url('${propThumbs.get(selected.kind)}')"` : ''}></span>
+            <div class="be-insp-title">
+              <strong>${escapeHtml(getAssetById(selected.kind)?.name ?? selected.kind)}</strong>
+              <span class="be-insp-kind">Prop</span>
+            </div>
+            <button type="button" class="be-icon-btn be-insp-close" data-act="deselect" title="Deselect">✕</button>
+          </div>
+          <div class="be-insp-tabs">
+            <button type="button" class="be-insp-tab${inspectorTab === 'transform' ? ' active' : ''}" data-tab="transform">Transform</button>
+            <button type="button" class="be-insp-tab${inspectorTab === 'details' ? ' active' : ''}" data-tab="details">Details</button>
+          </div>
+          ${
+            inspectorTab === 'transform'
+              ? `<div class="be-insp-body">
+                  <label class="be-field"><span>Position X</span><input type="number" step="${snapStep}" data-insp="x" value="${selected.x.toFixed(3)}" /></label>
+                  <label class="be-field"><span>Position Y</span><input type="number" step="0.01" value="0" disabled title="Props stay on hex surface" /></label>
+                  <label class="be-field"><span>Position Z</span><input type="number" step="${snapStep}" data-insp="z" value="${selected.z.toFixed(3)}" /></label>
+                  <label class="be-field"><span>Rotation Y°</span><input type="number" step="1" data-insp="yaw" value="${((selected.yaw * 180) / Math.PI).toFixed(1)}" /></label>
+                  <label class="be-field"><span>Scale</span><input type="number" step="0.05" min="0.15" max="3" data-insp="scale" value="${selected.scale.toFixed(2)}" /></label>
+                </div>`
+              : `<div class="be-insp-body">
+                  <label class="be-field"><span>Asset</span><input type="text" value="${escapeHtml(selected.kind)}" disabled /></label>
+                  <label class="be-field"><span>Variant</span><input type="number" step="1" min="0" max="8" data-insp="variant" value="${selected.variant ?? 0}" /></label>
+                  <p class="be-insp-note">${escapeHtml(getAssetById(selected.kind)?.description ?? '')}</p>
+                </div>`
+          }
+          <div class="be-insp-actions">
+            <button type="button" class="be-btn" data-act="dup-prop">Duplicate</button>
+            <button type="button" class="be-btn danger" data-act="del-prop">Delete</button>
+          </div>
+        </aside>`
+            : ''
+        }
       </div>
 
       <input type="file" accept="application/json,.json" data-import-file style="display:none" />
@@ -1025,6 +1021,7 @@ export function startBiomeEditor(): void {
     });
     act('dup-prop', duplicateSelectedProp);
     act('del-prop', deleteSelectedProp);
+    act('deselect', () => selectProp(null));
 
     const fileInput = root.querySelector<HTMLInputElement>('[data-import-file]');
     fileInput?.addEventListener('change', async () => {
