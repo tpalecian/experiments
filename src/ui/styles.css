@@ -980,40 +980,10 @@ body.biome-editor-mode #style-config-root {
   display: none !important;
 }
 
-.be-topbar,
 .be-left,
 .be-right,
 .be-stage-chrome {
   pointer-events: auto;
-}
-
-.be-topbar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0 0.75rem;
-  background: rgba(250, 246, 238, 0.96);
-  border-bottom: 2px solid var(--panel-border);
-  z-index: 6;
-}
-
-.be-topbar-left,
-.be-topbar-center,
-.be-topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.be-topbar-center {
-  flex-wrap: wrap;
-  justify-content: center;
 }
 
 .be-icon-btn,
@@ -1021,7 +991,7 @@ body.biome-editor-mode #style-config-root {
 .be-btn,
 .be-tool {
   border: 2px solid var(--panel-border);
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.82);
   color: var(--ink);
   border-radius: 10px;
   font: inherit;
@@ -1094,7 +1064,7 @@ body.biome-editor-mode #style-config-root {
 .be-status {
   font-size: 0.75rem;
   color: var(--muted);
-  max-width: 10rem;
+  max-width: 8rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1149,7 +1119,7 @@ body.biome-editor-mode #style-config-root {
 .be-left,
 .be-right {
   position: absolute;
-  top: 52px;
+  top: 0;
   bottom: 0;
   width: 280px;
   display: flex;
@@ -1169,6 +1139,30 @@ body.biome-editor-mode #style-config-root {
 .be-right {
   right: 0;
   border-left: 2px solid var(--panel-border);
+}
+
+.be-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-shrink: 0;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px dashed rgba(92, 61, 46, 0.2);
+}
+
+.be-eyebrow {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.be-brand h1 {
+  margin: 0.05rem 0 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.15rem;
+  line-height: 1.1;
 }
 
 .be-section h2,
@@ -1468,20 +1462,51 @@ body.biome-editor-mode #style-config-root {
   position: absolute;
   left: 280px;
   right: 280px;
-  top: 52px;
+  top: 0;
   bottom: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1rem 1.1rem;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  justify-items: center;
+  align-items: start;
+  padding: 0.85rem 1rem 1.1rem;
   pointer-events: none;
   z-index: 4;
+}
+
+.be-float-top {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+  pointer-events: none;
+}
+
+.be-float-dock {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem;
+  background: rgba(250, 246, 238, 0.94);
+  border: 2px solid var(--panel-border);
+  border-radius: 14px;
+  box-shadow: 0 8px 18px rgba(40, 24, 12, 0.12);
 }
 
 .be-layout-chip,
 .be-tool-dock {
   pointer-events: auto;
+}
+
+.be-layout-chip {
+  align-self: center;
+  margin-top: 0.35rem;
+}
+
+.be-tool-dock {
+  align-self: center;
+  justify-self: center;
 }
 
 .be-layout-chip-btn {
@@ -1564,7 +1589,8 @@ body.biome-editor-mode #style-config-root {
     right: 0;
   }
 
-  .be-topbar-center {
-    display: none;
+  .be-float-top {
+    flex-wrap: wrap;
+    justify-content: center;
   }
 }

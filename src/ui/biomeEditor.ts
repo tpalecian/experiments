@@ -108,7 +108,6 @@ export function startBiomeEditor(): void {
   let snapStep = 0.1;
   let snapEnabled = true;
   let showGrid = true;
-  let showWater = true;
   let dayMode = true;
   let cameraPreset: CameraPreset = 'isometric';
   let layoutMenuOpen = false;
@@ -176,14 +175,6 @@ export function startBiomeEditor(): void {
   ground.position.y = -0.02;
   ground.receiveShadow = true;
   stage.add(ground);
-
-  const waterRing = new THREE.Mesh(
-    new THREE.RingGeometry(1.35, 4.2, 48),
-    new THREE.MeshToonMaterial({ color: 0x4aa8c8, transparent: true, opacity: 0.72 }),
-  );
-  waterRing.rotation.x = -Math.PI / 2;
-  waterRing.position.y = -0.04;
-  stage.add(waterRing);
 
   const grid = new THREE.GridHelper(4, 16, 0x8b6a42, 0xc9b090);
   grid.position.y = TILE_HEIGHT + 0.005;
@@ -264,9 +255,8 @@ export function startBiomeEditor(): void {
     renderer.toneMappingExposure = day ? 1.15 : 0.85;
   }
 
-  function applyGridWater(): void {
+  function applyGrid(): void {
     grid.visible = showGrid;
-    waterRing.visible = showWater;
   }
 
   function applySnap(): void {
@@ -647,44 +637,15 @@ export function startBiomeEditor(): void {
     const props = filteredProps();
 
     root.innerHTML = `
-      <header class="be-topbar" aria-label="Editor toolbar">
-        <div class="be-topbar-left">
+      <aside class="be-left" aria-label="Biomes and props">
+        <div class="be-brand">
           <a class="be-icon-btn" href="${gameHref()}" title="Back to game">←</a>
-          <button type="button" class="be-icon-btn" data-act="undo" title="Undo" ${undoStack.length ? '' : 'disabled'}>↺</button>
-          <button type="button" class="be-icon-btn" data-act="redo" title="Redo" ${redoStack.length ? '' : 'disabled'}>↻</button>
-        </div>
-        <div class="be-topbar-center">
-          <button type="button" class="be-chip${dayMode ? ' active' : ''}" data-act="toggle-day">${dayMode ? '☀ Day' : '☾ Night'}</button>
-          <button type="button" class="be-chip${showGrid ? ' active' : ''}" data-act="toggle-grid">Grid</button>
-          <button type="button" class="be-chip${showWater ? ' active' : ''}" data-act="toggle-water">Water</button>
-          <label class="be-chip be-select-chip">
-            Camera
-            <select data-field="camera">
-              <option value="isometric"${cameraPreset === 'isometric' ? ' selected' : ''}>Isometric</option>
-              <option value="orbit"${cameraPreset === 'orbit' ? ' selected' : ''}>Orbit</option>
-            </select>
-          </label>
-        </div>
-        <div class="be-topbar-right">
-          ${statusMsg ? `<span class="be-status">${escapeHtml(statusMsg)}</span>` : ''}
-          <button type="button" class="be-btn" data-act="save">Save</button>
-          <button type="button" class="be-btn primary" data-act="preview">▶ Preview</button>
-          <div class="be-menu-wrap">
-            <button type="button" class="be-icon-btn" data-act="toggle-menu" title="Menu">☰</button>
-            ${
-              menuOpen
-                ? `<div class="be-menu">
-                    <button type="button" data-act="export">Export JSON</button>
-                    <button type="button" data-act="import">Import JSON</button>
-                    <button type="button" data-act="reset">Reset defaults</button>
-                  </div>`
-                : ''
-            }
+          <div>
+            <p class="be-eyebrow">Dev tools</p>
+            <h1>Biome Editor</h1>
           </div>
         </div>
-      </header>
 
-      <aside class="be-left" aria-label="Biomes and props">
         <div class="be-section">
           <h2>Biomes</h2>
           <div class="be-biome-list">
@@ -793,7 +754,42 @@ export function startBiomeEditor(): void {
         }
       </aside>
 
-      <div class="be-stage-chrome" aria-hidden="false">
+      <div class="be-stage-chrome">
+        <div class="be-float-top">
+          <div class="be-float-dock" aria-label="History">
+            <button type="button" class="be-icon-btn" data-act="undo" title="Undo" ${undoStack.length ? '' : 'disabled'}>↺</button>
+            <button type="button" class="be-icon-btn" data-act="redo" title="Redo" ${redoStack.length ? '' : 'disabled'}>↻</button>
+          </div>
+          <div class="be-float-dock" aria-label="View">
+            <button type="button" class="be-chip${dayMode ? ' active' : ''}" data-act="toggle-day">${dayMode ? '☀ Day' : '☾ Night'}</button>
+            <button type="button" class="be-chip${showGrid ? ' active' : ''}" data-act="toggle-grid">Grid</button>
+            <label class="be-chip be-select-chip">
+              Camera
+              <select data-field="camera">
+                <option value="isometric"${cameraPreset === 'isometric' ? ' selected' : ''}>Isometric</option>
+                <option value="orbit"${cameraPreset === 'orbit' ? ' selected' : ''}>Orbit</option>
+              </select>
+            </label>
+          </div>
+          <div class="be-float-dock" aria-label="Actions">
+            ${statusMsg ? `<span class="be-status">${escapeHtml(statusMsg)}</span>` : ''}
+            <button type="button" class="be-btn" data-act="save">Save</button>
+            <button type="button" class="be-btn primary" data-act="preview">▶ Preview</button>
+            <div class="be-menu-wrap">
+              <button type="button" class="be-icon-btn" data-act="toggle-menu" title="Menu">☰</button>
+              ${
+                menuOpen
+                  ? `<div class="be-menu">
+                      <button type="button" data-act="export">Export JSON</button>
+                      <button type="button" data-act="import">Import JSON</button>
+                      <button type="button" data-act="reset">Reset defaults</button>
+                    </div>`
+                  : ''
+              }
+            </div>
+          </div>
+        </div>
+
         <div class="be-layout-chip">
           <button type="button" class="be-layout-chip-btn" data-act="rename-layout" title="Rename layout">
             <strong>${escapeHtml(layout.name)}</strong>
@@ -801,6 +797,7 @@ export function startBiomeEditor(): void {
             <span class="be-layout-chip-edit">✎</span>
           </button>
         </div>
+
         <div class="be-tool-dock" aria-label="Transform tools">
           <button type="button" class="be-tool${tool === 'select' ? ' active' : ''}" data-tool="select" title="Select (Q)">Select</button>
           <button type="button" class="be-tool${tool === 'move' ? ' active' : ''}" data-tool="move" title="Move (G)">Move</button>
@@ -904,12 +901,7 @@ export function startBiomeEditor(): void {
     });
     act('toggle-grid', () => {
       showGrid = !showGrid;
-      applyGridWater();
-      renderUi();
-    });
-    act('toggle-water', () => {
-      showWater = !showWater;
-      applyGridWater();
+      applyGrid();
       renderUi();
     });
     act('toggle-snap', () => {
@@ -1098,7 +1090,7 @@ export function startBiomeEditor(): void {
     });
   }
 
-  applyGridWater();
+  applyGrid();
   applySnap();
   ensureLayoutSelection();
   rebuildHex();
