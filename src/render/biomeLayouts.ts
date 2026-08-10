@@ -27,7 +27,7 @@ export const TERRAIN_ORDER: Terrain[] = ['wood', 'brick', 'sheep', 'wheat', 'ore
 
 export const TERRAIN_LABELS: Record<Terrain, string> = {
   wood: 'Forest',
-  brick: 'Hills',
+  brick: 'Quarry',
   sheep: 'Pasture',
   wheat: 'Fields',
   ore: 'Mountains',
