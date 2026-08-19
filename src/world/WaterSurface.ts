@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { HEX_SIZE, islandHexApothem } from '../game/board';
-import type { AtmosphereSnapshot } from './atmosphere';
-import type { StyleConfig } from './styleConfig';
-import { DEFAULT_STYLE_CONFIG } from './styleConfig';
+import { HEX_SIZE, islandHexApothem } from '../engine/board';
+import { capWaterSegments, getQualityCaps } from '../core/Quality';
+import type { AtmosphereSnapshot } from './Atmosphere';
+import type { StyleConfig } from '../style/styleConfig';
+import { DEFAULT_STYLE_CONFIG } from '../style/styleConfig';
 
 /** Max land hexes supported by the water shoreline SDF (huge map = 61). */
 export const WATER_MAX_HEXES = 64;
@@ -390,8 +391,7 @@ function emptyHexCenters(): THREE.Vector2[] {
 }
 
 function reflectionSize(): number {
-  if (typeof window === 'undefined') return 512;
-  return Math.min(window.devicePixelRatio, 2) > 1.25 ? 768 : 512;
+  return getQualityCaps().reflectionSize;
 }
 
 export class WaterSurface {
@@ -492,7 +492,7 @@ export class WaterSurface {
       side: THREE.DoubleSide,
     });
 
-    const segs = Math.max(16, Math.round(this.config.waterSegments));
+    const segs = capWaterSegments(this.config.waterSegments);
     const radius = 180;
     const geom = new THREE.CircleGeometry(radius, Math.max(64, segs * 2));
     geom.rotateX(-Math.PI / 2);
@@ -504,7 +504,7 @@ export class WaterSurface {
   }
 
   applyConfig(config: StyleConfig): void {
-    const prevSegs = Math.max(16, Math.round(this.config.waterSegments));
+    const prevSegs = capWaterSegments(this.config.waterSegments);
     this.config = { ...config };
     const u = this.material.uniforms;
     u.uWaveHeight.value = config.waterWaveHeight;
@@ -547,7 +547,7 @@ export class WaterSurface {
     u.uDriftSpeed.value = config.waterDriftSpeed;
     u.uSkyFresnel.value.set(config.waterLagoon);
 
-    const nextSegs = Math.max(16, Math.round(config.waterSegments));
+    const nextSegs = capWaterSegments(config.waterSegments);
     if (nextSegs !== prevSegs) this.rebuildGeometry(this.rings, nextSegs);
   }
 
@@ -619,7 +619,7 @@ export class WaterSurface {
 
   resize(rings: number): void {
     this.rings = rings;
-    const segs = Math.max(16, Math.round(this.config.waterSegments));
+    const segs = capWaterSegments(this.config.waterSegments);
     this.rebuildGeometry(rings, segs);
   }
 

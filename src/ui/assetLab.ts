@@ -9,8 +9,8 @@ import {
   ASSET_CATEGORIES,
   getAssetById,
   type AssetDefinition,
-} from '../render/assets';
-import { STYLE, STYLIZED_PLAYER } from '../render/style';
+} from '../world/assets';
+import { STYLE, STYLIZED_PLAYER } from '../style/style';
 
 export function isAssetLabRoute(): boolean {
   const params = new URLSearchParams(window.location.search);
@@ -205,7 +205,7 @@ export function startAssetLab(): void {
           </div>
           <a class="btn secondary asset-lab-back" href="${gameHref()}">← Game</a>
         </header>
-        <p class="asset-lab-lede">Preview and orbit procedural pieces, props, and board meshes used by BoardView.</p>
+        <p class="asset-lab-lede">Preview and orbit procedural pieces, props, and board meshes used by World.</p>
         <div class="asset-lab-list">
           ${ASSET_CATEGORIES.map((cat) => {
             const items = ASSET_CATALOG.filter((a) => a.category === cat.id);

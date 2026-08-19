@@ -3,7 +3,7 @@
  * Edited via ?view=biome-editor; persisted in localStorage.
  */
 import * as THREE from 'three';
-import type { Terrain } from '../game/types';
+import type { Terrain } from '../engine/types';
 import { getAssetById, type AssetCreateOptions } from './assets';
 
 export const BIOME_PROP_KINDS = [

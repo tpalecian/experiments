@@ -5,9 +5,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import type { Terrain } from '../game/types';
-import { getAssetById, hexShape, makeHexTile, TILE_HEIGHT } from '../render/assets';
-import { STYLE } from '../render/style';
+import type { Terrain } from '../engine/types';
+import { getAssetById, hexShape, makeHexTile, TILE_HEIGHT } from '../world/assets';
+import { STYLE } from '../style/style';
 import {
   BIOME_PROP_KINDS,
   TERRAIN_LABELS,
@@ -25,7 +25,7 @@ import {
   type BiomeLayoutLibrary,
   type BiomePropInstance,
   type BiomePropKind,
-} from '../render/biomeLayouts';
+} from '../world/biomeLayouts';
 import { warmBiomeThumbnails, warmPropThumbnails } from './propThumbnails';
 
 export function isBiomeEditorRoute(): boolean {

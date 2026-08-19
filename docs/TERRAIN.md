@@ -5,7 +5,7 @@
 > Keep the **readable hex tiles**. Water, skirts, props, and lighting dress the board —
 > they do not replace it with organic non-hex terrain.
 
-The live board is built in `BoardView` (`src/render/BoardView.ts`): extruded hex meshes,
+The live board is built in `World` (`src/world/World.ts`): extruded hex meshes,
 terrain props, number tokens, harbors, tropical water hugging the land hexes.
 
 ---
@@ -16,7 +16,7 @@ terrain props, number tokens, harbors, tropical water hugging the land hexes.
 Hex graph (game rules)
         │
         ▼
-BoardView tiles + markers + pieces
+World tiles + markers + pieces
         │
         ├──────────────┐
         ▼              ▼
@@ -35,7 +35,7 @@ Gameplay adjacency and production stay on the hex graph. Presentation never inve
 
 Water is a flat sea plane with a **land mask from hex centers** (not an organic island silhouette).
 
-Live path: `src/render/water.ts` — Bruno folio shore (cyan rim + sparse arcs), frosted mirror, depth colour, atmosphere tint.
+Live path: `src/world/WaterSurface.ts` — Bruno folio shore (cyan rim + sparse arcs), frosted mirror, depth colour, atmosphere tint.
 
 Craft bases live in `StyleConfig`; day-night multiplies them via Environment State ([DAY_NIGHT.md](DAY_NIGHT.md)).
 
@@ -79,7 +79,7 @@ Dirt skirt (tabletop edge)
 
 Roads, settlements, cities, and the robber are board pieces on the hex graph.
 
-Motion system: `src/render/tween.ts` + `BoardView` sync.
+Motion system: `src/core/tween.ts` + `World` piece sync.
 
 | Moment | Feel |
 | --- | --- |
@@ -105,13 +105,13 @@ See [VISION.md](VISION.md) for the full animation priority table.
 
 | Concern | Module |
 | --- | --- |
-| Hex tiles, pieces, highlights | `src/render/BoardView.ts` |
-| Tweens / easing | `src/render/tween.ts` |
-| Water shader | `src/render/water.ts` |
-| Pasture grass | Meadow floor in `src/render/style.ts` + biome props |
-| Sky / clouds | `src/render/sky.ts` |
-| Day-night / atmosphere | `src/render/atmosphere.ts` |
-| Style craft | `src/render/styleConfig.ts`, `src/ui/configurator.ts` |
-| Rules / board graph | `src/game/*` |
+| Hex tiles, pieces, highlights | `src/world/World.ts` |
+| Tweens / easing | `src/core/tween.ts` |
+| Water shader | `src/world/WaterSurface.ts` |
+| Pasture grass | Meadow floor in `src/style/style.ts` + biome props |
+| Sky / clouds | `src/world/Sky.ts` |
+| Day-night / atmosphere | `src/world/Atmosphere.ts` |
+| Style craft | `src/style/styleConfig.ts`, `src/ui/style/configurator.ts` |
+| Rules / board graph | `src/engine/*` |
 
 Day-night and weather must **not** rebuild hex meshes — only Environment State changes. See **[DAY_NIGHT.md](DAY_NIGHT.md)**.

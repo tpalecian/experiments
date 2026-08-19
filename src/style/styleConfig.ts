@@ -2,6 +2,8 @@ export type CloudPuffShape = 'sphere' | 'icosahedron';
 
 export type TimeOfDayModeConfig = 'morning' | 'afternoon' | 'evening' | 'night' | 'cycle';
 
+export type WeatherKind = 'clear' | 'overcast' | 'rain';
+
 export interface StyleConfig {
   // Time of day (game-level atmosphere)
   timeOfDay: TimeOfDayModeConfig;
@@ -9,6 +11,8 @@ export interface StyleConfig {
   dayLengthSec: number;
   /** Seconds to ease when picking a fixed scheme. */
   dayTransitionSec: number;
+  /** Environment-State weather — never rebuilds hex meshes. */
+  weather: WeatherKind;
 
   // Clouds
   cloudCount: number;
@@ -116,6 +120,7 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   timeOfDay: 'afternoon',
   dayLengthSec: 180,
   dayTransitionSec: 4,
+  weather: 'clear',
 
   cloudCount: 12,
   cloudScale: 1.45,
@@ -294,7 +299,7 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-const STORAGE_KEY = 'catan-style-config-v21';
+const STORAGE_KEY = 'catan-style-config-v22';
 
 export function loadStyleConfig(): StyleConfig {
   try {

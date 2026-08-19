@@ -101,7 +101,7 @@ No organic mask / SDF island generators here.
 | Highlights | Fade speed, pulse amount |
 | Camera | Robber nudge blend, damping |
 
-Backed by `TweenPlayer` (`src/render/tween.ts`).
+Backed by `TweenPlayer` (`src/core/tween.ts`).
 
 ### 8. Camera
 
@@ -152,12 +152,10 @@ CraftConfig  (persisted JSON)
       │
       ├── look fields ──► Environment State / materials (live)
       │
-      └── motion fields ──► TweenPlayer timings / BoardView feel
+      └── motion fields ──► TweenPlayer timings / World feel
 ```
 
-Live MVP today: `StyleConfig` + `StyleConfigurator` (`src/render/styleConfig.ts`, `src/ui/configurator.ts`) cover time-of-day, clouds, sky refs, water, and lighting craft.
-
-Target: grow that into **`CraftConfig`** driven by the category schema in `src/ui/craftSchema.ts`, so every system in [VISION.md](VISION.md) / [TERRAIN.md](TERRAIN.md) / [DAY_NIGHT.md](DAY_NIGHT.md) has a home — and **every new uniform ships with a configurator field in the same PR**.
+Live MVP today: `StyleConfig` + `StyleConfigurator` (`src/style/styleConfig.ts`, `src/ui/style/configurator.ts`) are driven by `CRAFT_FIELDS` in `src/ui/style/craftSchema.ts` — atmosphere (including weather), clouds, sky refs, water, lighting, hex board, and motion.
 
 ---
 

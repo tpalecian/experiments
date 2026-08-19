@@ -20,7 +20,7 @@ tiles · props · pieces · water mesh · grass
         │
         ├──────────────────────┐
         ▼                      ▼
-BoardView materials       WaterSurface
+Board materials              WaterSurface
         │                      │
         └──────────┬───────────┘
                    ▼
@@ -271,7 +271,7 @@ type EnvironmentState = {
 
 ### Live mapping
 
-Runtime Environment State is `AtmosphereSnapshot` via `TimeOfDayController` in `src/render/atmosphere.ts`. Palette tables come from `src/atmosphere/environment.ts`.
+Runtime Environment State is `AtmosphereSnapshot` via `TimeOfDayController` in `src/world/Atmosphere.ts`. Palette tables come from `src/atmosphere/environment.ts`. Weather (`applyWeather`) is a second Environment State pass — Clear / Overcast / Rain — and never rebuilds meshes.
 
 | Vision field | Live field(s) |
 | --- | --- |
@@ -286,7 +286,7 @@ Runtime Environment State is `AtmosphereSnapshot` via `TimeOfDayController` in `
 | Board tint | `beachTint`, `boardTintMix` (hex/prop albedo only — no mesh rebuild) |
 | Stars / moon disc | `starsIntensity`, night celestial as cool “sun” |
 
-`WaterSurface.applyAtmosphere` composes **Style craft bases × Environment State**. `BoardView.applyAtmosphere` soft-tints tiles/props. `main.ts` applies lights, rim, fog, and shadow strength every frame.
+`WaterSurface.applyAtmosphere` composes **Style craft bases × Environment State**. `World.applyAtmosphere` soft-tints tiles/props. `Game.ts` applies lights, rim, fog, and shadow strength every frame.
 
 ---
 

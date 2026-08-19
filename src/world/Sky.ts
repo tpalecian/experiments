@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import type { AtmosphereSnapshot } from './atmosphere';
-import type { StyleConfig } from './styleConfig';
-import { DEFAULT_STYLE_CONFIG } from './styleConfig';
+import type { AtmosphereSnapshot } from './Atmosphere';
+import type { StyleConfig } from '../style/styleConfig';
+import { DEFAULT_STYLE_CONFIG } from '../style/styleConfig';
 
 const skyVertexShader = /* glsl */ `
 varying vec3 vDir;

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Terrain } from '../game/types';
+import type { Terrain } from '../engine/types';
 
 /** Cozy stylized fantasy palette — warm, saturated, Nintendo-adjacent. */
 export const STYLE = {

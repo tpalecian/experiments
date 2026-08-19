@@ -5,7 +5,7 @@
  * Every frame, renderers read this object; nothing regenerates.
  *
  * Live path: `AtmosphereSnapshot` + `TimeOfDayController` in
- * `src/render/atmosphere.ts` import these palette tables every frame.
+ * `src/world/Atmosphere.ts` import these palette tables every frame.
  * Board meshes never regenerate — see docs/DAY_NIGHT.md.
  */
 

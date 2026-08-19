@@ -1,0 +1,222 @@
+/**
+ * Asset Lab catalog — pieces, props, and board samples.
+ */
+import type { AssetDefinition, AssetCategory } from './types';
+import { makeCity, makeRoad, makeRobber, makeSettlement } from './pieces';
+import {
+  makeBush,
+  makeCactus,
+  makeDirtSkirt,
+  makeFence,
+  makeFlowerTuft,
+  makeHarborLabel,
+  makeHarborPier,
+  makeHexTile,
+  makeMesa,
+  makeNumberToken,
+  makePastureRock,
+  makePine,
+  makeRock,
+  makeSheep,
+  makeStoneWall,
+  makeTree,
+  makeWheatStalk,
+} from './props';
+
+export const ASSET_CATALOG: AssetDefinition[] = [
+  {
+    id: 'settlement',
+    name: 'Settlement',
+    category: 'pieces',
+    description: 'Player house placed on vertices.',
+    playerTint: true,
+    create: makeSettlement,
+  },
+  {
+    id: 'city',
+    name: 'City',
+    category: 'pieces',
+    description: 'Upgraded settlement with keep + tower.',
+    playerTint: true,
+    create: makeCity,
+  },
+  {
+    id: 'road',
+    name: 'Road',
+    category: 'pieces',
+    description: 'Edge piece connecting settlements.',
+    playerTint: true,
+    create: makeRoad,
+  },
+  {
+    id: 'robber',
+    name: 'Robber',
+    category: 'pieces',
+    description: 'Blocks production; hops between hexes.',
+    create: makeRobber,
+  },
+  {
+    id: 'tree',
+    name: 'Tree',
+    category: 'props',
+    description: 'Forest canopy prop (wood hexes).',
+    create: (opts) => makeTree({ ...opts, scale: opts?.scale ?? 1 }),
+  },
+  {
+    id: 'pine',
+    name: 'Pine',
+    category: 'props',
+    description: 'Dark conical pine for pasture corners.',
+    create: (opts) => makePine({ ...opts, scale: opts?.scale ?? 0.85 }),
+  },
+  {
+    id: 'sheep',
+    name: 'Sheep',
+    category: 'props',
+    description: 'Fluffy pasture sheep with dark face.',
+    create: makeSheep,
+  },
+  {
+    id: 'fence',
+    name: 'Fence',
+    category: 'props',
+    description: 'Short wooden fence segment.',
+    create: makeFence,
+  },
+  {
+    id: 'stone-wall',
+    name: 'Stone wall',
+    category: 'props',
+    description: 'Low grey stone enclosure segment.',
+    create: makeStoneWall,
+  },
+  {
+    id: 'bush',
+    name: 'Bush',
+    category: 'props',
+    description: 'Rounded meadow shrub.',
+    create: makeBush,
+  },
+  {
+    id: 'pasture-rock',
+    name: 'Pasture rock',
+    category: 'props',
+    description: 'Small grey/tan stone cluster.',
+    create: makePastureRock,
+  },
+  {
+    id: 'flower-tuft',
+    name: 'Flower tuft',
+    category: 'props',
+    description: 'Tiny white/yellow meadow flowers.',
+    create: makeFlowerTuft,
+  },
+  {
+    id: 'wheat',
+    name: 'Wheat stalk',
+    category: 'props',
+    description: 'Field cone for wheat hexes.',
+    create: makeWheatStalk,
+  },
+  {
+    id: 'rock',
+    name: 'Ore rock',
+    category: 'props',
+    description: 'Dodecahedron rock for ore hexes.',
+    create: makeRock,
+  },
+  {
+    id: 'mesa',
+    name: 'Brick mesa',
+    category: 'props',
+    description: 'Hill / mesa for brick hexes.',
+    create: makeMesa,
+  },
+  {
+    id: 'cactus',
+    name: 'Cactus',
+    category: 'props',
+    description: 'Desert cactus prop.',
+    create: makeCactus,
+  },
+  {
+    id: 'number-token',
+    name: 'Number token',
+    category: 'board',
+    description: 'Wooden production chit (default 8).',
+    create: makeNumberToken,
+  },
+  {
+    id: 'harbor-pier',
+    name: 'Harbor pier',
+    category: 'board',
+    description: 'Dock stub outside coastal edges.',
+    create: makeHarborPier,
+  },
+  {
+    id: 'harbor-label',
+    name: 'Harbor label',
+    category: 'board',
+    description: 'Billboard trade ratio sprite.',
+    create: makeHarborLabel,
+  },
+  {
+    id: 'dirt-skirt',
+    name: 'Dirt skirt',
+    category: 'board',
+    description: 'Pedestal under hex tiles.',
+    create: makeDirtSkirt,
+  },
+  {
+    id: 'hex-wood',
+    name: 'Hex · wood',
+    category: 'board',
+    description: 'Extruded forest tile + rim.',
+    create: () => makeHexTile({ terrain: 'wood' }),
+  },
+  {
+    id: 'hex-brick',
+    name: 'Hex · brick',
+    category: 'board',
+    description: 'Extruded hills tile + rim.',
+    create: () => makeHexTile({ terrain: 'brick' }),
+  },
+  {
+    id: 'hex-sheep',
+    name: 'Hex · sheep',
+    category: 'board',
+    description: 'Pasture tile with meadow floor texture.',
+    create: () => makeHexTile({ terrain: 'sheep' }),
+  },
+  {
+    id: 'hex-wheat',
+    name: 'Hex · wheat',
+    category: 'board',
+    description: 'Extruded fields tile + rim.',
+    create: () => makeHexTile({ terrain: 'wheat' }),
+  },
+  {
+    id: 'hex-ore',
+    name: 'Hex · ore',
+    category: 'board',
+    description: 'Extruded mountains tile + rim.',
+    create: () => makeHexTile({ terrain: 'ore' }),
+  },
+  {
+    id: 'hex-desert',
+    name: 'Hex · desert',
+    category: 'board',
+    description: 'Extruded desert tile + rim.',
+    create: () => makeHexTile({ terrain: 'desert' }),
+  },
+];
+
+export const ASSET_CATEGORIES: { id: AssetCategory; label: string }[] = [
+  { id: 'pieces', label: 'Pieces' },
+  { id: 'props', label: 'Props' },
+  { id: 'board', label: 'Board' },
+];
+
+export function getAssetById(id: string): AssetDefinition | undefined {
+  return ASSET_CATALOG.find((a) => a.id === id);
+}
