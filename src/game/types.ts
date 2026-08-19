@@ -96,15 +96,6 @@ export interface BoardState {
 
 export const RESOURCES: Resource[] = ['wood', 'brick', 'sheep', 'wheat', 'ore'];
 
-export const TERRAIN_COLORS: Record<Terrain, number> = {
-  wood: 0x3f8f4a,
-  brick: 0xd4784a,
-  sheep: 0x7bc95a,
-  wheat: 0xf0c84a,
-  ore: 0x8a92a6,
-  desert: 0xe8c988,
-};
-
 export const PLAYER_COLORS: number[] = [0xf04545, 0x4a9fff, 0xfff6e8, 0xffb020];
 
 export const PLAYER_NAMES = ['Red', 'Blue', 'White', 'Orange'];

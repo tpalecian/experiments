@@ -20,7 +20,7 @@ Live modules:
 
 ```
 src/game/        rules engine · board graph
-src/render/      BoardView · assets · water · grass · sky · atmosphere · tweens
+src/render/      BoardView · assets · water · sky · atmosphere · tweens
 src/input/       picker
 src/ui/          HUD · Style configurator · Asset Lab
 ```

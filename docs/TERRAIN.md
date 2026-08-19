@@ -99,8 +99,6 @@ See [VISION.md](VISION.md) for the full animation priority table.
 - Hidden region graphs that players never see as tiles
 - Regenerating terrain when day-night changes
 
-Legacy stubs under `src/terrain/`, `src/water/` (CPU helpers), `src/world/`, `src/gameplay/` are **not** the live presentation path. Prefer extending `src/render/*`.
-
 ---
 
 ## Module map (live)
@@ -110,7 +108,7 @@ Legacy stubs under `src/terrain/`, `src/water/` (CPU helpers), `src/world/`, `sr
 | Hex tiles, pieces, highlights | `src/render/BoardView.ts` |
 | Tweens / easing | `src/render/tween.ts` |
 | Water shader | `src/render/water.ts` |
-| Pasture grass | `src/render/grass.ts` |
+| Pasture grass | Meadow floor in `src/render/style.ts` + biome props |
 | Sky / clouds | `src/render/sky.ts` |
 | Day-night / atmosphere | `src/render/atmosphere.ts` |
 | Style craft | `src/render/styleConfig.ts`, `src/ui/configurator.ts` |

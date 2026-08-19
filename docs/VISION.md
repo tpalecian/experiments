@@ -16,7 +16,7 @@ Hex Board (visible tiles)
         ↓
 Gameplay Graph (same hexes — resources / adjacency / robber)
         ↓
-BoardView (tiles · props · pieces · water · grass)
+        BoardView (tiles · props · pieces · water)
         ↓
 Renderers  ←  Environment State (time / weather) + TweenPlayer
 ```
@@ -29,7 +29,7 @@ Renderers  ←  Environment State (time / weather) + TweenPlayer
 | Engine | Three.js |
 | Materials | Custom GLSL shaders + toon materials |
 | Motion | Local `TweenPlayer` (`src/render/tween.ts`) |
-| Water / grass | GPU `uTime` shaders |
+| Water | GPU `uTime` shaders |
 | Day-night | `TimeOfDayController` + Environment State |
 
 ---
@@ -56,12 +56,10 @@ src/
   render/
     BoardView.ts   # hex tiles, pieces, highlights, motion
     tween.ts       # shared easing / tween queue
-    water.ts · grass.ts · sky.ts · atmosphere.ts
+    water.ts · sky.ts · atmosphere.ts
   ui/            hud · configurator · styles
   input/         picker
 ```
-
-Legacy island-generation stubs under `src/terrain/`, `src/water/`, `src/world/`, `src/gameplay/` are **not** the active presentation path.
 
 ---
 
