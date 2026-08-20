@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { boardRadiusWorld } from '../engine/board';
 import { TweenPlayer, ease } from '../core/tween';
-import type { StyleConfig } from '../style/styleConfig';
+import type { MotionFeel } from '../world/motion';
 
 /** Orbit camera, board framing, and robber look-at nudge. */
 export class CameraRig {
@@ -58,13 +58,13 @@ export class CameraRig {
     };
   }
 
-  nudgeToward(world: THREE.Vector3, config: StyleConfig): void {
+  nudgeToward(world: THREE.Vector3, motion: MotionFeel): void {
     this.lookFrom.copy(this.controls.target);
     this.look.copy(world);
     this.look.y = 0.12;
-    this.look.lerp(this.boardCenter, config.motionCameraNudgeBlend);
+    this.look.lerp(this.boardCenter, motion.cameraNudgeBlend);
     this.tweens.play(
-      config.motionCameraNudgeSec,
+      motion.cameraNudgeSec,
       (u) => {
         this.controls.target.lerpVectors(this.lookFrom, this.look, ease.easeOutCubic(u));
       },

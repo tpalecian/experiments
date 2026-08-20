@@ -54,7 +54,7 @@ Renderers  ←  Environment State (time / weather) + TweenPlayer
 src/
   engine/        GameEngine · board · rules · types
   Game.ts        composition root (folio-style wiring)
-  core/          Time · Ticker · Viewport · Rendering · tween · Quality
+  core/          Time · Viewport · Rendering · tween · Quality
   view/          CameraRig · Lighting · Fog
   world/         Board · Pieces · Highlights · Props · WaterSurface · Sky · Atmosphere
   ui/            hud · style/configurator · styles

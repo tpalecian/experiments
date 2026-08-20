@@ -68,9 +68,6 @@ export class Lighting {
     this.sun.castShadow = atm.shadowStrength > 0.05;
     this.sun.shadow.radius = atm.shadowStrength < 0.55 ? 3.5 : 1.25;
     this.sun.shadow.bias = -0.0008;
-    if (atm.shadowStrength < 1) {
-      this.sun.intensity *= 0.65 + 0.35 * atm.shadowStrength;
-    }
   }
 
   setCelestialDirection(dir: THREE.Vector3): void {

@@ -438,7 +438,7 @@ const NUMBER_KEYS = [
   'boardTintMix',
 ] as const;
 
-function cloneSnapshot(src: AtmosphereSnapshot): AtmosphereSnapshot {
+export function cloneSnapshot(src: AtmosphereSnapshot): AtmosphereSnapshot {
   const out = { ...src } as AtmosphereSnapshot;
   for (const key of COLOR_KEYS) {
     out[key] = src[key].clone();

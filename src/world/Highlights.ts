@@ -6,17 +6,24 @@ import type { MotionFeel } from './motion';
 
 /** Legal vertex / edge markers. */
 export class Highlights {
+  readonly group = new THREE.Group();
   private vertexMarkers = new Map<string, THREE.Mesh>();
   private edgeMarkers = new Map<string, THREE.Mesh>();
   private legalVertices = new Set<string>();
   private legalEdges = new Set<string>();
+  private pickables: THREE.Object3D[] = [];
   private elapsed = 0;
 
-  build(board: BoardState, parent: THREE.Group, pickables: THREE.Object3D[]): void {
-    this.vertexMarkers.clear();
-    this.edgeMarkers.clear();
-    this.legalVertices.clear();
-    this.legalEdges.clear();
+  addTo(parent: THREE.Group): void {
+    parent.add(this.group);
+  }
+
+  getPickables(): THREE.Object3D[] {
+    return this.pickables;
+  }
+
+  build(board: BoardState): void {
+    this.clear();
 
     for (const v of board.vertices.values()) {
       const m = new THREE.Mesh(
@@ -31,8 +38,8 @@ export class Highlights {
       m.position.set(v.x, TILE_HEIGHT + 0.1, v.z);
       m.userData = { kind: 'vertex', id: v.id };
       this.vertexMarkers.set(v.id, m);
-      parent.add(m);
-      pickables.push(m);
+      this.group.add(m);
+      this.pickables.push(m);
     }
 
     for (const e of board.edges.values()) {
@@ -49,8 +56,8 @@ export class Highlights {
       m.rotation.y = -e.angle;
       m.userData = { kind: 'edge', id: e.id };
       this.edgeMarkers.set(e.id, m);
-      parent.add(m);
-      pickables.push(m);
+      this.group.add(m);
+      this.pickables.push(m);
     }
   }
 
@@ -97,9 +104,11 @@ export class Highlights {
   }
 
   clear(): void {
+    this.group.clear();
     this.vertexMarkers.clear();
     this.edgeMarkers.clear();
     this.legalVertices.clear();
     this.legalEdges.clear();
+    this.pickables = [];
   }
 }

@@ -1,32 +1,19 @@
 import * as THREE from 'three';
 import type { WeatherKind } from '../style/styleConfig';
-import type { AtmosphereSnapshot } from './Atmosphere';
+import { cloneSnapshot, type AtmosphereSnapshot } from './Atmosphere';
 
 /** Environment-State-only weather. Never rebuilds hex meshes. */
-export type { WeatherKind } from '../style/styleConfig';
-
-export const WEATHER_KINDS: WeatherKind[] = ['clear', 'overcast', 'rain'];
-
-function cloneAtmosphere(src: AtmosphereSnapshot): AtmosphereSnapshot {
-  const out = { ...src } as AtmosphereSnapshot;
-  for (const key of Object.keys(src) as (keyof AtmosphereSnapshot)[]) {
-    const val = src[key];
-    if (val instanceof THREE.Color) {
-      (out[key] as THREE.Color) = val.clone();
-    }
-  }
-  return out;
-}
+export type { WeatherKind };
 
 /**
  * Palette / scalar multipliers on a snapshot copy.
  * Call after day-cycle sampling — board geometry stays static.
  */
 export function applyWeather(src: AtmosphereSnapshot, weather: WeatherKind): AtmosphereSnapshot {
-  const atm = cloneAtmosphere(src);
+  const atm = cloneSnapshot(src);
   switch (weather) {
     case 'clear':
-      return atm;
+      break;
     case 'overcast':
       atm.sunIntensity *= 0.55;
       atm.hemiIntensity *= 1.12;
@@ -39,7 +26,7 @@ export function applyWeather(src: AtmosphereSnapshot, weather: WeatherKind): Atm
       atm.shadowStrength *= 0.45;
       atm.waterCausticIntensity *= 0.4;
       atm.horizonHaze = Math.min(1, atm.horizonHaze + 0.12);
-      return atm;
+      break;
     case 'rain':
       atm.sunIntensity *= 0.4;
       atm.hemiIntensity *= 1.05;
@@ -55,10 +42,14 @@ export function applyWeather(src: AtmosphereSnapshot, weather: WeatherKind): Atm
       atm.foamBrightness = Math.min(1.2, atm.foamBrightness * 1.15);
       atm.waveBandIntensity = Math.min(1.4, atm.waveBandIntensity * 1.25);
       atm.skyHorizon.lerp(new THREE.Color('#6a7888'), 0.25);
-      return atm;
+      break;
     default: {
       const _exhaustive: never = weather;
       return _exhaustive;
     }
   }
+  if (atm.shadowStrength < 1) {
+    atm.sunIntensity *= 0.65 + 0.35 * atm.shadowStrength;
+  }
+  return atm;
 }

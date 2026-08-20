@@ -13,8 +13,9 @@ import {
   updateLongestRoad,
 } from '../src/engine/rules';
 import { RESOURCES, emptyBank } from '../src/engine/types';
-import { CRAFT_FIELDS } from '../src/ui/style/craftSchema';
+import { CRAFT_CATEGORIES, CRAFT_FIELDS } from '../src/ui/style/craftSchema';
 import { applyWeather } from '../src/world/Weather';
+import { World } from '../src/world/World';
 import { getQualityCaps, getQualityLevel } from '../src/core/Quality';
 import {
   ATMOSPHERE_PRESETS,
@@ -315,9 +316,35 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(rain.fogFarMul < aft.fogFarMul, 'rain pulls fog in');
   assert(aft.sunIntensity === ATMOSPHERE_PRESETS.afternoon.sunIntensity, 'weather does not mutate preset');
   assert(CRAFT_FIELDS.some((f) => f.key === 'weather'), 'craft schema includes weather');
+  const craftKeys = CRAFT_FIELDS.map((f) => f.key);
+  assert(new Set(craftKeys).size === craftKeys.length, 'CRAFT_FIELDS keys are unique (no duplicate exposure)');
+  const categoryIds = new Set<string>(CRAFT_CATEGORIES.map((c) => c.id));
+  assert(
+    CRAFT_FIELDS.every((f) => categoryIds.has(f.category)),
+    'every CRAFT_FIELDS.category is in CRAFT_CATEGORIES',
+  );
+  assert(!categoryIds.has('camera') && !categoryIds.has('debug'), 'CRAFT_CATEGORIES has no camera/debug');
   assert(getQualityLevel() === 'high', 'node quality defaults high');
   assert(getQualityCaps().shadowMap >= 1024, 'quality caps present');
   console.log('ok weather + craft schema + quality');
+}
+
+{
+  const engine = new GameEngine(11);
+  engine.startGame(2, 'standard', 11);
+  const world = new World();
+  world.build(engine.board);
+  const first = world.root.children.slice();
+  assert(first.length === 5, 'world root has water, board, props, highlights, pieces');
+  world.build(engine.board);
+  assert(world.root.children.length === first.length, 'rebuild keeps child count');
+  assert(
+    world.root.children.every((child, i) => child === first[i]),
+    'rebuild keeps the same group objects',
+  );
+  const robber = world.getRobberPosition();
+  assert(Number.isFinite(robber.x) && Number.isFinite(robber.z), 'robber rest position is finite');
+  console.log('ok world scene-graph ownership');
 }
 
 console.log('smoke ok');

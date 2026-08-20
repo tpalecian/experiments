@@ -494,7 +494,4 @@ export function resourceProduced(hex: HexTile): Resource | null {
   return resourceFromTerrain(hex.terrain);
 }
 
-/** @deprecated Use generateRingCoords(2) — kept for any callers expecting classic layout. */
-export const LAND_COORDS: Axial[] = generateRingCoords(2);
-
 export { HEX_SIZE };

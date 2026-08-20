@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import { HEX_SIZE, axialToWorld } from '../engine/board';
-import type { BoardState, Terrain } from '../engine/types';
+import type { BoardState } from '../engine/types';
 import type { AtmosphereSnapshot } from './Atmosphere';
 import type { StyleConfig } from '../style/styleConfig';
-import { TweenPlayer } from '../core/tween';
 import { WaterSurface } from './WaterSurface';
 import { Board } from './Board';
 import { Highlights } from './Highlights';
@@ -21,7 +20,6 @@ export class World {
   private readonly pieces = new Pieces();
   private readonly props = new Props();
   private readonly water = new WaterSurface();
-  private readonly tweens = new TweenPlayer();
   private pickables: THREE.Object3D[] = [];
   private motion: MotionFeel = motionFromStyle();
 
@@ -29,6 +27,7 @@ export class World {
     this.root.add(this.water.mesh);
     this.board.addTo(this.root);
     this.props.addTo(this.root);
+    this.highlights.addTo(this.root);
     this.pieces.addTo(this.root);
   }
 
@@ -40,6 +39,10 @@ export class World {
     return this.pieces.getRobberPosition(out);
   }
 
+  getMotion(): MotionFeel {
+    return this.motion;
+  }
+
   setHoverHex(id: string | null): void {
     this.board.setHoverHex(id);
   }
@@ -49,7 +52,7 @@ export class World {
   }
 
   update(time: number, dt = 1 / 60): void {
-    this.tweens.update(dt);
+    this.pieces.update(dt);
     this.water.update(time);
     this.highlights.update(time, dt, this.motion);
     this.board.update(time, dt, this.motion);
@@ -83,8 +86,6 @@ export class World {
 
   build(board: BoardState): void {
     this.clearDynamic();
-    this.pickables = [];
-    this.tweens.clear();
     this.props.reload();
 
     this.water.resize(board.rings);
@@ -93,20 +94,20 @@ export class World {
       landCenters.push(axialToWorld(hex.q, hex.r));
     }
     this.water.setLandHexes(landCenters, HEX_SIZE);
-    this.root.add(this.water.mesh);
 
-    this.board.build(board, this.root, this.pickables, this.props.group);
+    this.board.build(board);
     for (const hex of board.hexes.values()) {
       const { x, z } = axialToWorld(hex.q, hex.r);
-      this.props.stamp(hex.terrain as Terrain, x, z, hex.id);
+      this.props.stamp(hex.terrain, x, z, hex.id);
     }
-    this.highlights.build(board, this.root, this.pickables);
-    this.pieces.sync(board, this.root, this.tweens, this.motion, false);
+    this.highlights.build(board);
+    this.pieces.sync(board, this.motion, false);
     this.syncHighlights([], [], []);
+    this.pickables = [...this.board.getPickables(), ...this.highlights.getPickables()];
   }
 
   syncPieces(board: BoardState, animate = true): void {
-    this.pieces.sync(board, this.root, this.tweens, this.motion, animate);
+    this.pieces.sync(board, this.motion, animate);
   }
 
   syncHighlights(vertices: string[], edges: string[], hexes: string[]): void {
@@ -115,15 +116,9 @@ export class World {
   }
 
   private clearDynamic(): void {
-    this.tweens.clear();
-    while (this.root.children.length) this.root.remove(this.root.children[0]);
+    this.board.clear();
     this.highlights.clear();
     this.pieces.reset();
     this.props.reset();
-    this.board.resetHarborGroup();
-    this.root.add(this.water.mesh);
-    this.board.addTo(this.root);
-    this.props.addTo(this.root);
-    this.pieces.addTo(this.root);
   }
 }

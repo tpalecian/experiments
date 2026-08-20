@@ -11,6 +11,8 @@ export interface MotionFeel {
   productionPulseSec: number;
   productionPulseStrength: number;
   harborBobAmp: number;
+  cameraNudgeSec: number;
+  cameraNudgeBlend: number;
 }
 
 export function motionFromStyle(config: StyleConfig = DEFAULT_STYLE_CONFIG): MotionFeel {
@@ -24,5 +26,7 @@ export function motionFromStyle(config: StyleConfig = DEFAULT_STYLE_CONFIG): Mot
     productionPulseSec: config.productionPulseSec,
     productionPulseStrength: config.productionPulseStrength,
     harborBobAmp: config.harborBobAmp,
+    cameraNudgeSec: config.motionCameraNudgeSec,
+    cameraNudgeBlend: config.motionCameraNudgeBlend,
   };
 }

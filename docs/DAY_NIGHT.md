@@ -242,36 +242,23 @@ Only rendering / Environment State changes. Piece tweens are gameplay feedback, 
 
 Do not sprinkle a bare `timeOfDay` into every shader.
 
-Build one **Environment State** every frame (or on scheme hold). Every renderer reads from it.
+The **live** Environment State type is `AtmosphereSnapshot` (`src/world/Atmosphere.ts`), built every frame (or on scheme hold) by `TimeOfDayController`. `src/atmosphere/environment.ts` holds palette tables only (`WATER_DEPTH_PALETTES`, beach tints, Fresnel / wave-band / caustic scalars) — it is not a runtime state object.
 
-```ts
-type EnvironmentState = {
-  sunDirection: Vector3
-  sunColor: Color
-  moonDirection: Vector3
+Every renderer reads the snapshot. Conceptual fields include:
 
-  ambientColor: Color
+- Celestial direction (from altitude / azimuth) and sun colour / intensity
+- Sky zenith, mid, horizon; stars
+- Fog colour and near/far multipliers
+- Hemisphere, fill, and rim lights; exposure
+- Shadow strength (softness / opacity feel)
+- Water depth palette, brightness, tint, Fresnel, specular, caustics, foam, wave bands
+- Beach / board tint (albedo only — no mesh rebuild)
 
-  skyTopColor: Color
-  skyHorizonColor: Color
-
-  fogColor: Color
-
-  waterDeepColor: Color
-  waterShallowColor: Color
-  // optional mid / lagoon / beach shelf colours
-
-  waveBandIntensity: number
-  fresnelStrength: number
-  shadowStrength: number
-  causticIntensity: number
-  foamBrightness: number
-}
-```
+Weather is `applyWeather(snapshot, kind)` producing a **cloned** snapshot — never rebuilds meshes.
 
 ### Live mapping
 
-Runtime Environment State is `AtmosphereSnapshot` via `TimeOfDayController` in `src/world/Atmosphere.ts`. Palette tables come from `src/atmosphere/environment.ts`. Weather (`applyWeather`) is a second Environment State pass — Clear / Overcast / Rain — and never rebuilds meshes.
+`TimeOfDayController` samples `AtmosphereSnapshot`. Palette tables come from `src/atmosphere/environment.ts`. Weather (`applyWeather`) is a second pass on a clone — Clear / Overcast / Rain — and never rebuilds meshes.
 
 | Vision field | Live field(s) |
 | --- | --- |

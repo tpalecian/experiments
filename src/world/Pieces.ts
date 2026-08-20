@@ -24,37 +24,39 @@ interface RoadEntry {
 
 /** Roads, settlements, cities, robber. */
 export class Pieces {
+  readonly group = new THREE.Group();
   robber: THREE.Object3D;
+  private readonly tweens = new TweenPlayer();
   private buildings = new Map<string, BuildingEntry>();
   private roads = new Map<string, RoadEntry>();
   private robberHopping = false;
   private robberTargetHex: string | null = null;
+  private readonly robberRest = new THREE.Vector3();
 
   constructor() {
     this.robber = makeRobber();
+    this.group.add(this.robber);
   }
 
   addTo(parent: THREE.Group): void {
-    parent.add(this.robber);
+    parent.add(this.group);
   }
 
   getRobberPosition(out = new THREE.Vector3()): THREE.Vector3 {
-    return out.copy(this.robber.position);
+    return out.copy(this.robberRest);
   }
 
-  sync(board: BoardState, parent: THREE.Group, tweens: TweenPlayer, motion: MotionFeel, animate: boolean): void {
-    this.syncRoads(board, parent, tweens, motion, animate);
-    this.syncBuildings(board, parent, tweens, motion, animate);
-    this.syncRobber(board, tweens, motion, animate);
+  update(dt: number): void {
+    this.tweens.update(dt);
   }
 
-  private syncRoads(
-    board: BoardState,
-    parent: THREE.Group,
-    tweens: TweenPlayer,
-    motion: MotionFeel,
-    animate: boolean,
-  ): void {
+  sync(board: BoardState, motion: MotionFeel, animate: boolean): void {
+    this.syncRoads(board, motion, animate);
+    this.syncBuildings(board, motion, animate);
+    this.syncRobber(board, motion, animate);
+  }
+
+  private syncRoads(board: BoardState, motion: MotionFeel, animate: boolean): void {
     const keep = new Set<string>();
     for (const road of board.roads.values()) {
       keep.add(road.edgeId);
@@ -62,7 +64,7 @@ export class Pieces {
       if (existing && existing.owner === road.owner) continue;
 
       if (existing) {
-        parent.remove(existing.mesh);
+        this.group.remove(existing.mesh);
         this.roads.delete(road.edgeId);
       }
 
@@ -73,10 +75,10 @@ export class Pieces {
       const restingScale = 1;
       mesh.scale.set(0.15, 0.15, 0.15);
       this.roads.set(road.edgeId, { mesh, owner: road.owner, restingScale });
-      parent.add(mesh);
+      this.group.add(mesh);
 
       if (animate) {
-        tweens.play(
+        this.tweens.play(
           motion.roadSpawnSec,
           (u) => {
             const s = 0.15 + (restingScale - 0.15) * u;
@@ -98,18 +100,12 @@ export class Pieces {
 
     for (const [id, entry] of this.roads) {
       if (keep.has(id)) continue;
-      parent.remove(entry.mesh);
+      this.group.remove(entry.mesh);
       this.roads.delete(id);
     }
   }
 
-  private syncBuildings(
-    board: BoardState,
-    parent: THREE.Group,
-    tweens: TweenPlayer,
-    motion: MotionFeel,
-    animate: boolean,
-  ): void {
+  private syncBuildings(board: BoardState, motion: MotionFeel, animate: boolean): void {
     const keep = new Set<string>();
     for (const b of board.buildings.values()) {
       keep.add(b.vertexId);
@@ -125,7 +121,7 @@ export class Pieces {
         const restingScale = 1.1;
         city.position.set(v.x, TILE_HEIGHT, v.z);
         city.scale.setScalar(0.01);
-        parent.add(city);
+        this.group.add(city);
         this.buildings.set(b.vertexId, {
           mesh: city,
           kind: 'city',
@@ -135,7 +131,7 @@ export class Pieces {
         });
 
         if (animate) {
-          tweens.play(
+          this.tweens.play(
             motion.upgradeSec,
             (u) => {
               old.scale.setScalar(existing.restingScale * (1 - u * 0.85));
@@ -146,21 +142,21 @@ export class Pieces {
             {
               ease: ease.linear,
               onComplete: () => {
-                parent.remove(old);
+                this.group.remove(old);
                 city.scale.setScalar(restingScale);
                 city.position.y = TILE_HEIGHT;
               },
             },
           );
         } else {
-          parent.remove(old);
+          this.group.remove(old);
           city.scale.setScalar(restingScale);
         }
         continue;
       }
 
       if (existing) {
-        parent.remove(existing.mesh);
+        this.group.remove(existing.mesh);
         this.buildings.delete(b.vertexId);
       }
 
@@ -175,10 +171,10 @@ export class Pieces {
         restingY: TILE_HEIGHT,
         restingScale: baked,
       });
-      parent.add(piece);
+      this.group.add(piece);
 
       if (animate) {
-        tweens.play(
+        this.tweens.play(
           motion.pieceSpawnSec,
           (u) => {
             piece.scale.setScalar(baked * u);
@@ -200,18 +196,19 @@ export class Pieces {
 
     for (const [id, entry] of this.buildings) {
       if (keep.has(id)) continue;
-      parent.remove(entry.mesh);
+      this.group.remove(entry.mesh);
       this.buildings.delete(id);
     }
   }
 
-  private syncRobber(board: BoardState, tweens: TweenPlayer, motion: MotionFeel, animate: boolean): void {
+  private syncRobber(board: BoardState, motion: MotionFeel, animate: boolean): void {
     const robberHex = board.hexes.get(board.robberHexId);
     if (!robberHex) return;
     const { x, z } = axialToWorld(robberHex.q, robberHex.r);
     const tx = x + 0.35;
     const tz = z + 0.2;
     const ty = TILE_HEIGHT;
+    this.robberRest.set(tx, ty, tz);
 
     if (this.robberTargetHex === board.robberHexId && (this.robberHopping || !animate)) {
       if (!animate && !this.robberHopping) {
@@ -234,7 +231,7 @@ export class Pieces {
 
     const from = this.robber.position.clone();
     this.robberHopping = true;
-    tweens.play(
+    this.tweens.play(
       motion.robberHopSec,
       (u) => {
         const s = ease.easeInOutCubic(u);
@@ -250,7 +247,7 @@ export class Pieces {
           this.robber.position.set(tx, ty, tz);
           this.robber.rotation.y = 0;
           this.robberHopping = false;
-          tweens.play(
+          this.tweens.play(
             0.14,
             (u) => {
               const squash = 1 - Math.sin(u * Math.PI) * 0.12;
@@ -267,10 +264,14 @@ export class Pieces {
   }
 
   reset(): void {
+    this.tweens.clear();
+    for (const child of [...this.group.children]) {
+      if (child !== this.robber) this.group.remove(child);
+    }
     this.buildings.clear();
     this.roads.clear();
     this.robberHopping = false;
     this.robberTargetHex = null;
-    this.robber = makeRobber();
+    this.robberRest.set(0, 0, 0);
   }
 }

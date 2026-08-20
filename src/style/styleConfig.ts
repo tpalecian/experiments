@@ -1,12 +1,14 @@
-export type CloudPuffShape = 'sphere' | 'icosahedron';
+import type { TimeOfDayMode } from '../world/Atmosphere';
 
-export type TimeOfDayModeConfig = 'morning' | 'afternoon' | 'evening' | 'night' | 'cycle';
+export type { TimeOfDayMode };
+
+export type CloudPuffShape = 'sphere' | 'icosahedron';
 
 export type WeatherKind = 'clear' | 'overcast' | 'rain';
 
 export interface StyleConfig {
   // Time of day (game-level atmosphere)
-  timeOfDay: TimeOfDayModeConfig;
+  timeOfDay: TimeOfDayMode;
   /** Seconds for one full day when cycling. */
   dayLengthSec: number;
   /** Seconds to ease when picking a fixed scheme. */

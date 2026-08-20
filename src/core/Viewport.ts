@@ -16,6 +16,7 @@ export class Viewport {
     this.element = element;
     this.onChange = onChange;
     this.measure();
+    this.onChange(this.size());
     window.addEventListener('resize', this.handleResize);
   }
 

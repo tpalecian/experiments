@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import type { Terrain } from '../engine/types';
 import { TILE_HEIGHT } from './assets';
 import { loadBiomeLayouts, pickLayout, stampLayout, type BiomeLayoutLibrary } from './biomeLayouts';
+import type { AtmosphereSnapshot } from './Atmosphere';
 
 /** Authored biome decoration stamp per hex. */
 export class Props {
-  group = new THREE.Group();
+  readonly group = new THREE.Group();
   private library: BiomeLayoutLibrary = loadBiomeLayouts();
 
   addTo(parent: THREE.Group): void {
@@ -21,7 +22,7 @@ export class Props {
     stampLayout(layout, this.group, x, TILE_HEIGHT, z);
   }
 
-  applyTint(atm: { boardTintMix: number; beachTint: THREE.Color }): void {
+  applyTint(atm: AtmosphereSnapshot): void {
     const mix = atm.boardTintMix;
     const tint = atm.beachTint;
     for (const child of this.group.children) {
@@ -38,6 +39,6 @@ export class Props {
   }
 
   reset(): void {
-    this.group = new THREE.Group();
+    this.group.clear();
   }
 }

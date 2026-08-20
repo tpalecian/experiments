@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { HEX_SIZE, axialToWorld } from '../engine/board';
-import type { BoardState, Terrain } from '../engine/types';
+import type { BoardState } from '../engine/types';
 import {
   TILE_HEIGHT,
   hexShape,
@@ -20,16 +20,27 @@ import type { MotionFeel } from './motion';
 
 /** Hex bodies, skirts, rims, tokens, and harbors. */
 export class Board {
+  readonly group = new THREE.Group();
+  readonly harborGroup = new THREE.Group();
   readonly hexVisuals = new Map<string, HexVisual>();
-  harborGroup = new THREE.Group();
   private harborSprites: THREE.Sprite[] = [];
   private legalHexes = new Set<string>();
   private hoverHexId: string | null = null;
   private productionPulse = new Map<string, number>();
+  private pickables: THREE.Object3D[] = [];
+  private accents: THREE.Mesh[] = [];
   private elapsed = 0;
 
+  constructor() {
+    this.group.add(this.harborGroup);
+  }
+
   addTo(parent: THREE.Group): void {
-    parent.add(this.harborGroup);
+    parent.add(this.group);
+  }
+
+  getPickables(): THREE.Object3D[] {
+    return this.pickables;
   }
 
   setHoverHex(id: string | null): void {
@@ -67,13 +78,18 @@ export class Board {
         mat.color.copy(base).lerp(tint, mix);
       });
     }
+    for (const mesh of this.accents) {
+      const mat = mesh.material;
+      if (!(mat instanceof THREE.MeshToonMaterial) && !(mat instanceof THREE.MeshBasicMaterial)) continue;
+      const stored = mesh.userData.baseColor as THREE.Color | undefined;
+      const base = stored ?? mat.color.clone();
+      mesh.userData.baseColor = base;
+      mat.color.copy(base).lerp(tint, mix);
+    }
   }
 
-  build(board: BoardState, parent: THREE.Group, pickables: THREE.Object3D[], skirtsParent: THREE.Group): void {
-    this.hexVisuals.clear();
-    this.productionPulse.clear();
-    this.legalHexes.clear();
-    this.hoverHexId = null;
+  build(board: BoardState): void {
+    this.clear();
 
     const tileRadius = HEX_SIZE;
     const geom = new THREE.ExtrudeGeometry(hexShape(tileRadius), {
@@ -88,7 +104,7 @@ export class Board {
 
     for (const hex of board.hexes.values()) {
       const { x, z } = axialToWorld(hex.q, hex.r);
-      const terrain = hex.terrain as Terrain;
+      const terrain = hex.terrain;
 
       const mat: THREE.Material | THREE.Material[] =
         terrain === 'sheep'
@@ -99,8 +115,8 @@ export class Board {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.userData = { kind: 'hex', id: hex.id, terrain, number: hex.number };
-      parent.add(mesh);
-      pickables.push(mesh);
+      this.group.add(mesh);
+      this.pickables.push(mesh);
 
       let numberToken: THREE.Mesh | null = null;
       let numberRestY = TILE_HEIGHT + 0.04;
@@ -111,7 +127,8 @@ export class Board {
       );
       skirt.position.set(x, -0.1, z);
       skirt.receiveShadow = true;
-      skirtsParent.add(skirt);
+      this.group.add(skirt);
+      this.accents.push(skirt);
 
       const rim = new THREE.Mesh(
         rimGeom,
@@ -121,7 +138,8 @@ export class Board {
         }),
       );
       rim.position.set(x, TILE_HEIGHT + 0.002, z);
-      skirtsParent.add(rim);
+      this.group.add(rim);
+      this.accents.push(rim);
 
       if (hex.number !== null) {
         numberRestY = TILE_HEIGHT + 0.04;
@@ -132,8 +150,8 @@ export class Board {
         numberToken.rotation.x = -Math.PI / 2;
         numberToken.position.set(x, numberRestY, z);
         numberToken.userData = { kind: 'hex', id: hex.id };
-        parent.add(numberToken);
-        pickables.push(numberToken);
+        this.group.add(numberToken);
+        this.pickables.push(numberToken);
       }
 
       this.hexVisuals.set(hex.id, {
@@ -146,6 +164,20 @@ export class Board {
     }
 
     this.drawHarbors(board);
+  }
+
+  clear(): void {
+    this.hexVisuals.clear();
+    this.productionPulse.clear();
+    this.legalHexes.clear();
+    this.hoverHexId = null;
+    this.pickables = [];
+    this.accents = [];
+    for (const child of [...this.group.children]) {
+      if (child !== this.harborGroup) this.group.remove(child);
+    }
+    this.harborGroup.clear();
+    this.harborSprites = [];
   }
 
   private drawHarbors(board: BoardState): void {
@@ -242,10 +274,5 @@ export class Board {
       const phase = (sprite.userData.bobPhase as number) ?? 0;
       sprite.position.y = base + Math.sin(time * 1.4 + phase) * motion.harborBobAmp;
     }
-  }
-
-  resetHarborGroup(): void {
-    this.harborSprites = [];
-    this.harborGroup = new THREE.Group();
   }
 }
