@@ -16,7 +16,7 @@ Hex Board (visible tiles)
         ↓
 Gameplay Graph (same hexes — resources / adjacency / robber)
         ↓
-BoardView (tiles · props · pieces · water · grass)
+        World (tiles · props · pieces · water)
         ↓
 Renderers  ←  Environment State (time / weather) + TweenPlayer
 ```
@@ -28,8 +28,8 @@ Renderers  ←  Environment State (time / weather) + TweenPlayer
 | --- | --- |
 | Engine | Three.js |
 | Materials | Custom GLSL shaders + toon materials |
-| Motion | Local `TweenPlayer` (`src/render/tween.ts`) |
-| Water / grass | GPU `uTime` shaders |
+| Motion | Local `TweenPlayer` (`src/core/tween.ts`) |
+| Water | GPU `uTime` shaders |
 | Day-night | `TimeOfDayController` + Environment State |
 
 ---
@@ -52,16 +52,14 @@ Renderers  ←  Environment State (time / weather) + TweenPlayer
 
 ```
 src/
-  game/          engine · board · rules · types
-  render/
-    BoardView.ts   # hex tiles, pieces, highlights, motion
-    tween.ts       # shared easing / tween queue
-    water.ts · grass.ts · sky.ts · atmosphere.ts
-  ui/            hud · configurator · styles
+  engine/        GameEngine · board · rules · types
+  Game.ts        composition root (folio-style wiring)
+  core/          Time · Viewport · Rendering · tween · Quality
+  view/          CameraRig · Lighting · Fog
+  world/         Board · Pieces · Highlights · Props · WaterSurface · Sky · Atmosphere
+  ui/            hud · style/configurator · styles
   input/         picker
 ```
-
-Legacy island-generation stubs under `src/terrain/`, `src/water/`, `src/world/`, `src/gameplay/` are **not** the active presentation path.
 
 ---
 
@@ -80,7 +78,7 @@ Legacy island-generation stubs under `src/terrain/`, `src/water/`, `src/world/`,
 | 9 | Day-night Environment State | Scheme palettes, bands, foam, shadows, rim, board tint |
 | 10 | Weather (later) | Palette / scalar swaps on Environment State only |
 
-Milestones 1–9 are implemented on the live hex board. Weather remains future work.
+Milestones 1–10 are implemented on the live hex board (weather is Environment State only — Clear / Overcast / Rain in the Style panel).
 
 Day-night is already live (`TimeOfDayController`). Keep feeding Environment State into water/sky/lights — never rebuild hex geometry when the clock moves.
 

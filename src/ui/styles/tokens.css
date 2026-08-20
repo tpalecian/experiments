@@ -1,0 +1,105 @@
+:root {
+  --bg-deep: #2a6f8f;
+  --bg-mid: #5eb0c8;
+  --panel: rgba(255, 244, 220, 0.92);
+  --panel-border: rgba(92, 61, 46, 0.35);
+  --ink: #3a2a18;
+  --muted: #7a6548;
+  --accent: #e8a838;
+  --accent-ink: #3a2a18;
+  --danger: #e04a3a;
+  --ok: #3f9a55;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 90% 70% at 30% 20%, #ffe0b0 0%, transparent 55%),
+    radial-gradient(ellipse 80% 60% at 80% 80%, #7ec8a0 0%, transparent 50%),
+    linear-gradient(165deg, #6eb8d8, #a8d8e8 45%, #f0d8a8);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+#app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+#game-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+}
+
+
+button {
+  font-family: var(--font-body);
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn {
+  pointer-events: auto;
+  padding: 0.65rem 1rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 12px;
+  border: 2px solid rgba(92, 61, 46, 0.25);
+  box-shadow: 0 3px 0 rgba(92, 61, 46, 0.2);
+}
+
+.btn.secondary {
+  background: #fff8e8;
+  color: var(--ink);
+  border-color: var(--panel-border);
+}
+
+.btn.active {
+  outline: 3px solid #ffe08a;
+  outline-offset: 2px;
+}
+
+.btn.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+#debug-monitor {
+  position: fixed;
+  left: 8px;
+  bottom: 8px;
+  z-index: 80;
+  pointer-events: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #fff8e8;
+  background: rgba(20, 24, 32, 0.72);
+  border: 1px solid rgba(255, 244, 220, 0.25);
+  border-radius: 8px;
+  padding: 6px 8px;
+  white-space: pre;
+}

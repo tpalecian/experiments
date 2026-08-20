@@ -3,22 +3,36 @@
  * Run: npx tsx scripts/smoke.ts
  */
 import * as THREE from 'three';
-import { hexCountForRings, MAP_SIZES, type MapSizeId } from '../src/game/board';
-import { GameEngine } from '../src/game/engine';
-import { legalSetupRoads, legalSetupSettlements } from '../src/game/rules';
+import { hexCountForRings, MAP_SIZES, type MapSizeId } from '../src/engine/board';
+import { GameEngine } from '../src/engine/engine';
+import {
+  computeVictoryPoints,
+  legalCities,
+  legalSetupRoads,
+  legalSetupSettlements,
+  updateLongestRoad,
+} from '../src/engine/rules';
+import { RESOURCES, emptyBank } from '../src/engine/types';
+import { CRAFT_CATEGORIES, CRAFT_FIELDS } from '../src/ui/style/craftSchema';
+import { applyWeather } from '../src/world/Weather';
+import { Highlights } from '../src/world/Highlights';
+import { Pieces } from '../src/world/Pieces';
+import { Props } from '../src/world/Props';
+import { motionFromStyle } from '../src/world/motion';
+import { getQualityCaps, getQualityLevel } from '../src/core/Quality';
 import {
   ATMOSPHERE_PRESETS,
   TimeOfDayController,
   celestialDirection,
   lerpAtmosphere,
   sampleAtmosphereAtPhase,
-} from '../src/render/atmosphere';
+} from '../src/world/Atmosphere';
 import {
   ASSET_CATALOG,
   getAssetById,
   makeSettlement,
   makeTree,
-} from '../src/render/assets';
+} from '../src/world/assets';
 import {
   BIOME_PROP_KINDS,
   TERRAIN_ORDER,
@@ -29,13 +43,13 @@ import {
   layoutsForTerrain,
   pickLayout,
   stampLayout,
-} from '../src/render/biomeLayouts';
-import { TweenPlayer, ease } from '../src/render/tween';
+} from '../src/world/biomeLayouts';
+import { TweenPlayer, ease } from '../src/core/tween';
 import {
   DEFAULT_STYLE_CONFIG,
   STYLE_PRESETS,
   applyStylePreset,
-} from '../src/render/styleConfig';
+} from '../src/style/styleConfig';
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -211,6 +225,137 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   const roundTrip = importBiomeLayoutsJson(json);
   assert(roundTrip.layouts.length === lib.layouts.length, 'import/export round-trip');
   console.log(`ok biome layouts (${lib.layouts.length} defaults)`);
+}
+
+{
+  const engine = new GameEngine(7);
+  engine.startGame(2, 'standard', 7);
+  assert(!engine.placeSettlement('nope'), 'illegal settlement rejected');
+  assert(!engine.rollDice(), 'roll rejected in lobby/setup');
+  playSetup(engine, 2);
+  assert(engine.phase === 'roll', 'enter roll');
+
+  const origRandom = Math.random;
+  Math.random = () => 0.5; // 1+floor(3)=4 per die → 8
+  assert(engine.rollDice(), 'roll 8');
+  Math.random = origRandom;
+  assert(engine.phase === 'main', 'non-7 enters main');
+  assert(!engine.placeCity('x'), 'city rejected without build mode');
+
+  const p0 = engine.players[0];
+  for (const r of RESOURCES) p0.resources[r] = 20;
+
+  const ownSettlement = [...engine.board.buildings.values()].find((b) => b.owner === 0 && b.kind === 'settlement');
+  assert(ownSettlement, 'player 0 has a settlement');
+  engine.setBuildMode('city');
+  const cities = legalCities(engine.board, 0);
+  assert(cities.includes(ownSettlement.vertexId), 'owned settlement is a legal city site');
+  assert(engine.placeCity(ownSettlement.vertexId), 'city upgrade');
+  assert(p0.cities === 1 && p0.settlements === 1, 'city counts');
+
+  const woodBefore = p0.resources.wood;
+  const wheatBefore = p0.resources.wheat;
+  assert(engine.bankTrade('wood', 'wheat'), 'bank trade');
+  assert(p0.resources.wood < woodBefore && p0.resources.wheat === wheatBefore + 1, 'trade swapped');
+  assert(!engine.bankTrade('wood', 'wood'), 'same-resource trade rejected');
+
+  engine.longestRoadOwner = updateLongestRoad(engine.board, engine.players, engine.longestRoadOwner);
+  const vp = computeVictoryPoints(engine.board, p0, engine.longestRoadOwner);
+  assert(vp >= 3, 'city + settlement is at least 3 VP');
+  console.log('ok rules city/trade/illegal');
+}
+
+{
+  const engine = new GameEngine(3);
+  engine.startGame(2, 'standard', 3);
+  playSetup(engine, 2);
+  const victim = engine.players[1];
+  for (const r of RESOURCES) victim.resources[r] = 4; // 20 cards
+  engine.players[0].resources = emptyBank();
+  engine.currentPlayer = 0;
+  engine.phase = 'roll';
+
+  const origRandom = Math.random;
+  Math.random = () => 0; // die = 1+0 → 1+1 = 2, not 7. Need 7: one 0 and one ~0.99
+  let calls = 0;
+  Math.random = () => {
+    calls += 1;
+    return calls === 1 ? 0 : 0.99; // 1 + 6 = 7
+  };
+  assert(engine.rollDice(), 'roll 7');
+  Math.random = origRandom;
+  assert(engine.phase === 'discard', '7 with >7 cards enters discard');
+  assert(engine.discard(1, { wood: 2, brick: 2, sheep: 2, wheat: 2, ore: 2 }), 'discard 10 of 20');
+  assert(engine.phase === 'robber', 'discard done → robber');
+
+  const otherHex = [...engine.board.hexes.keys()].find((id) => id !== engine.board.robberHexId)!;
+  engine.moveRobber(otherHex);
+  assert(engine.phase === 'main' || engine.phase === 'steal', 'robber resolved');
+  if (engine.phase === 'steal') {
+    const target = engine.stealTargets[0];
+    assert(engine.stealFrom(target), 'steal');
+    assert(engine.phase === 'main', 'steal returns to main');
+  }
+  console.log('ok rules discard/robber');
+}
+
+{
+  const engine = new GameEngine(9);
+  engine.startGame(2, 'standard', 9);
+  playSetup(engine, 2);
+  for (const b of engine.board.buildings.values()) {
+    if (b.owner === 0) b.kind = 'city';
+  }
+  const vp = computeVictoryPoints(engine.board, engine.players[0], null);
+  assert(vp === 4, 'two cities = 4 VP');
+  console.log('ok rules victory points');
+}
+
+{
+  const aft = ATMOSPHERE_PRESETS.afternoon;
+  const overcast = applyWeather(aft, 'overcast');
+  const rain = applyWeather(aft, 'rain');
+  assert(overcast.sunIntensity < aft.sunIntensity, 'overcast dims sun');
+  assert(rain.fogFarMul < aft.fogFarMul, 'rain pulls fog in');
+  assert(aft.sunIntensity === ATMOSPHERE_PRESETS.afternoon.sunIntensity, 'weather does not mutate preset');
+  assert(CRAFT_FIELDS.some((f) => f.key === 'weather'), 'craft schema includes weather');
+  const craftKeys = CRAFT_FIELDS.map((f) => f.key);
+  assert(new Set(craftKeys).size === craftKeys.length, 'CRAFT_FIELDS keys are unique (no duplicate exposure)');
+  const categoryIds = new Set<string>(CRAFT_CATEGORIES.map((c) => c.id));
+  assert(
+    CRAFT_FIELDS.every((f) => categoryIds.has(f.category)),
+    'every CRAFT_FIELDS.category is in CRAFT_CATEGORIES',
+  );
+  assert(!categoryIds.has('camera') && !categoryIds.has('debug'), 'CRAFT_CATEGORIES has no camera/debug');
+  assert(getQualityLevel() === 'high', 'node quality defaults high');
+  assert(getQualityCaps().shadowMap >= 1024, 'quality caps present');
+  console.log('ok weather + craft schema + quality');
+}
+
+{
+  const engine = new GameEngine(11);
+  engine.startGame(2, 'standard', 11);
+
+  const highlights = new Highlights();
+  highlights.build(engine.board);
+  assert(highlights.group.children.length > 0, 'highlights populated');
+  highlights.clear();
+  assert(highlights.group.children.length === 0, 'highlights.clear removes meshes');
+
+  const props = new Props();
+  const propsGroup = props.group;
+  props.reset();
+  assert(props.group === propsGroup, 'props.reset keeps the same group');
+
+  const pieces = new Pieces();
+  const robber = pieces.robber;
+  pieces.sync(engine.board, motionFromStyle(), false);
+  assert(pieces.group.children.includes(robber), 'robber stays in group after sync');
+  const rest = pieces.getRobberPosition();
+  assert(Number.isFinite(rest.x) && Number.isFinite(rest.z), 'robber rest position is finite');
+  pieces.reset();
+  assert(pieces.robber === robber && pieces.group.children.includes(robber), 'reset keeps robber');
+  console.log('ok world scene-graph ownership');
 }
 
 console.log('smoke ok');

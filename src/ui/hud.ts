@@ -1,8 +1,8 @@
-import type { EngineSnapshot, GameEngine } from '../game/engine';
-import type { PlayerId, Resource, ResourceBank } from '../game/types';
-import { RESOURCES, bankTotal, emptyBank } from '../game/types';
-import { tradeRate } from '../game/rules';
-import { MAP_SIZE_ORDER, MAP_SIZES, type MapSizeId } from '../game/board';
+import type { EngineSnapshot, GameEngine } from '../engine/engine';
+import type { PlayerId, Resource, ResourceBank } from '../engine/types';
+import { RESOURCES, bankTotal, emptyBank } from '../engine/types';
+import { tradeRate } from '../engine/rules';
+import { MAP_SIZE_ORDER, MAP_SIZES, type MapSizeId } from '../engine/board';
 
 const RES_COLORS: Record<Resource, string> = {
   wood: '#3f8f4a',

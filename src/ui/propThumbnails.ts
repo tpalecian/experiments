@@ -2,11 +2,11 @@
  * Offscreen Three.js renders → data-URL thumbnails for the Biome Editor.
  */
 import * as THREE from 'three';
-import { getAssetById, makeHexTile } from '../render/assets';
-import { STYLE } from '../render/style';
-import type { Terrain } from '../game/types';
-import type { BiomePropKind } from '../render/biomeLayouts';
-import { BIOME_PROP_KINDS, TERRAIN_ORDER } from '../render/biomeLayouts';
+import { getAssetById, makeHexTile } from '../world/assets';
+import { STYLE } from '../style/style';
+import type { Terrain } from '../engine/types';
+import type { BiomePropKind } from '../world/biomeLayouts';
+import { BIOME_PROP_KINDS, TERRAIN_ORDER } from '../world/biomeLayouts';
 
 const SIZE = 128;
 const cache = new Map<string, string>();

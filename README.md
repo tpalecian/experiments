@@ -19,8 +19,11 @@ A **stylized hex-board island** — classic Catan tiles, polished motion, tropic
 Live modules:
 
 ```
-src/game/        rules engine · board graph
-src/render/      BoardView · assets · water · grass · sky · atmosphere · tweens
+src/engine/      rules engine · board graph
+src/Game.ts      composition root
+src/core/        ticker · rendering · viewport · time · tween
+src/view/        camera · lighting · fog
+src/world/       hex board · pieces · water · sky · atmosphere
 src/input/       picker
 src/ui/          HUD · Style configurator · Asset Lab
 ```

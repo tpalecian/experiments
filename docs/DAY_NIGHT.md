@@ -20,7 +20,7 @@ tiles · props · pieces · water mesh · grass
         │
         ├──────────────────────┐
         ▼                      ▼
-BoardView materials       WaterSurface
+Board materials              WaterSurface
         │                      │
         └──────────┬───────────┘
                    ▼
@@ -242,36 +242,23 @@ Only rendering / Environment State changes. Piece tweens are gameplay feedback, 
 
 Do not sprinkle a bare `timeOfDay` into every shader.
 
-Build one **Environment State** every frame (or on scheme hold). Every renderer reads from it.
+The **live** Environment State type is `AtmosphereSnapshot` (`src/world/Atmosphere.ts`), built every frame (or on scheme hold) by `TimeOfDayController`. `src/atmosphere/environment.ts` holds palette tables only (`WATER_DEPTH_PALETTES`, beach tints, Fresnel / wave-band / caustic scalars) — it is not a runtime state object.
 
-```ts
-type EnvironmentState = {
-  sunDirection: Vector3
-  sunColor: Color
-  moonDirection: Vector3
+Every renderer reads the snapshot. Conceptual fields include:
 
-  ambientColor: Color
+- Celestial direction (from altitude / azimuth) and sun colour / intensity
+- Sky zenith, mid, horizon; stars
+- Fog colour and near/far multipliers
+- Hemisphere, fill, and rim lights; exposure
+- Shadow strength (softness / opacity feel)
+- Water depth palette, brightness, tint, Fresnel, specular, caustics, foam, wave bands
+- Beach / board tint (albedo only — no mesh rebuild)
 
-  skyTopColor: Color
-  skyHorizonColor: Color
-
-  fogColor: Color
-
-  waterDeepColor: Color
-  waterShallowColor: Color
-  // optional mid / lagoon / beach shelf colours
-
-  waveBandIntensity: number
-  fresnelStrength: number
-  shadowStrength: number
-  causticIntensity: number
-  foamBrightness: number
-}
-```
+Weather is `applyWeather(snapshot, kind)` producing a **cloned** snapshot — never rebuilds meshes.
 
 ### Live mapping
 
-Runtime Environment State is `AtmosphereSnapshot` via `TimeOfDayController` in `src/render/atmosphere.ts`. Palette tables come from `src/atmosphere/environment.ts`.
+`TimeOfDayController` samples `AtmosphereSnapshot`. Palette tables come from `src/atmosphere/environment.ts`. Weather (`applyWeather`) is a second pass on a clone — Clear / Overcast / Rain — and never rebuilds meshes.
 
 | Vision field | Live field(s) |
 | --- | --- |
@@ -286,7 +273,7 @@ Runtime Environment State is `AtmosphereSnapshot` via `TimeOfDayController` in `
 | Board tint | `beachTint`, `boardTintMix` (hex/prop albedo only — no mesh rebuild) |
 | Stars / moon disc | `starsIntensity`, night celestial as cool “sun” |
 
-`WaterSurface.applyAtmosphere` composes **Style craft bases × Environment State**. `BoardView.applyAtmosphere` soft-tints tiles/props. `main.ts` applies lights, rim, fog, and shadow strength every frame.
+`WaterSurface.applyAtmosphere` composes **Style craft bases × Environment State**. `World.applyAtmosphere` soft-tints tiles/props. `Game.ts` applies lights, rim, fog, and shadow strength every frame.
 
 ---
 
