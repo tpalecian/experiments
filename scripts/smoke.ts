@@ -15,7 +15,10 @@ import {
 import { RESOURCES, emptyBank } from '../src/engine/types';
 import { CRAFT_CATEGORIES, CRAFT_FIELDS } from '../src/ui/style/craftSchema';
 import { applyWeather } from '../src/world/Weather';
-import { World } from '../src/world/World';
+import { Highlights } from '../src/world/Highlights';
+import { Pieces } from '../src/world/Pieces';
+import { Props } from '../src/world/Props';
+import { motionFromStyle } from '../src/world/motion';
 import { getQualityCaps, getQualityLevel } from '../src/core/Quality';
 import {
   ATMOSPHERE_PRESETS,
@@ -332,18 +335,26 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
 {
   const engine = new GameEngine(11);
   engine.startGame(2, 'standard', 11);
-  const world = new World();
-  world.build(engine.board);
-  const first = world.root.children.slice();
-  assert(first.length === 5, 'world root has water, board, props, highlights, pieces');
-  world.build(engine.board);
-  assert(world.root.children.length === first.length, 'rebuild keeps child count');
-  assert(
-    world.root.children.every((child, i) => child === first[i]),
-    'rebuild keeps the same group objects',
-  );
-  const robber = world.getRobberPosition();
-  assert(Number.isFinite(robber.x) && Number.isFinite(robber.z), 'robber rest position is finite');
+
+  const highlights = new Highlights();
+  highlights.build(engine.board);
+  assert(highlights.group.children.length > 0, 'highlights populated');
+  highlights.clear();
+  assert(highlights.group.children.length === 0, 'highlights.clear removes meshes');
+
+  const props = new Props();
+  const propsGroup = props.group;
+  props.reset();
+  assert(props.group === propsGroup, 'props.reset keeps the same group');
+
+  const pieces = new Pieces();
+  const robber = pieces.robber;
+  pieces.sync(engine.board, motionFromStyle(), false);
+  assert(pieces.group.children.includes(robber), 'robber stays in group after sync');
+  const rest = pieces.getRobberPosition();
+  assert(Number.isFinite(rest.x) && Number.isFinite(rest.z), 'robber rest position is finite');
+  pieces.reset();
+  assert(pieces.robber === robber && pieces.group.children.includes(robber), 'reset keeps robber');
   console.log('ok world scene-graph ownership');
 }
 
