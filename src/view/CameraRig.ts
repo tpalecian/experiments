@@ -4,6 +4,9 @@ import { boardRadiusWorld } from '../engine/board';
 import { TweenPlayer, ease } from '../core/tween';
 import type { MotionFeel } from '../world/motion';
 
+const TABLETOP_MIN_POLAR = 0.28;
+const TABLETOP_MAX_POLAR = Math.PI * 0.42;
+
 /** Orbit camera, board framing, and robber look-at nudge. */
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
@@ -12,6 +15,8 @@ export class CameraRig {
   private readonly tweens: TweenPlayer;
   private readonly look = new THREE.Vector3();
   private readonly lookFrom = new THREE.Vector3();
+  private frameDist = 14;
+  private frameHeight = 14;
 
   constructor(canvas: HTMLCanvasElement, tweens: TweenPlayer) {
     this.tweens = tweens;
@@ -22,9 +27,17 @@ export class CameraRig {
     controls.target.copy(this.boardCenter);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
+    controls.enablePan = true;
+    controls.screenSpacePanning = true;
+    // Desktop: LMB orbit. Touch: 1-finger pan, pinch zoom, 2-finger tilt (Catan Universe).
+    controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+    controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+    controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
+    controls.touches.ONE = THREE.TOUCH.PAN;
+    controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
     // Keep a tabletop angle — nearly horizontal views expose tile undersides / water gaps.
-    controls.minPolarAngle = 0.28;
-    controls.maxPolarAngle = Math.PI * 0.42;
+    controls.minPolarAngle = TABLETOP_MIN_POLAR;
+    controls.maxPolarAngle = TABLETOP_MAX_POLAR;
     controls.minDistance = 8;
     controls.maxDistance = 24;
     controls.update();
@@ -39,23 +52,26 @@ export class CameraRig {
   /** Returns fog near/far and sun-anchor distance for the framed board. */
   frameBoard(rings: number): { fogNear: number; fogFar: number; sunAnchor: number; radius: number } {
     const r = boardRadiusWorld(rings);
-    const dist = Math.max(12, r * 2.35);
-    const height = Math.max(10, r * 1.85);
-    this.camera.position.set(0, height, dist);
-    this.camera.far = Math.max(200, dist * 12);
+    this.frameDist = Math.max(12, r * 2.35);
+    this.frameHeight = Math.max(10, r * 1.85);
+    this.camera.far = Math.max(200, this.frameDist * 12);
     this.camera.updateProjectionMatrix();
     this.controls.minDistance = Math.max(6, r * 0.9);
     this.controls.maxDistance = Math.max(24, r * 4.2);
-    this.controls.minPolarAngle = 0.28;
-    this.controls.maxPolarAngle = Math.PI * 0.42;
-    this.controls.target.copy(this.boardCenter);
-    this.controls.update();
+    this.controls.minPolarAngle = TABLETOP_MIN_POLAR;
+    this.controls.maxPolarAngle = TABLETOP_MAX_POLAR;
+    this.applyPose(false);
     return {
-      fogNear: dist * 1.8,
-      fogFar: dist * 5.8,
+      fogNear: this.frameDist * 1.8,
+      fogFar: this.frameDist * 5.8,
       sunAnchor: Math.max(8, r * 1.1),
       radius: r,
     };
+  }
+
+  /** Recenter on the island. `topDown` uses a higher, more overhead pose for placing pieces. */
+  resetView(topDown = true): void {
+    this.applyPose(topDown);
   }
 
   nudgeToward(world: THREE.Vector3, motion: MotionFeel): void {
@@ -73,6 +89,16 @@ export class CameraRig {
   }
 
   update(): void {
+    this.controls.update();
+  }
+
+  private applyPose(topDown: boolean): void {
+    if (topDown) {
+      this.camera.position.set(0, this.frameHeight * 1.28, this.frameDist * 0.48);
+    } else {
+      this.camera.position.set(0, this.frameHeight, this.frameDist);
+    }
+    this.controls.target.copy(this.boardCenter);
     this.controls.update();
   }
 }
