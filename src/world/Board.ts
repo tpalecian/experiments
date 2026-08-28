@@ -119,7 +119,7 @@ export class Board {
       let numberRestY = y + 0.07;
       if (hex.number !== null) {
         numberToken = new THREE.Mesh(
-          new THREE.CircleGeometry(0.26, 24),
+          new THREE.CircleGeometry(0.22 * HEX_SIZE, 24),
           new THREE.MeshBasicMaterial({ map: numberTexture(hex.number), transparent: true }),
         );
         numberToken.rotation.x = -Math.PI / 2;
@@ -164,12 +164,12 @@ export class Board {
       const edge = board.edges.get(h.edgeId);
       if (!edge) continue;
       const outward = new THREE.Vector2(edge.midX, edge.midZ).normalize();
-      const px = edge.midX + outward.x * 0.85;
-      const pz = edge.midZ + outward.y * 0.85;
+      const px = edge.midX + outward.x * 0.85 * HEX_SIZE;
+      const pz = edge.midZ + outward.y * 0.85 * HEX_SIZE;
       const py = Math.max(0.03, field.heightAt(px, pz));
 
       const pier = new THREE.Mesh(
-        new THREE.BoxGeometry(0.38, 0.05, 0.16),
+        new THREE.BoxGeometry(0.38 * HEX_SIZE, 0.05, 0.16 * HEX_SIZE),
         toonMat(STYLE.woodTrim),
       );
       pier.position.set(px, py, pz);

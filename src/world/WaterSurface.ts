@@ -65,7 +65,7 @@ void main() {
   vec2 d = swellDeriv(world.xz, t);
 
   float shore = shoreDistance(world.xz);
-  float nearLand = 1.0 - smoothstep(0.0, 3.2, shore);
+  float nearLand = 1.0 - smoothstep(0.0, ${(3.2 * HEX_SIZE).toFixed(3)}, shore);
   float amp = uWaveHeight * (1.0 - nearLand * 0.97);
   float displacement = mix(w * amp, abs(w) * amp * 0.15, nearLand);
   displacement = mix(displacement, max(displacement, 0.0), nearLand);

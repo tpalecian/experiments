@@ -9,16 +9,16 @@ import { HEX_SIZE, axialToWorld, boardRadiusWorld } from '../engine/board';
 import type { BoardState, Terrain } from '../engine/types';
 import { DIORAMA_TERRAIN, DIORAMA_SAND, DIORAMA_SAND_WET } from '../style/style';
 
-export const COAST_HEX_PAD = 0.18;
-export const COAST_ROUND = 0.36;
-export const COAST_WARP_FREQ = 0.38;
-export const COAST_WARP_AMP = 0.55;
-export const COAST_WARP_FREQ2 = 0.82;
-export const COAST_WARP_AMP2 = 0.14;
-export const BEACH_WIDTH = 0.58;
-export const SHELF_WIDTH = 0.5;
+export const COAST_HEX_PAD = 0.18 * HEX_SIZE;
+export const COAST_ROUND = 0.36 * HEX_SIZE;
+export const COAST_WARP_FREQ = 0.38 / HEX_SIZE;
+export const COAST_WARP_AMP = 0.55 * HEX_SIZE;
+export const COAST_WARP_FREQ2 = 0.82 / HEX_SIZE;
+export const COAST_WARP_AMP2 = 0.14 * HEX_SIZE;
+export const BEACH_WIDTH = 0.58 * HEX_SIZE;
+export const SHELF_WIDTH = 0.5 * HEX_SIZE;
 /** Water discards inland of this (keeps transparent shallows over the shelf). */
-export const WATER_INLAND_DISCARD = 0.48;
+export const WATER_INLAND_DISCARD = 0.48 * HEX_SIZE;
 
 const HEX_APOTHEM = HEX_SIZE * Math.sqrt(3) * 0.5;
 const TERRAINS: Terrain[] = ['wood', 'brick', 'sheep', 'wheat', 'ore', 'desert'];
@@ -157,7 +157,7 @@ float shoreDistance(vec2 p) {
   float rnd = ${COAST_ROUND.toFixed(3)};
   for (int i = 0; i < ${maxHexes}; i++) {
     float alive = step(float(i), float(uHexCount) - 0.5);
-    float hd = sdHexagon(w - uHexCenters[i], max(r - rnd, 0.05)) - rnd;
+    float hd = sdHexagon(w - uHexCenters[i], max(r - rnd, ${(0.05 * HEX_SIZE).toFixed(3)})) - rnd;
     d = min(d, mix(1e5, hd, alive));
   }
   return d;
@@ -171,7 +171,7 @@ export class IslandField implements GroundSampler {
 
   constructor(sites: LandSite[], rings: number) {
     this.sites = sites;
-    this.radius = boardRadiusWorld(rings) + 1.4;
+    this.radius = boardRadiusWorld(rings) + 1.4 * HEX_SIZE;
   }
 
   static fromBoard(board: BoardState): IslandField {
@@ -187,9 +187,10 @@ export class IslandField implements GroundSampler {
     const w = warpCoast(x, z);
     const r = HEX_APOTHEM + COAST_HEX_PAD;
     const rnd = COAST_ROUND;
+    const minR = 0.05 * HEX_SIZE;
     let d = 1e5;
     for (const site of this.sites) {
-      const hd = sdHexagon(w.x - site.x, w.z - site.z, Math.max(r - rnd, 0.05)) - rnd;
+      const hd = sdHexagon(w.x - site.x, w.z - site.z, Math.max(r - rnd, minR)) - rnd;
       if (hd < d) d = hd;
     }
     return d;
@@ -225,21 +226,25 @@ export class IslandField implements GroundSampler {
       cb += w * c.b;
     }
 
-    const roll = (valueNoise(x * 0.31, z * 0.31) - 0.5) * 0.045;
+    const ux = x / HEX_SIZE;
+    const uz = z / HEX_SIZE;
+    const roll = (valueNoise(ux * 0.31, uz * 0.31) - 0.5) * 0.045 * HEX_SIZE;
     height += roll;
 
-    const landMask = smoothstep(0.12, -0.08, shoreDist);
-    const beachMask = smoothstep(BEACH_WIDTH, 0.02, shoreDist) * smoothstep(-0.12, 0.08, shoreDist);
-    const shelfMask = smoothstep(-SHELF_WIDTH, -0.02, shoreDist) * smoothstep(0.1, -0.02, shoreDist);
+    const landMask = smoothstep(0.12 * HEX_SIZE, -0.08 * HEX_SIZE, shoreDist);
+    const beachMask =
+      smoothstep(BEACH_WIDTH, 0.02 * HEX_SIZE, shoreDist) * smoothstep(-0.12 * HEX_SIZE, 0.08 * HEX_SIZE, shoreDist);
+    const shelfMask =
+      smoothstep(-SHELF_WIDTH, -0.02 * HEX_SIZE, shoreDist) * smoothstep(0.1 * HEX_SIZE, -0.02 * HEX_SIZE, shoreDist);
 
-    const beachH = 0.042 + valueNoise(x * 1.1, z * 1.1) * 0.012;
-    const shelfH = -0.055 + shoreDist * 0.04;
+    const beachH = HEX_SIZE * (0.042 + valueNoise(ux * 1.1, uz * 1.1) * 0.012);
+    const shelfH = HEX_SIZE * -0.055 + shoreDist * 0.04;
     height = height * landMask + beachH * beachMask * (1 - landMask * 0.35);
     if (shelfMask > 0.01 && landMask < 0.5) {
       height = height * (1 - shelfMask) + shelfH * shelfMask;
     }
 
-    const wet = smoothstep(0.18, -0.08, shoreDist);
+    const wet = smoothstep(0.18 * HEX_SIZE, -0.08 * HEX_SIZE, shoreDist);
     cr = cr * (1 - beachMask) + (SAND.r * (1 - wet) + SAND_WET.r * wet) * beachMask;
     cg = cg * (1 - beachMask) + (SAND.g * (1 - wet) + SAND_WET.g * wet) * beachMask;
     cb = cb * (1 - beachMask) + (SAND.b * (1 - wet) + SAND_WET.b * wet) * beachMask;
@@ -249,7 +254,7 @@ export class IslandField implements GroundSampler {
       cb = cb * (1 - shelfMask) + SAND_WET.b * shelfMask;
     }
 
-    const speck = (valueNoise(x * 2.4, z * 2.4) - 0.5) * 0.04;
+    const speck = (valueNoise(ux * 2.4, uz * 2.4) - 0.5) * 0.04;
     cr = clamp01(cr + speck);
     cg = clamp01(cg + speck * 0.7);
     cb = clamp01(cb + speck * 0.4);
@@ -267,10 +272,10 @@ export class IslandField implements GroundSampler {
       desert: 0,
     };
     let sum = 0;
-    const pad = HEX_APOTHEM + 0.22;
+    const pad = HEX_APOTHEM + 0.22 * HEX_SIZE;
     for (const site of this.sites) {
       const d = sdHexagon(x - site.x, z - site.z, pad);
-      const w = smoothstep(0.34, -0.18, d);
+      const w = smoothstep(0.34 * HEX_SIZE, -0.18 * HEX_SIZE, d);
       if (w <= 0) continue;
       out[site.terrain] += w;
       sum += w;
@@ -284,30 +289,33 @@ export class IslandField implements GroundSampler {
   }
 
   private biomeHeight(terrain: Terrain, x: number, z: number): number {
-    const n = valueNoise(x * 0.55, z * 0.55);
+    const ux = x / HEX_SIZE;
+    const uz = z / HEX_SIZE;
+    const n = valueNoise(ux * 0.55, uz * 0.55);
     switch (terrain) {
       case 'wood':
-        return 0.16 + n * 0.05;
+        return HEX_SIZE * (0.16 + n * 0.05);
       case 'sheep':
-        return 0.2 + Math.sin(x * 0.9 + z * 0.55) * 0.045 + n * 0.04;
+        return HEX_SIZE * (0.2 + Math.sin(ux * 0.9 + uz * 0.55) * 0.045 + n * 0.04);
       case 'wheat': {
-        const rows = Math.sin(x * 4.2 + z * 0.35) * 0.018;
-        return 0.1 + rows + n * 0.02;
+        const rows = Math.sin(ux * 4.2 + uz * 0.35) * 0.018;
+        return HEX_SIZE * (0.1 + rows + n * 0.02);
       }
       case 'brick': {
-        const mesa = Math.max(0, 0.32 - this.nearestDist(x, z, 'brick') * 0.55);
-        const terrace = Math.floor((n + this.nearestDist(x, z, 'brick')) * 4) * 0.018;
-        return 0.28 + mesa * 0.55 + terrace;
+        const d = this.nearestDist(x, z, 'brick') / HEX_SIZE;
+        const mesa = Math.max(0, 0.32 - d * 0.55);
+        const terrace = Math.floor((n + d) * 4) * 0.018;
+        return HEX_SIZE * (0.28 + mesa * 0.55 + terrace);
       }
       case 'ore': {
-        const d = this.nearestDist(x, z, 'ore');
+        const d = this.nearestDist(x, z, 'ore') / HEX_SIZE;
         const peak = Math.pow(Math.max(0, 1 - d / 0.72), 1.55) * 1.28;
-        const facet = Math.abs(valueNoise(x * 1.6, z * 1.6) - 0.5) * 0.22;
-        return 0.22 + peak + facet;
+        const facet = Math.abs(valueNoise(ux * 1.6, uz * 1.6) - 0.5) * 0.22;
+        return HEX_SIZE * (0.22 + peak + facet);
       }
       case 'desert': {
-        const dunes = Math.sin(x * 1.7 + z * 0.4) * 0.055 + Math.sin(z * 2.1) * 0.03;
-        return 0.08 + dunes + n * 0.02;
+        const dunes = Math.sin(ux * 1.7 + uz * 0.4) * 0.055 + Math.sin(uz * 2.1) * 0.03;
+        return HEX_SIZE * (0.08 + dunes + n * 0.02);
       }
       default: {
         const _exhaustive: never = terrain;

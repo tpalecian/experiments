@@ -70,6 +70,12 @@ soft hex influence, blended at the borders so the grid does not read.
 Mountains are taller and sharper than realistic; trees stay oversized enough
 to read from the diorama camera.
 
+Each land hex uses circumradius `HEX_SIZE` (1.75, about 3× the old floor
+area) so groves, fields, and flocks can be composed instead of stacked on a
+tiny disc. Coast SDF, biome height, roads, and the biome editor tile all
+scale with that size. The ortho camera frames the island a little tighter
+so the bigger hexes also read larger on screen.
+
 ---
 
 ## Water around the island

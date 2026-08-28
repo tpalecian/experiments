@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { axialToWorld } from '../engine/board';
+import { HEX_SIZE, axialToWorld } from '../engine/board';
 import type { BoardState, PlayerId } from '../engine/types';
 import { TILE_HEIGHT, makeCity, makeRoad, makeRobber, makeSettlement } from './assets';
 import { STYLIZED_PLAYER } from '../style/style';
@@ -220,8 +220,8 @@ export class Pieces {
     const robberHex = board.hexes.get(board.robberHexId);
     if (!robberHex) return;
     const { x, z } = axialToWorld(robberHex.q, robberHex.r);
-    const tx = x + 0.35;
-    const tz = z + 0.2;
+    const tx = x + 0.35 * HEX_SIZE;
+    const tz = z + 0.2 * HEX_SIZE;
     const ty = this.yAt(tx, tz);
     this.robberRest.set(tx, ty, tz);
 

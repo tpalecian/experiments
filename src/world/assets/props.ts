@@ -12,6 +12,7 @@ import {
 } from '../../style/style';
 import type { AssetCreateOptions } from './types';
 import { TILE_HEIGHT, hexShape, numberTexture, roundRect } from './types';
+import { HEX_SIZE } from '../../engine/board';
 
 export function makeSheep(opts?: AssetCreateOptions): THREE.Object3D {
   const variant = Math.abs(Math.floor(opts?.variant ?? 0)) % 4;
@@ -457,7 +458,7 @@ export function makeDirtSkirt(_opts?: AssetCreateOptions): THREE.Object3D {
 
 export function makeHexTile(opts?: AssetCreateOptions): THREE.Object3D {
   const terrain = opts?.terrain ?? 'wood';
-  const tileRadius = 1;
+  const tileRadius = HEX_SIZE;
   const geom = new THREE.ExtrudeGeometry(hexShape(tileRadius), {
     depth: TILE_HEIGHT,
     bevelEnabled: false,

@@ -1,7 +1,8 @@
 import type { Axial, BoardState, Edge, Harbor, HexTile, MapSizeId, Resource, Terrain, Vertex } from './types';
 import { RESOURCES, hexId, resourceFromTerrain } from './types';
 
-const HEX_SIZE = 1;
+/** Circumradius of one land hex. 1.75 gives ~3× floor area vs a unit hex so biome layouts can breathe. */
+const HEX_SIZE = 1.75;
 const SQRT3 = Math.sqrt(3);
 
 export type { MapSizeId };

@@ -60,7 +60,8 @@ export class CameraRig {
   frameBoard(rings: number): { fogNear: number; fogFar: number; sunAnchor: number; radius: number } {
     const r = boardRadiusWorld(rings);
     this.frameRadius = r;
-    this.viewSize = Math.max(7.5, r * 1.55);
+    // Tighter than the old 1.55× frame so the larger hexes also read bigger on screen.
+    this.viewSize = Math.max(8.5, r * 1.28);
     this.camera.far = Math.max(200, r * 28);
     this.camera.near = 0.1;
     this.camera.zoom = 1;

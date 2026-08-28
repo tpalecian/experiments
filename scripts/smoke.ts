@@ -3,7 +3,7 @@
  * Run: npx tsx scripts/smoke.ts
  */
 import * as THREE from 'three';
-import { hexCountForRings, MAP_SIZES, axialToWorld, type MapSizeId } from '../src/engine/board';
+import { hexCountForRings, MAP_SIZES, axialToWorld, HEX_SIZE, type MapSizeId } from '../src/engine/board';
 import { GameEngine } from '../src/engine/engine';
 import {
   computeVictoryPoints,
@@ -43,6 +43,7 @@ import {
   importBiomeLayoutsJson,
   layoutsForTerrain,
   pickLayout,
+  sanitizeLibrary,
   stampLayout,
 } from '../src/world/biomeLayouts';
 import { TweenPlayer, ease } from '../src/core/tween';
@@ -204,6 +205,22 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(a.terrain === 'wood', 'picked wood layout');
   // Different hex ids may still collide on small pools — just ensure pick returns a layout.
   assert(c.terrain === 'wood', 'other seed still wood');
+  const groveSpan = Math.max(...a.props.map((p) => Math.hypot(p.x, p.z)));
+  assert(groveSpan > HEX_SIZE * 0.45, 'grove uses the larger hex floor');
+
+  const migrated = sanitizeLibrary({
+    version: 1,
+    layouts: [
+      {
+        id: 'wood-legacy',
+        name: 'Legacy grove',
+        terrain: 'wood',
+        props: [{ id: 't1', kind: 'tree', x: 0.4, z: 0.3, yaw: 0, scale: 1 }],
+      },
+    ],
+  });
+  const legacy = migrated.layouts.find((l) => l.id === 'wood-legacy')?.props[0];
+  assert(legacy && Math.abs(legacy.x - 0.4 * HEX_SIZE) < 1e-6, 'legacy unit-hex layouts scale up');
 
   const group = new THREE.Group();
   stampLayout(a, group, 1, 0.28, 2);
@@ -403,12 +420,12 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
     if (hex.terrain === 'wheat') wheatH = Math.max(wheatH, h);
   }
   assert(oreH > 0.3 && wheatH > 0, 'ore and wheat tiles exist');
-  assert(oreH > wheatH + 0.2, 'ore peaks taller than wheat fields');
+  assert(oreH > wheatH + 0.2 * HEX_SIZE, 'ore peaks taller than wheat fields');
 
   const inland = field.shoreDistance(0, 0);
   const warped = warpCoast(0, 0);
-  assert(Math.hypot(warped.x, warped.z) < 1, 'warp stays local');
-  assert(sdHexagon(0, 0, 0.866) < 0, 'hex center inside SDF');
+  assert(Math.hypot(warped.x, warped.z) < HEX_SIZE, 'warp stays local');
+  assert(sdHexagon(0, 0, HEX_SIZE * Math.sqrt(3) * 0.5) < 0, 'hex center inside SDF');
   assert(inland < 0, 'shoreDistance negative inland');
 
   const mesh = new IslandMesh();
@@ -436,7 +453,8 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   const rig = new CameraRig(canvas, new TweenPlayer());
   assert(rig.camera.type === 'OrthographicCamera', 'diorama camera is orthographic');
   const framed = rig.frameBoard(2);
-  assert(framed.radius > 0, 'frameBoard returns radius');
+  assert(framed.radius > HEX_SIZE * 3, 'standard island radius grew with hex size');
+  assert(rig.camera.top / framed.radius < 1.4, 'ortho frame is tight enough that hexes read large');
   console.log('ok orthographic camera rig');
 }
 

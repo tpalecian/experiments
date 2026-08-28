@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { HEX_SIZE } from '../engine/board';
 import type { BoardState } from '../engine/types';
 import { TILE_HEIGHT } from './assets';
 import { STYLE, getToonGradient } from '../style/style';
@@ -7,9 +8,9 @@ import type { GroundSampler } from './islandField';
 
 const FLAT: GroundSampler = { heightAt: () => TILE_HEIGHT };
 
-const VERTEX_VISUAL_R = 0.14;
-const VERTEX_HIT_R = 0.28;
-const EDGE_HIT = { x: 1.05, y: 0.28, z: 0.42 } as const;
+const VERTEX_VISUAL_R = 0.12 * HEX_SIZE;
+const VERTEX_HIT_R = 0.22 * HEX_SIZE;
+const EDGE_HIT = { x: 1.05 * HEX_SIZE, y: 0.28, z: 0.42 } as const;
 const COARSE_HIT_SCALE = 1.25;
 
 const hitMaterial = new THREE.MeshBasicMaterial({
@@ -82,7 +83,7 @@ export class Highlights {
 
     for (const e of board.edges.values()) {
       const m = new THREE.Mesh(
-        new THREE.BoxGeometry(0.9, 0.1, 0.18),
+        new THREE.BoxGeometry(0.9 * HEX_SIZE, 0.1, 0.18),
         new THREE.MeshToonMaterial({
           color: STYLE.highlight,
           gradientMap: getToonGradient(),

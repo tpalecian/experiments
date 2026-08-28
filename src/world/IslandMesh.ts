@@ -2,6 +2,7 @@
  * Seamless island height mesh from IslandField samples.
  */
 import * as THREE from 'three';
+import { HEX_SIZE } from '../engine/board';
 import { getQualityLevel } from '../core/Quality';
 import { painterlyMat } from '../style/style';
 import type { AtmosphereSnapshot } from './Atmosphere';
@@ -11,11 +12,11 @@ function gridStep(): number {
   const level = getQualityLevel();
   switch (level) {
     case 'low':
-      return 0.22;
+      return 0.22 * HEX_SIZE;
     case 'medium':
-      return 0.15;
+      return 0.15 * HEX_SIZE;
     case 'high':
-      return 0.11;
+      return 0.11 * HEX_SIZE;
     default: {
       const _exhaustive: never = level;
       return _exhaustive;
@@ -80,7 +81,7 @@ function buildIslandGeometry(field: IslandField): THREE.BufferGeometry {
   for (let iz = 0; iz <= segs; iz++) {
     for (let ix = 0; ix <= segs; ix++) {
       const s = sampleAt(ix, iz);
-      if (s.shoreDist > 1.2) continue;
+      if (s.shoreDist > 1.2 * HEX_SIZE) continue;
       const x = origin + ix * step;
       const z = origin + iz * step;
       const idx = positions.length / 3;
