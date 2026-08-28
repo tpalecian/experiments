@@ -10,6 +10,7 @@ import { Pieces } from './Pieces';
 import { Props } from './Props';
 import { IslandField } from './islandField';
 import { IslandMesh } from './IslandMesh';
+import { ShoreDressing } from './ShoreDressing';
 import { motionFromStyle, type MotionFeel } from './motion';
 
 /**
@@ -24,10 +25,12 @@ export class World {
   private readonly pieces = new Pieces();
   private readonly props = new Props();
   private readonly water = new WaterSurface();
+  private readonly shore = new ShoreDressing();
   private motion: MotionFeel = motionFromStyle();
 
   constructor() {
     this.root.add(this.water.mesh);
+    this.shore.addTo(this.root);
     this.island.addTo(this.root);
     this.board.addTo(this.root);
     this.props.addTo(this.root);
@@ -85,9 +88,12 @@ export class World {
     camera: THREE.Camera,
   ): void {
     const harborsWereVisible = this.board.harborGroup.visible;
+    const shoreWasVisible = this.shore.group.visible;
     this.board.harborGroup.visible = false;
+    this.shore.group.visible = false;
     this.water.renderReflection(renderer, scene, camera);
     this.board.harborGroup.visible = harborsWereVisible;
+    this.shore.group.visible = shoreWasVisible;
   }
 
   applyAtmosphere(atm: AtmosphereSnapshot): void {
@@ -95,6 +101,7 @@ export class World {
     this.board.applyBoardTint(atm);
     this.island.applyBoardTint(atm);
     this.props.applyTint(atm);
+    this.shore.applyTint(atm);
   }
 
   build(board: BoardState): void {
@@ -112,6 +119,7 @@ export class World {
       landCenters.push(axialToWorld(hex.q, hex.r));
     }
     this.water.setLandHexes(landCenters, HEX_SIZE);
+    this.shore.build(field);
 
     this.board.build(board, field);
     for (const hex of board.hexes.values()) {
@@ -137,6 +145,7 @@ export class World {
     this.highlights.clear();
     this.pieces.reset();
     this.props.reset();
+    this.shore.clear();
     this.island.clear();
   }
 }

@@ -7,7 +7,6 @@ import {
   STYLIZED_TERRAIN,
   STYLIZED_TERRAIN_SIDE,
   getMeadowFloorMaterial,
-  painterlyMat,
   toonMat,
 } from '../../style/style';
 import type { AssetCreateOptions } from './types';
@@ -307,22 +306,59 @@ export function makeCactus(_opts?: AssetCreateOptions): THREE.Object3D {
   return cactus;
 }
 
-/** Faceted ore peak — silhouette-first mountain. */
+/** Faceted boulder pile — chunky rocks, not skinny cones. */
 export function makeMountain(opts?: AssetCreateOptions): THREE.Object3D {
+  const variant = (Math.abs(Math.floor(opts?.variant ?? 0)) % 3) as 0 | 1 | 2;
   const g = new THREE.Group();
-  const rock = painterlyMat(0x8a909c, { flat: true });
-  const dark = painterlyMat(0x6a7280, { flat: true });
-  const peak = new THREE.Mesh(new THREE.ConeGeometry(0.38, 1.05, 5), rock);
-  peak.position.y = 0.52;
-  peak.castShadow = true;
-  const shoulder = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.62, 5), dark);
-  shoulder.position.set(0.22, 0.3, -0.08);
-  shoulder.rotation.y = 0.4;
-  shoulder.castShadow = true;
-  const nugget = new THREE.Mesh(new THREE.DodecahedronGeometry(0.08, 0), painterlyMat(0xc4a45a, { flat: true }));
-  nugget.position.set(-0.16, 0.12, 0.1);
-  nugget.castShadow = true;
-  g.add(peak, shoulder, nugget);
+  const light = 0xc8ced8;
+  const mid = 0x9aa3b0;
+  const dark = 0x6a7382;
+
+  const addBoulder = (
+    x: number,
+    y: number,
+    z: number,
+    sx: number,
+    sy: number,
+    sz: number,
+    yaw: number,
+    color: number,
+  ): void => {
+    const mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 0), toonMat(color));
+    mesh.position.set(x, y, z);
+    mesh.scale.set(sx, sy, sz);
+    mesh.rotation.set(0.22 + yaw * 0.08, yaw, 0.14);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    g.add(mesh);
+  };
+
+  switch (variant) {
+    case 0:
+      addBoulder(0.02, 0.32, -0.04, 1.22, 0.78, 1.05, 0.2, light);
+      addBoulder(-0.34, 0.24, 0.12, 0.92, 0.58, 0.86, 0.9, dark);
+      addBoulder(0.38, 0.26, -0.16, 0.78, 0.52, 0.82, -0.5, mid);
+      addBoulder(0.1, 0.16, 0.36, 0.62, 0.4, 0.58, 0.4, mid);
+      addBoulder(-0.16, 0.2, -0.34, 0.7, 0.44, 0.64, 1.2, dark);
+      break;
+    case 1:
+      addBoulder(-0.08, 0.28, 0.06, 1.05, 0.7, 0.95, 0.6, mid);
+      addBoulder(0.3, 0.22, -0.18, 0.88, 0.55, 0.8, -0.3, light);
+      addBoulder(-0.36, 0.18, -0.14, 0.72, 0.46, 0.7, 1.4, dark);
+      addBoulder(0.06, 0.14, 0.32, 0.55, 0.36, 0.5, 0.15, mid);
+      break;
+    case 2:
+      addBoulder(0.12, 0.24, -0.08, 0.95, 0.62, 0.88, -0.8, light);
+      addBoulder(-0.28, 0.2, 0.16, 0.82, 0.5, 0.76, 0.5, dark);
+      addBoulder(0.34, 0.16, 0.22, 0.58, 0.38, 0.54, 1.1, mid);
+      addBoulder(-0.04, 0.14, -0.3, 0.64, 0.4, 0.6, 0.2, mid);
+      break;
+    default: {
+      const _exhaustive: never = variant;
+      return _exhaustive;
+    }
+  }
+
   if (opts?.scale !== undefined) g.scale.setScalar(opts.scale);
   return g;
 }

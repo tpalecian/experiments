@@ -64,11 +64,16 @@ soft hex influence, blended at the borders so the grid does not read.
 | Wheat | Golden rolling fields, crop rows, tiny barn or windmill |
 | Sheep | Bright hills, sheep, fences, flowers |
 | Brick | Warm red/orange rock, terraces, clay pits, sparse plants |
-| Ore | Tall faceted grey peaks, mineral rocks, darker ground |
+| Ore | Dark grey floor, stacked chunky boulders (not cones) |
 | Desert | Cream dunes, cactus, oasis or ruins |
 
-Mountains are taller and sharper than realistic; trees stay oversized enough
-to read from the diorama camera.
+Mountains are **boulder piles**: overlapping faceted grey rocks with light tops
+and dark sides. The island mesh stays a low rocky floor; silhouette comes from
+the props. Trees stay oversized enough to read from the diorama camera.
+
+The beach is a **wide warm-sand band** with thick white foam blobs along the
+organic coast and bright turquoise shallows — toy shoreline, not a thin glow
+ring.
 
 Each land hex uses circumradius `HEX_SIZE` (1.75, about 3× the old floor
 area) so groves, fields, and flocks can be composed instead of stacked on a

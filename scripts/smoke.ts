@@ -419,8 +419,12 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
     if (hex.terrain === 'ore') oreH = Math.max(oreH, h);
     if (hex.terrain === 'wheat') wheatH = Math.max(wheatH, h);
   }
-  assert(oreH > 0.3 && wheatH > 0, 'ore and wheat tiles exist');
-  assert(oreH > wheatH + 0.2 * HEX_SIZE, 'ore peaks taller than wheat fields');
+  assert(oreH > 0 && wheatH > 0, 'ore and wheat tiles exist');
+
+  const mountain = getAssetById('mountain')!.create({ scale: 1 });
+  const mbox = new THREE.Box3().setFromObject(mountain);
+  assert(mbox.getSize(new THREE.Vector3()).y > 0.35, 'mountain boulders have volume');
+  assert(mbox.getSize(new THREE.Vector3()).x > 0.7, 'mountain is a wide pile not a spike');
 
   const inland = field.shoreDistance(0, 0);
   const warped = warpCoast(0, 0);

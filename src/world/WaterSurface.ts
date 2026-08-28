@@ -332,27 +332,28 @@ void main() {
   float nearShore = smoothstep(0.22, 0.5, prox) * (1.0 - smoothstep(0.82, 0.98, prox));
   float ripple = accept * arcGate * crest * nearShore * clamp(uRippleIntensity, 0.0, 1.2);
 
-  // Shore foam lip flush to hex coast
-  float foamWidth = max(uFoamWidth, 0.04);
-  float shoreCore = 1.0 - smoothstep(0.0, foamWidth * 0.4, shoreDist);
-  shoreCore = pow(max(shoreCore, 0.0), 2.8);
-  float shoreHalo = 1.0 - smoothstep(0.0, foamWidth * 1.1, shoreDist);
-  shoreHalo = pow(max(shoreHalo, 0.0), 1.8);
-  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 2.4 + wave * 2.0));
-  float shoreFoam = shoreCore * uShoreFoam * foamPulse;
-  float shoreGlowRim = shoreHalo * uShoreGlow * 1.6;
+  // Shore foam — thick blob lip like a toy shoreline, not a thin glow ring
+  float foamWidth = max(uFoamWidth, 0.08);
+  float foamBand = smoothstep(-0.06 * foamWidth, 0.02, shoreDist) * (1.0 - smoothstep(0.04, foamWidth * 1.55, shoreDist));
+  float blobA = valueNoise(vWorldPos.xz * 1.65);
+  float blobB = valueNoise(vWorldPos.xz * 3.4 + vec2(2.1, -1.4));
+  float blob = smoothstep(0.22, 0.58, blobA * 0.65 + blobB * 0.35);
+  float thickFoam = foamBand * mix(0.45, 1.0, blob);
+  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 1.6 + wave * 1.4));
+  float shoreFoam = thickFoam * uShoreFoam * foamPulse;
+  float shoreGlowRim = foamBand * uShoreGlow * 0.85;
 
-  col = mix(col, mix(uShallow, uFoamColor, 0.25), clamp(shoreGlowRim, 0.0, 0.7) * keep);
+  col = mix(col, mix(uShallow, uFoamColor, 0.2), clamp(shoreGlowRim, 0.0, 0.45) * keep);
 
-  float foam = max(ripple * 0.85, shoreFoam);
-  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.88) * keep);
+  float foam = max(ripple * 0.35, shoreFoam);
+  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.97) * keep);
 
   // 9. Horizon dissolve
   vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);
   col = mix(col, fadeCol, haze);
   if (keep < 0.04) discard;
 
-  float shallowAlpha = mix(0.42, 1.0, smoothstep(-0.12, 1.7, shoreDist));
+  float shallowAlpha = mix(0.28, 1.0, smoothstep(-0.08, 2.1, shoreDist));
   gl_FragColor = vec4(col, keep * shallowAlpha);
 }
 `;

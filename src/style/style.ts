@@ -37,12 +37,12 @@ export const DIORAMA_TERRAIN: Record<Terrain, number> = {
   brick: 0xc45e32,
   sheep: 0x7ecf52,
   wheat: 0xe8c24a,
-  ore: 0x8a909c,
+  ore: 0x6e7682,
   desert: 0xe4d2a4,
 };
 
-export const DIORAMA_SAND = 0xe8dcc0;
-export const DIORAMA_SAND_WET = 0xd4c49a;
+export const DIORAMA_SAND = 0xf4d078;
+export const DIORAMA_SAND_WET = 0xe8bc62;
 
 /** Slightly darker sides for chunky hex blocks. */
 export const STYLIZED_TERRAIN_SIDE: Record<Terrain, number> = {

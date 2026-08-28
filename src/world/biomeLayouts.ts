@@ -262,23 +262,25 @@ export function createDefaultLayouts(): BiomeLayout[] {
     layouts.push({ id: 'wheat-lush', name: 'Lush field', terrain: 'wheat', props });
   }
 
-  // Ore — dramatic faceted peaks
+  // Ore — stacked boulder piles
   {
     const rand = seeded(501);
     const props: BiomePropInstance[] = [];
-    props.push(p(rand, 'mountain', 0.04, -0.06, 0.2, 1.12));
-    props.push(p(rand, 'rock', 0.48, 0.28, rand() * Math.PI, 0.9));
-    props.push(p(rand, 'rock', -0.42, 0.34, rand() * Math.PI, 0.75));
-    props.push(p(rand, 'rock', 0.22, -0.48, rand() * Math.PI, 0.55));
-    layouts.push({ id: 'ore-default', name: 'Rock pile', terrain: 'ore', props });
+    props.push(p(rand, 'mountain', 0.04, -0.06, 0.15, 1.22, 0));
+    props.push(p(rand, 'mountain', 0.42, 0.22, 1.05, 0.88, 1));
+    props.push(p(rand, 'mountain', -0.38, 0.26, -0.55, 0.82, 2));
+    props.push(p(rand, 'rock', 0.52, -0.32, rand() * Math.PI, 1.05));
+    props.push(p(rand, 'rock', -0.48, -0.22, rand() * Math.PI, 0.85));
+    layouts.push({ id: 'ore-default', name: 'Boulder pile', terrain: 'ore', props });
   }
   {
     const rand = seeded(502);
     const props: BiomePropInstance[] = [];
-    props.push(p(rand, 'mountain', -0.18, 0.12, 0.5, 1));
-    props.push(p(rand, 'mountain', 0.4, -0.26, -0.3, 0.7));
-    props.push(p(rand, 'rock', 0.12, 0.5, rand() * Math.PI, 0.7));
-    layouts.push({ id: 'ore-craggy', name: 'Craggy ridge', terrain: 'ore', props });
+    props.push(p(rand, 'mountain', -0.16, 0.1, 0.45, 1.12, 1));
+    props.push(p(rand, 'mountain', 0.4, -0.22, -0.35, 0.92, 0));
+    props.push(p(rand, 'mountain', 0.08, 0.42, 0.8, 0.72, 2));
+    props.push(p(rand, 'rock', -0.5, -0.28, rand() * Math.PI, 0.8));
+    layouts.push({ id: 'ore-craggy', name: 'Boulder ridge', terrain: 'ore', props });
   }
 
   // Desert — dunes, cactus, oasis

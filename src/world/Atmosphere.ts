@@ -133,7 +133,7 @@ function envExtras(scheme: EnvironmentScheme): {
     waterOcean: p.ocean,
     waterLagoon: p.lagoon,
     // Shallow sits between lagoon and shelf — cyan near coast, navy farther out.
-    waterShallow: scheme === 'day' ? '#3ED8E0' : scheme === 'sunset' ? '#5EC8D0' : '#2A6A9A',
+    waterShallow: scheme === 'day' ? '#7AF8E8' : scheme === 'sunset' ? '#5EC8D0' : '#2A6A9A',
     waterShelf: p.shelf,
     waterFoamColor: scheme === 'night' ? '#C8F4FF' : scheme === 'sunset' ? '#FFF0E0' : '#FFFFFF',
     waveBandIntensity: WAVE_BAND_INTENSITY[scheme],

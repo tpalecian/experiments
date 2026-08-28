@@ -146,9 +146,9 @@ export const ASSET_CATALOG: AssetDefinition[] = [
   },
   {
     id: 'mountain',
-    name: 'Mountain peak',
+    name: 'Boulder pile',
     category: 'props',
-    description: 'Faceted ore mountain silhouette.',
+    description: 'Chunky faceted ore boulders.',
     create: makeMountain,
   },
   {

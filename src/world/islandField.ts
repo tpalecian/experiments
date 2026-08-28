@@ -15,8 +15,8 @@ export const COAST_WARP_FREQ = 0.38 / HEX_SIZE;
 export const COAST_WARP_AMP = 0.55 * HEX_SIZE;
 export const COAST_WARP_FREQ2 = 0.82 / HEX_SIZE;
 export const COAST_WARP_AMP2 = 0.14 * HEX_SIZE;
-export const BEACH_WIDTH = 0.58 * HEX_SIZE;
-export const SHELF_WIDTH = 0.5 * HEX_SIZE;
+export const BEACH_WIDTH = 0.78 * HEX_SIZE;
+export const SHELF_WIDTH = 0.62 * HEX_SIZE;
 /** Water discards inland of this (keeps transparent shallows over the shelf). */
 export const WATER_INLAND_DISCARD = 0.48 * HEX_SIZE;
 
@@ -233,18 +233,18 @@ export class IslandField implements GroundSampler {
 
     const landMask = smoothstep(0.12 * HEX_SIZE, -0.08 * HEX_SIZE, shoreDist);
     const beachMask =
-      smoothstep(BEACH_WIDTH, 0.02 * HEX_SIZE, shoreDist) * smoothstep(-0.12 * HEX_SIZE, 0.08 * HEX_SIZE, shoreDist);
+      smoothstep(BEACH_WIDTH, -0.02 * HEX_SIZE, shoreDist) * smoothstep(-0.48 * HEX_SIZE, -0.04 * HEX_SIZE, shoreDist);
     const shelfMask =
-      smoothstep(-SHELF_WIDTH, -0.02 * HEX_SIZE, shoreDist) * smoothstep(0.1 * HEX_SIZE, -0.02 * HEX_SIZE, shoreDist);
+      smoothstep(-SHELF_WIDTH, -0.02 * HEX_SIZE, shoreDist) * smoothstep(0.12 * HEX_SIZE, -0.02 * HEX_SIZE, shoreDist);
 
-    const beachH = HEX_SIZE * (0.042 + valueNoise(ux * 1.1, uz * 1.1) * 0.012);
+    const beachH = HEX_SIZE * (0.05 + valueNoise(ux * 0.9, uz * 0.9) * 0.01);
     const shelfH = HEX_SIZE * -0.055 + shoreDist * 0.04;
     height = height * landMask + beachH * beachMask * (1 - landMask * 0.35);
     if (shelfMask > 0.01 && landMask < 0.5) {
       height = height * (1 - shelfMask) + shelfH * shelfMask;
     }
 
-    const wet = smoothstep(0.18 * HEX_SIZE, -0.08 * HEX_SIZE, shoreDist);
+    const wet = smoothstep(0.1 * HEX_SIZE, -0.2 * HEX_SIZE, shoreDist);
     cr = cr * (1 - beachMask) + (SAND.r * (1 - wet) + SAND_WET.r * wet) * beachMask;
     cg = cg * (1 - beachMask) + (SAND.g * (1 - wet) + SAND_WET.g * wet) * beachMask;
     cb = cb * (1 - beachMask) + (SAND.b * (1 - wet) + SAND_WET.b * wet) * beachMask;
@@ -307,12 +307,8 @@ export class IslandField implements GroundSampler {
         const terrace = Math.floor((n + d) * 4) * 0.018;
         return HEX_SIZE * (0.28 + mesa * 0.55 + terrace);
       }
-      case 'ore': {
-        const d = this.nearestDist(x, z, 'ore') / HEX_SIZE;
-        const peak = Math.pow(Math.max(0, 1 - d / 0.72), 1.55) * 1.28;
-        const facet = Math.abs(valueNoise(ux * 1.6, uz * 1.6) - 0.5) * 0.22;
-        return HEX_SIZE * (0.22 + peak + facet);
-      }
+      case 'ore':
+        return HEX_SIZE * (0.14 + n * 0.05);
       case 'desert': {
         const dunes = Math.sin(ux * 1.7 + uz * 0.4) * 0.055 + Math.sin(uz * 2.1) * 0.03;
         return HEX_SIZE * (0.08 + dunes + n * 0.02);
