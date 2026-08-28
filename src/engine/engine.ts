@@ -150,8 +150,7 @@ export class GameEngine {
     this.winner = null;
     this.productionLog = '';
     this.phase = 'setupSettlement';
-    const sizeLabel = MAP_SIZES[mapSize].label;
-    this.message = `${sizeLabel} map · ${this.player().name}: place your first settlement.`;
+    this.message = `${this.player().name}: place your first settlement.`;
     this.emit();
   }
 

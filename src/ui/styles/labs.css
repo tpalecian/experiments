@@ -243,7 +243,7 @@ body.asset-lab-mode #style-config-root {
   .style-config {
     top: auto;
     right: max(0.5rem, env(safe-area-inset-right));
-    bottom: calc(6.25rem + env(safe-area-inset-bottom));
+    bottom: calc(8.35rem + env(safe-area-inset-bottom));
   }
 
   .style-config-toggle {
