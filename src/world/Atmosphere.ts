@@ -238,7 +238,7 @@ function snap(
   };
 }
 
-/** Authoritative look targets — tropical hex-board day cycle. */
+/** Authoritative look targets — tropical island-diorama day cycle. */
 export const ATMOSPHERE_PRESETS: Record<DayScheme, AtmosphereSnapshot> = {
   morning: snap('morning', {
     skyZenith: '#5aa8e0',

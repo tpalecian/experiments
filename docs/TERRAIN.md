@@ -1,77 +1,114 @@
-# Hex Board Presentation — Water, Props & Coast Feel
+# Island Diorama — Terrain, Water, Props & Coast
 
 > **Core Principle**
 >
-> Keep the **readable hex tiles**. Water, skirts, props, and lighting dress the board —
-> they do not replace it with organic non-hex terrain.
+> The **hex graph stays for rules only**. Presentation is one continuous
+> stylized island: organic coastline, silhouette-first biomes, painterly
+> materials. Do not draw extruded hexagonal tiles.
 
-The live board is built in `World` (`src/world/World.ts`): extruded hex meshes,
-terrain props, number tokens, harbors, tropical water hugging the land hexes.
+The live board is built in `World` (`src/world/World.ts`): an island height
+mesh, terrain props, number tokens, harbors, and tropical water hugging the
+organic shore.
 
 ---
 
 ## Architecture
 
 ```text
-Hex graph (game rules)
+Hex graph (game rules, hidden)
         │
         ▼
-World tiles + markers + pieces
+IslandField (warped rounded-hex SDF + biome sample)
         │
         ├──────────────┐
         ▼              ▼
-WaterSurface      Grass / props
-(hex land SDF)    (per-tile scatter)
+IslandMesh        WaterSurface
+(vertex colors)   (same coast SDF)
+        │
+        ▼
+Props / pieces / tokens sit on sampled height
         │
         ▼
 Environment State + TweenPlayer
 ```
 
-Gameplay adjacency and production stay on the hex graph. Presentation never invents a second board.
+Gameplay adjacency and production stay on the hex graph. Presentation never
+draws that graph as tiles.
 
 ---
 
-## Water around hexes
+## Island field
 
-Water is a flat sea plane with a **land mask from hex centers** (not an organic island silhouette).
+Live path: `src/world/islandField.ts`.
 
-Live path: `src/world/WaterSurface.ts` — Bruno folio shore (cyan rim + sparse arcs), frosted mirror, depth colour, atmosphere tint.
+Coastline is a **union of rounded hex SDFs** with a shared domain warp so
+neighbouring tiles melt into one blob. Biome colour and height still follow
+soft hex influence, blended at the borders so the grid does not read.
 
-Craft bases live in `StyleConfig`; day-night multiplies them via Environment State ([DAY_NIGHT.md](DAY_NIGHT.md)).
+`distanceToCoast` (positive = ocean, negative = inland) drives:
+
+| System | Reads |
+| --- | --- |
+| Beach / shelf | sand band and underwater sand |
+| Terrain height | biome curve faded by coast |
+| Water colour / foam | same SDF on the GPU |
+| Prop / piece Y | `heightAt(x, z)` |
+
+---
+
+## Biome language (silhouette first)
+
+| Terrain | Terrain language |
+| --- | --- |
+| Wood | Darker green floor, dense oversized trees, logs, rocks |
+| Wheat | Golden rolling fields, crop rows, tiny barn or windmill |
+| Sheep | Bright hills, sheep, fences, flowers |
+| Brick | Warm red/orange rock, terraces, clay pits, sparse plants |
+| Ore | Tall faceted grey peaks, mineral rocks, darker ground |
+| Desert | Cream dunes, cactus, oasis or ruins |
+
+Mountains are taller and sharper than realistic; trees stay oversized enough
+to read from the diorama camera.
+
+---
+
+## Water around the island
+
+Water is a flat sea plane whose land mask is the **same warped coast SDF**
+as the mesh (not a raw hex outline).
+
+Live path: `src/world/WaterSurface.ts` — Bruno folio shore (cyan rim + sparse
+arcs), frosted mirror, depth colour, transparent shallows over a sand shelf.
+
+Craft bases live in `StyleConfig`; day-night multiplies them via Environment
+State ([DAY_NIGHT.md](DAY_NIGHT.md)).
 
 | Effect | Intent |
 | --- | --- |
-| Depth colour | Navy open water → cyan shelf at hex coast |
-| Shore foam | Thin glowing lip (Bruno `shoreNode`) |
-| Shore ripples | Sparse thin arcs marching on SDF (Bruno `ripplesNode`) |
+| Depth colour | Navy open water → turquoise shelf at the organic coast |
+| Transparent shallows | Underwater sand visible around the shoreline |
+| Shore foam | Thin glowing lip along the beach |
+| Shore ripples | Sparse thin arcs marching on the coast SDF |
 | Frosted mirror | Soft scene contact shadows on the plane |
 | Swells | Near-flat (folio amplitude is tiny) |
 | Caustics | Quiet, shallow only |
 
-Polish work improves these shaders and Style knobs — **without** removing hex tiles.
-
 ---
 
-## Hex tile stack
+## Board stack
 
-Each land hex (conceptually):
+Each hidden hex (conceptually):
 
 ```text
-Dirt skirt (tabletop edge)
-  └─ Extruded hex body (terrain colour)
-       └─ Top rim
-            └─ Props (trees / wheat / rocks / mesa / cactus)
+Island mesh (shared)
+  └─ Invisible pick disc
+       └─ Glow disc (hover / legal / production)
+            └─ Props (trees / wheat / rocks / peaks / …)
                  └─ Number token (if any)
-                      └─ Pasture grass blades (sheep only)
 ```
 
-| Layer | Notes |
-| --- | --- |
-| Body | Toon material per terrain type |
-| Skirt | Slightly wider bottom for a coast edge |
-| Props | Seeded scatter; static meshes (motion comes from grass wind + pieces) |
-| Tokens | Pulse on matching dice production |
-| Markers | Vertex / edge legal highlights (fade + pulse) |
+Pieces (roads, settlements, cities, robber) sample island height at their
+world xz. Highlight markers sit on the same sampler.
 
 ---
 
@@ -87,7 +124,8 @@ Motion system: `src/core/tween.ts` + `World` piece sync.
 | Upgrade city | Morph / crossfade |
 | Robber | Arc hop + land squash |
 | Highlights | Opacity / emissive fade + pulse |
-| Hover | Slight hex lift |
+| Hover | Soft glow disc (no tile lift) |
+| Select tile | Camera eases down and toward the hex |
 
 See [VISION.md](VISION.md) for the full animation priority table.
 
@@ -95,8 +133,8 @@ See [VISION.md](VISION.md) for the full animation priority table.
 
 ## What we are not doing
 
-- Replacing hexes with a coastline-first organic heightmesh
-- Hidden region graphs that players never see as tiles
+- Drawing extruded hex tiles, dirt skirts, or hex rims as the board
+- Treating “low-poly” as primitive unshaded chunks
 - Regenerating terrain when day-night changes
 
 ---
@@ -105,13 +143,16 @@ See [VISION.md](VISION.md) for the full animation priority table.
 
 | Concern | Module |
 | --- | --- |
-| Hex tiles, pieces, highlights | `src/world/World.ts` |
+| Coast SDF + biome height | `src/world/islandField.ts` |
+| Terrain mesh | `src/world/IslandMesh.ts` |
+| Tokens, harbors, pick discs | `src/world/Board.ts` |
 | Tweens / easing | `src/core/tween.ts` |
 | Water shader | `src/world/WaterSurface.ts` |
-| Pasture grass | Meadow floor in `src/style/style.ts` + biome props |
+| Biome props | `src/world/biomeLayouts.ts` + `src/world/assets/props.ts` |
 | Sky / clouds | `src/world/Sky.ts` |
 | Day-night / atmosphere | `src/world/Atmosphere.ts` |
 | Style craft | `src/style/styleConfig.ts`, `src/ui/style/configurator.ts` |
 | Rules / board graph | `src/engine/*` |
 
-Day-night and weather must **not** rebuild hex meshes — only Environment State changes. See **[DAY_NIGHT.md](DAY_NIGHT.md)**.
+Day-night and weather must **not** rebuild the island mesh — only Environment
+State changes. See **[DAY_NIGHT.md](DAY_NIGHT.md)**.

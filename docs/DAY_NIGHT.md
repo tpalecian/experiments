@@ -1,10 +1,10 @@
-# Day-Night Cycle on the Hex Board
+# Day-Night Cycle on the Island
 
 > **Core Principle**
 >
-> The day-night cycle should **never regenerate the board**.
+> The day-night cycle should **never regenerate the world**.
 >
-> Hex tiles, props, pieces, water mesh, and vegetation instances remain static.
+> Island mesh, props, pieces, water mesh, and vegetation instances remain static.
 >
 > Only the **rendering layer** (Environment State) changes.
 
@@ -15,12 +15,12 @@
 Separate board data from look.
 
 ```text
-Hex Board (Static)
-tiles · props · pieces · water mesh · grass
+Island (Static)
+terrain mesh · props · pieces · water mesh
         │
         ├──────────────────────┐
         ▼                      ▼
-Board materials              WaterSurface
+Island materials             WaterSurface
         │                      │
         └──────────┬───────────┘
                    ▼
@@ -38,11 +38,11 @@ This separation makes the day-night cycle cheap: retint and relight, never rebui
 
 These stay identical across the whole cycle:
 
-- Hex meshes and terrain colours (base albedos)
-- Dirt skirts, rims, harbors
+- Island mesh and biome vertex colours (base albedos)
+- Harbors and number tokens
 - Trees, wheat, rocks, roads, buildings, robber geometry
-- Water **mesh** and land-hex mask
-- Grass blade instances
+- Water **mesh** and coast SDF uniforms
+- Grass / meadow props
 
 ### Rendering — everything that reads Environment State
 
@@ -59,7 +59,7 @@ These stay identical across the whole cycle:
 
 ## Sun
 
-The sun is a moving directional light over the hex board. Nothing procedural regenerates.
+The sun is a moving directional light over the island. Nothing procedural regenerates.
 
 ```ts
 // Live code: TimeOfDayController → celestialDirection(altitude, azimuth)
@@ -148,9 +148,9 @@ Foam **placement** never changes (shore only). Only brightness / tint:
 
 ---
 
-## Hex tiles & props
+## Island mesh & props
 
-Tile **geometry** never changes. Optional future albedo / emissive response:
+Island **geometry** never changes. Optional future albedo / emissive response:
 
 | Time | Feel |
 | --- | --- |
@@ -227,11 +227,10 @@ Caustics stay active in shallow water near hex shores. Intensity scales with the
 ## The Board Never Changes
 
 ```text
-Hex tiles       ✔ Static
+Island mesh     ✔ Static
 Props           ✔ Static
 Pieces          ✔ Static (motion is tween, not rebuild)
 Water mesh      ✔ Static
-Grass instances ✔ Static
 ```
 
 Only rendering / Environment State changes. Piece tweens are gameplay feedback, not world regeneration.
@@ -314,10 +313,10 @@ Piece / camera motion stays on `TweenPlayer` ([VISION.md](VISION.md)) — orthog
 
 ## Key Design Principle
 
-The hex board is built **once** per game (map size / seed) — see [TERRAIN.md](TERRAIN.md).
+The island is built **once** per game (map size / seed) — see [TERRAIN.md](TERRAIN.md).
 
-The day-night cycle does **not** modify the board.
+The day-night cycle does **not** modify the world.
 
-Every renderer interprets the same hex world through a shared Environment State that controls lighting, colours, atmosphere, reflections, shadows, and post-processing.
+Every renderer interprets the same island through a shared Environment State that controls lighting, colours, atmosphere, reflections, shadows, and post-processing.
 
 Atmosphere scalars and palettes should be editable from the craft configurator under **Atmosphere**, **Sky & Clouds**, **Lighting**, **Fog**, and **Water** — see [CONFIGURATOR.md](CONFIGURATOR.md).

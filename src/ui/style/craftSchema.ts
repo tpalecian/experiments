@@ -3,8 +3,8 @@
  *
  * `StyleConfigurator` renders from `CRAFT_CATEGORIES` + `CRAFT_FIELDS` only.
  * This file is the panel schema (id, title, blurb, and live knobs) — not an
- * aspirational IA dump. Hex tiles stay; craft look/motion on the board, not
- * organic-island generation. See docs/CONFIGURATOR.md.
+ * aspirational IA dump. The island stays a seamless diorama over a hidden hex
+ * graph. See docs/CONFIGURATOR.md.
  */
 
 import type { StyleConfig } from '../../style/styleConfig';
@@ -29,7 +29,7 @@ export const CRAFT_CATEGORIES: CraftCategory[] = [
   {
     id: 'atmosphere',
     title: 'Atmosphere',
-    blurb: 'Environment State only — never rebuilds the hex board.',
+    blurb: 'Environment State only — never rebuilds the island.',
   },
   {
     id: 'skyClouds',
@@ -49,12 +49,12 @@ export const CRAFT_CATEGORIES: CraftCategory[] = [
   {
     id: 'water',
     title: 'Water',
-    blurb: 'Depth palette, swell, bands, foam, caustics around hex land.',
+    blurb: 'Depth palette, swell, bands, foam, caustics around the island coast.',
   },
   {
     id: 'hexBoard',
-    title: 'Hex Board & Props',
-    blurb: 'Tile colours, skirts, tokens, scatter props, harbors.',
+    title: 'Island & Props',
+    blurb: 'Hover glow, tokens, scatter props, harbors.',
   },
   {
     id: 'motion',
