@@ -254,7 +254,8 @@ export class IslandField implements GroundSampler {
       cb = cb * (1 - shelfMask) + SAND_WET.b * shelfMask;
     }
 
-    const speck = (valueNoise(ux * 2.4, uz * 2.4) - 0.5) * 0.04;
+    const speckAmt = 1 - beachMask * 0.85;
+    const speck = (valueNoise(ux * 2.4, uz * 2.4) - 0.5) * 0.04 * speckAmt;
     cr = clamp01(cr + speck);
     cg = clamp01(cg + speck * 0.7);
     cb = clamp01(cb + speck * 0.4);

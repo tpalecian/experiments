@@ -62,22 +62,22 @@ export class ShoreDressing {
   }
 
   private buildFoam(field: IslandField): THREE.InstancedMesh | null {
-    const step = 0.32 * HEX_SIZE;
+    const step = 0.2 * HEX_SIZE;
     const dummy = new THREE.Object3D();
     const matrices: THREE.Matrix4[] = [];
     const radius = field.radius;
-    const foamHi = 0.42 * HEX_SIZE;
+    const foamHi = 0.2 * HEX_SIZE;
 
     for (let z = -radius; z <= radius; z += step) {
       for (let x = -radius; x <= radius; x += step) {
         const d = field.shoreDistance(x, z);
-        if (d < -0.04 * HEX_SIZE || d > foamHi) continue;
+        if (d < 0.0 || d > foamHi) continue;
         const n = hash21(x * 3.1, z * 2.7);
-        if (n < 0.38) continue;
-        const jitter = (hash21(z, x) - 0.5) * step * 0.55;
-        dummy.position.set(x + jitter, 0.028, z - jitter * 0.4);
-        const s = (0.16 + n * 0.22) * HEX_SIZE;
-        dummy.scale.set(s * (1.4 + n * 0.8), s * 0.22, s * (1.1 + n * 0.5));
+        if (n < 0.52) continue;
+        const jitter = (hash21(z, x) - 0.5) * step * 0.7;
+        dummy.position.set(x + jitter, 0.022, z - jitter * 0.35);
+        const s = (0.055 + n * 0.07) * HEX_SIZE;
+        dummy.scale.set(s * (1.6 + n * 0.6), s * 0.18, s * (1.2 + n * 0.4));
         dummy.rotation.set(0.08, n * Math.PI * 2, 0.05);
         dummy.updateMatrix();
         matrices.push(dummy.matrix.clone());

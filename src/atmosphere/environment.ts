@@ -41,7 +41,7 @@ export const WATER_DEPTH_PALETTES: Record<EnvironmentScheme, WaterDepthPalette> 
 
 /** Beach albedo tints (geometry unchanged). */
 export const BEACH_TINTS: Record<EnvironmentScheme, string> = {
-  day: '#F4D078',
+  day: '#F6C44A',
   sunset: '#E8A050', // golden orange
   night: '#8A9AAA', // cool grey
 };

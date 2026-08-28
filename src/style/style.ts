@@ -41,8 +41,8 @@ export const DIORAMA_TERRAIN: Record<Terrain, number> = {
   desert: 0xe4d2a4,
 };
 
-export const DIORAMA_SAND = 0xf4d078;
-export const DIORAMA_SAND_WET = 0xe8bc62;
+export const DIORAMA_SAND = 0xf6c44a;
+export const DIORAMA_SAND_WET = 0xefb03c;
 
 /** Slightly darker sides for chunky hex blocks. */
 export const STYLIZED_TERRAIN_SIDE: Record<Terrain, number> = {
