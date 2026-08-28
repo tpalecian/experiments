@@ -454,7 +454,7 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(rig.camera.type === 'OrthographicCamera', 'diorama camera is orthographic');
   const framed = rig.frameBoard(2);
   assert(framed.radius > HEX_SIZE * 3, 'standard island radius grew with hex size');
-  assert(rig.camera.top / framed.radius < 1.4, 'ortho frame is tight enough that hexes read large');
+  assert(rig.camera.top / framed.radius < 1.35, 'ortho frame is tight enough that hexes read large');
   console.log('ok orthographic camera rig');
 }
 

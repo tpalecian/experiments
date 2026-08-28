@@ -71,7 +71,7 @@ const STORAGE_KEY = 'catan-biome-layouts-v1';
 /** Saved layouts with hypot ≤ this were authored on a unit hex and need HEX_SIZE. */
 const LEGACY_UNIT_HEX_MAX = 1.05;
 /** Trees/sheep grow less than the floor so groves stay airy on the larger hex. */
-const LAYOUT_PROP_SCALE = 1.38;
+const LAYOUT_PROP_SCALE = 1.18;
 
 function seeded(n: number): () => number {
   let s = (n * 16807) % 2147483647;
@@ -119,10 +119,10 @@ export function createDefaultLayouts(): BiomeLayout[] {
   {
     const rand = seeded(101);
     const props: BiomePropInstance[] = [];
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2 + rand() * 0.35;
-      const d = 0.22 + rand() * 0.52;
-      props.push(p(rand, 'tree', Math.cos(a) * d, Math.sin(a) * d, rand() * Math.PI, 0.95 + rand() * 0.55));
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + rand() * 0.35;
+      const d = 0.22 + rand() * 0.5;
+      props.push(p(rand, 'tree', Math.cos(a) * d, Math.sin(a) * d, rand() * Math.PI, 0.95 + rand() * 0.45));
     }
     props.push(p(rand, 'fallen-log', 0.18, -0.42, 0.6, 0.95));
     props.push(p(rand, 'rock', -0.48, 0.28, rand() * Math.PI, 0.6));
@@ -132,10 +132,10 @@ export function createDefaultLayouts(): BiomeLayout[] {
   {
     const rand = seeded(102);
     const props: BiomePropInstance[] = [];
-    for (let i = 0; i < 11; i++) {
+    for (let i = 0; i < 8; i++) {
       const a = rand() * Math.PI * 2;
-      const d = 0.14 + rand() * 0.58;
-      props.push(p(rand, 'tree', Math.cos(a) * d, Math.sin(a) * d, rand() * Math.PI, 0.85 + rand() * 0.6));
+      const d = 0.16 + rand() * 0.55;
+      props.push(p(rand, 'tree', Math.cos(a) * d, Math.sin(a) * d, rand() * Math.PI, 0.85 + rand() * 0.5));
     }
     props.push(p(rand, 'pine', -0.52, 0.38, 0.2, 0.75));
     props.push(p(rand, 'fallen-log', -0.16, 0.32, -0.4, 0.85));
@@ -175,9 +175,9 @@ export function createDefaultLayouts(): BiomeLayout[] {
   {
     const rand = seeded(301);
     const props: BiomePropInstance[] = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 5; i++) {
       const a = rand() * Math.PI * 2;
-      const d = 0.18 + rand() * 0.52;
+      const d = 0.2 + rand() * 0.5;
       props.push(
         p(rand, 'sheep', Math.cos(a) * d, Math.sin(a) * d, rand() * Math.PI * 2, 0.9 + rand() * 0.28, Math.floor(rand() * 4)),
       );
@@ -242,23 +242,23 @@ export function createDefaultLayouts(): BiomeLayout[] {
   {
     const rand = seeded(401);
     const props: BiomePropInstance[] = [];
-    for (let row = -3; row <= 3; row++) {
+    for (let row = -2; row <= 2; row++) {
       for (let col = -2; col <= 2; col++) {
-        props.push(p(rand, 'wheat', col * 0.2 + 0.04, row * 0.18, 0.05, 0.95 + rand() * 0.15));
+        props.push(p(rand, 'wheat', col * 0.26 + 0.04, row * 0.22, 0.05, 0.95 + rand() * 0.15));
       }
     }
-    props.push(p(rand, 'barn', 0.42, 0.48, 0.4, 1.05));
+    props.push(p(rand, 'barn', 0.48, 0.52, 0.4, 1.05));
     layouts.push({ id: 'wheat-default', name: 'Field rows', terrain: 'wheat', props });
   }
   {
     const rand = seeded(402);
     const props: BiomePropInstance[] = [];
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 12; i++) {
       const col = (i % 4) - 1.5;
-      const row = Math.floor(i / 4) - 1.5;
-      props.push(p(rand, 'wheat', col * 0.26, row * 0.22, rand() * 0.2, 0.9 + rand() * 0.2));
+      const row = Math.floor(i / 4) - 1;
+      props.push(p(rand, 'wheat', col * 0.28, row * 0.26, rand() * 0.2, 0.9 + rand() * 0.2));
     }
-    props.push(p(rand, 'windmill', -0.42, 0.4, 0.2, 1.05));
+    props.push(p(rand, 'windmill', -0.48, 0.46, 0.2, 1.05));
     layouts.push({ id: 'wheat-lush', name: 'Lush field', terrain: 'wheat', props });
   }
 
