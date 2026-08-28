@@ -167,7 +167,7 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterSpecularPower: 18,
 
   waterShoreFoam: 1.0,
-  waterFoamWidth: 0.55,
+  waterFoamWidth: 0.62,
   waterFoamPulse: 0.12,
   waterFoamPulseSpeed: 0.45,
 

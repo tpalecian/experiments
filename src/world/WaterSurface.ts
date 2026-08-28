@@ -334,19 +334,16 @@ void main() {
 
   // Shore foam — thick blob lip like a toy shoreline, not a thin glow ring
   float foamWidth = max(uFoamWidth, 0.08);
-  float foamBand = smoothstep(-0.06 * foamWidth, 0.02, shoreDist) * (1.0 - smoothstep(0.04, foamWidth * 1.55, shoreDist));
+  float foamBand = smoothstep(-0.04, 0.0, shoreDist) * (1.0 - smoothstep(0.0, foamWidth * 1.35, shoreDist));
   float blobA = valueNoise(vWorldPos.xz * 1.65);
   float blobB = valueNoise(vWorldPos.xz * 3.4 + vec2(2.1, -1.4));
-  float blob = smoothstep(0.22, 0.58, blobA * 0.65 + blobB * 0.35);
-  float thickFoam = foamBand * mix(0.45, 1.0, blob);
+  float blob = smoothstep(0.18, 0.55, blobA * 0.65 + blobB * 0.35);
+  float thickFoam = foamBand * mix(0.82, 1.0, blob);
   float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 1.6 + wave * 1.4));
   float shoreFoam = thickFoam * uShoreFoam * foamPulse;
-  float shoreGlowRim = foamBand * uShoreGlow * 0.85;
 
-  col = mix(col, mix(uShallow, uFoamColor, 0.2), clamp(shoreGlowRim, 0.0, 0.45) * keep);
-
-  float foam = max(ripple * 0.35, shoreFoam);
-  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.97) * keep);
+  float foam = max(ripple * 0.22, shoreFoam);
+  col = mix(col, uFoamColor, clamp(foam, 0.0, 1.0) * keep);
 
   // 9. Horizon dissolve
   vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);
