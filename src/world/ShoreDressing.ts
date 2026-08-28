@@ -1,6 +1,6 @@
 /**
- * Chunky shore foam blobs + seaweed tufts along the organic coast.
- * Geometry stays static; day-night only tints materials.
+ * Seaweed tufts in the shallows along the organic coast.
+ * Foam lives on the water shader (blob lip), not as extra meshes.
  */
 import * as THREE from 'three';
 import { HEX_SIZE } from '../engine/board';
@@ -10,9 +10,7 @@ import type { AtmosphereSnapshot } from './Atmosphere';
 
 export class ShoreDressing {
   readonly group = new THREE.Group();
-  private foam: THREE.InstancedMesh | null = null;
   private weed: THREE.InstancedMesh | null = null;
-  private readonly foamColor = new THREE.Color(0xffffff);
   private readonly weedColor = new THREE.Color(0x4fd64a);
 
   addTo(parent: THREE.Group): void {
@@ -21,19 +19,11 @@ export class ShoreDressing {
 
   build(field: IslandField): void {
     this.clear();
-    this.foam = this.buildFoam(field);
     this.weed = this.buildWeed(field);
-    if (this.foam) this.group.add(this.foam);
     if (this.weed) this.group.add(this.weed);
   }
 
   applyTint(atm: AtmosphereSnapshot): void {
-    if (this.foam) {
-      const mat = this.foam.material;
-      if (mat instanceof THREE.MeshToonMaterial) {
-        mat.color.copy(this.foamColor).lerp(atm.waterFoamColor, atm.waterPaletteMix * 0.15);
-      }
-    }
     if (this.weed) {
       const mat = this.weed.material;
       if (mat instanceof THREE.MeshToonMaterial) {
@@ -44,9 +34,7 @@ export class ShoreDressing {
 
   clear(): void {
     this.group.clear();
-    this.disposeMesh(this.foam);
     this.disposeMesh(this.weed);
-    this.foam = null;
     this.weed = null;
   }
 
@@ -59,42 +47,6 @@ export class ShoreDressing {
     } else {
       mat.dispose();
     }
-  }
-
-  private buildFoam(field: IslandField): THREE.InstancedMesh | null {
-    const step = 0.2 * HEX_SIZE;
-    const dummy = new THREE.Object3D();
-    const matrices: THREE.Matrix4[] = [];
-    const radius = field.radius;
-    const foamHi = 0.2 * HEX_SIZE;
-
-    for (let z = -radius; z <= radius; z += step) {
-      for (let x = -radius; x <= radius; x += step) {
-        const d = field.shoreDistance(x, z);
-        if (d < 0.0 || d > foamHi) continue;
-        const n = hash21(x * 3.1, z * 2.7);
-        if (n < 0.52) continue;
-        const jitter = (hash21(z, x) - 0.5) * step * 0.7;
-        dummy.position.set(x + jitter, 0.022, z - jitter * 0.35);
-        const s = (0.055 + n * 0.07) * HEX_SIZE;
-        dummy.scale.set(s * (1.6 + n * 0.6), s * 0.18, s * (1.2 + n * 0.4));
-        dummy.rotation.set(0.08, n * Math.PI * 2, 0.05);
-        dummy.updateMatrix();
-        matrices.push(dummy.matrix.clone());
-      }
-    }
-
-    if (matrices.length === 0) return null;
-    const mesh = new THREE.InstancedMesh(
-      new THREE.SphereGeometry(1, 8, 6),
-      toonMat(0xffffff),
-      matrices.length,
-    );
-    for (let i = 0; i < matrices.length; i++) mesh.setMatrixAt(i, matrices[i]!);
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.renderOrder = 2;
-    mesh.frustumCulled = false;
-    return mesh;
   }
 
   private buildWeed(field: IslandField): THREE.InstancedMesh | null {
