@@ -3,7 +3,7 @@
  * Run: npx tsx scripts/smoke.ts
  */
 import * as THREE from 'three';
-import { hexCountForRings, MAP_SIZES, type MapSizeId } from '../src/engine/board';
+import { hexCountForRings, MAP_SIZES, axialToWorld, type MapSizeId } from '../src/engine/board';
 import { GameEngine } from '../src/engine/engine';
 import {
   computeVictoryPoints,
@@ -51,6 +51,9 @@ import {
   STYLE_PRESETS,
   applyStylePreset,
 } from '../src/style/styleConfig';
+import { IslandField, sdHexagon, warpCoast } from '../src/world/islandField';
+import { IslandMesh } from '../src/world/IslandMesh';
+import { CameraRig } from '../src/view/CameraRig';
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -382,6 +385,59 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(!isTap(8, 8), 'diagonal past slop is a drag');
   assert(isTap(6, 6), 'short diagonal is a tap');
   console.log('ok tap vs drag');
+}
+
+{
+  const engine = new GameEngine(13);
+  engine.startGame(2, 'standard', 13);
+  const field = IslandField.fromBoard(engine.board);
+  assert(field.sample(0, 0).shoreDist < -0.2, 'center inland');
+  assert(field.sample(20, 0).shoreDist > 1, 'open ocean');
+
+  let oreH = 0;
+  let wheatH = 0;
+  for (const hex of engine.board.hexes.values()) {
+    const { x, z } = axialToWorld(hex.q, hex.r);
+    const h = field.heightAt(x, z);
+    if (hex.terrain === 'ore') oreH = Math.max(oreH, h);
+    if (hex.terrain === 'wheat') wheatH = Math.max(wheatH, h);
+  }
+  assert(oreH > 0.3 && wheatH > 0, 'ore and wheat tiles exist');
+  assert(oreH > wheatH + 0.2, 'ore peaks taller than wheat fields');
+
+  const inland = field.shoreDistance(0, 0);
+  const warped = warpCoast(0, 0);
+  assert(Math.hypot(warped.x, warped.z) < 1, 'warp stays local');
+  assert(sdHexagon(0, 0, 0.866) < 0, 'hex center inside SDF');
+  assert(inland < 0, 'shoreDistance negative inland');
+
+  const mesh = new IslandMesh();
+  mesh.build(field);
+  const pos = mesh.mesh.geometry.getAttribute('position');
+  const col = mesh.mesh.geometry.getAttribute('color');
+  assert(pos && pos.count > 200, 'island mesh has vertices');
+  assert(col && col.count === pos.count, 'island mesh has vertex colours');
+  const vertCount = pos.count;
+  mesh.clear();
+  console.log(`ok island field + mesh (${vertCount} verts)`);
+}
+
+{
+  const canvas = {
+    addEventListener() {},
+    removeEventListener() {},
+    style: {},
+    getRootNode() {
+      return { addEventListener() {}, removeEventListener() {} };
+    },
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }),
+    ownerDocument: { documentElement: {} },
+  } as unknown as HTMLCanvasElement;
+  const rig = new CameraRig(canvas, new TweenPlayer());
+  assert(rig.camera.type === 'OrthographicCamera', 'diorama camera is orthographic');
+  const framed = rig.frameBoard(2);
+  assert(framed.radius > 0, 'frameBoard returns radius');
+  console.log('ok orthographic camera rig');
 }
 
 console.log('smoke ok');

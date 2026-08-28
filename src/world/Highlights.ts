@@ -3,6 +3,9 @@ import type { BoardState } from '../engine/types';
 import { TILE_HEIGHT } from './assets';
 import { STYLE, getToonGradient } from '../style/style';
 import type { MotionFeel } from './motion';
+import type { GroundSampler } from './islandField';
+
+const FLAT: GroundSampler = { heightAt: () => TILE_HEIGHT };
 
 const VERTEX_VISUAL_R = 0.14;
 const VERTEX_HIT_R = 0.28;
@@ -26,6 +29,7 @@ export class Highlights {
   private legalEdges = new Set<string>();
   private coarsePointer = false;
   private elapsed = 0;
+  private ground: GroundSampler = FLAT;
 
   addTo(parent: THREE.Group): void {
     parent.add(this.group);
@@ -51,8 +55,9 @@ export class Highlights {
     this.applyHitScale();
   }
 
-  build(board: BoardState): void {
+  build(board: BoardState, ground?: GroundSampler): void {
     this.clear();
+    this.ground = ground ?? FLAT;
 
     for (const v of board.vertices.values()) {
       const m = new THREE.Mesh(
@@ -64,8 +69,9 @@ export class Highlights {
           opacity: 0,
         }),
       );
-      m.position.set(v.x, TILE_HEIGHT + 0.1, v.z);
-      m.userData = { kind: 'vertex', id: v.id };
+      const y = this.ground.heightAt(v.x, v.z) + 0.1;
+      m.position.set(v.x, y, v.z);
+      m.userData = { kind: 'vertex', id: v.id, restY: y };
       const hit = new THREE.Mesh(new THREE.SphereGeometry(VERTEX_HIT_R, 8, 6), hitMaterial);
       hit.userData = { kind: 'vertex', id: v.id };
       m.add(hit);
@@ -84,7 +90,8 @@ export class Highlights {
           opacity: 0,
         }),
       );
-      m.position.set(e.midX, TILE_HEIGHT + 0.08, e.midZ);
+      const y = this.ground.heightAt(e.midX, e.midZ) + 0.08;
+      m.position.set(e.midX, y, e.midZ);
       m.rotation.y = -e.angle;
       m.userData = { kind: 'edge', id: e.id };
       const hit = new THREE.Mesh(new THREE.BoxGeometry(EDGE_HIT.x, EDGE_HIT.y, EDGE_HIT.z), hitMaterial);
@@ -126,9 +133,8 @@ export class Highlights {
       mat.opacity += (target - mat.opacity) * step;
       m.visible = mat.opacity > 0.02;
       if (this.legalVertices.has(id)) {
-        m.position.y = TILE_HEIGHT + 0.1 + Math.sin(this.elapsed * 4 + id.length) * 0.02;
-      } else {
-        m.position.y = TILE_HEIGHT + 0.1;
+        const rest = (m.userData.restY as number) ?? m.position.y;
+        m.position.y = rest + Math.sin(this.elapsed * 4 + id.length) * 0.02;
       }
     }
 

@@ -1,24 +1,23 @@
 import * as THREE from 'three';
 import { HEX_SIZE, axialToWorld } from '../engine/board';
 import type { BoardState } from '../engine/types';
-import {
-  TILE_HEIGHT,
-  hexShape,
-  makeLabelSprite,
-  numberTexture,
-} from './assets';
-import {
-  STYLE,
-  STYLIZED_TERRAIN,
-  STYLIZED_TERRAIN_SIDE,
-  getMeadowFloorMaterial,
-  toonMat,
-} from '../style/style';
+import { hexShape, makeLabelSprite, numberTexture } from './assets';
+import { STYLE, toonMat } from '../style/style';
 import type { AtmosphereSnapshot } from './Atmosphere';
-import { hexRimGeometry, hexToonMats, remapExtrudeLidUVs, type HexVisual } from './geom';
+import type { IslandField } from './islandField';
 import type { MotionFeel } from './motion';
 
-/** Hex bodies, skirts, rims, tokens, and harbors. */
+interface HexVisual {
+  pick: THREE.Mesh;
+  glow: THREE.Mesh;
+  restingY: number;
+  numberToken: THREE.Mesh | null;
+  numberRestY: number;
+  worldX: number;
+  worldZ: number;
+}
+
+/** Hidden hex pick discs, glow, tokens, and harbors on the island. */
 export class Board {
   readonly group = new THREE.Group();
   readonly harborGroup = new THREE.Group();
@@ -43,6 +42,12 @@ export class Board {
     return this.pickables;
   }
 
+  getHexWorld(id: string, out = new THREE.Vector3()): THREE.Vector3 | null {
+    const vis = this.hexVisuals.get(id);
+    if (!vis) return null;
+    return out.set(vis.worldX, vis.restingY, vis.worldZ);
+  }
+
   setHoverHex(id: string | null): void {
     if (this.hoverHexId === id) return;
     this.hoverHexId = id;
@@ -51,33 +56,18 @@ export class Board {
   pulseProduction(total: number, durationSec: number): void {
     if (total < 2 || total === 7) return;
     for (const [id, vis] of this.hexVisuals) {
-      const hexNum = vis.mesh.userData.number as number | null | undefined;
+      const hexNum = vis.pick.userData.number as number | null | undefined;
       if (hexNum === total) this.productionPulse.set(id, durationSec);
     }
   }
 
   setLegalHexes(ids: string[]): void {
     this.legalHexes = new Set(ids);
-    for (const [id, vis] of this.hexVisuals) {
-      const on = this.legalHexes.has(id);
-      for (const mat of hexToonMats(vis.mesh)) {
-        mat.emissive.set(on ? 0x665522 : 0x000000);
-      }
-    }
   }
 
   applyBoardTint(atm: AtmosphereSnapshot): void {
     const mix = atm.boardTintMix;
     const tint = atm.beachTint;
-    for (const vis of this.hexVisuals.values()) {
-      const mats = hexToonMats(vis.mesh);
-      if (!vis.baseColors) vis.baseColors = mats.map((mat) => mat.color.clone());
-      mats.forEach((mat, i) => {
-        const base = vis.baseColors![i] ?? mat.color.clone();
-        vis.baseColors![i] = base;
-        mat.color.copy(base).lerp(tint, mix);
-      });
-    }
     for (const mesh of this.accents) {
       const mat = mesh.material;
       if (!(mat instanceof THREE.MeshToonMaterial) && !(mat instanceof THREE.MeshBasicMaterial)) continue;
@@ -88,63 +78,48 @@ export class Board {
     }
   }
 
-  build(board: BoardState): void {
+  build(board: BoardState, field: IslandField): void {
     this.clear();
 
-    const tileRadius = HEX_SIZE;
-    const geom = new THREE.ExtrudeGeometry(hexShape(tileRadius), {
-      depth: TILE_HEIGHT,
-      bevelEnabled: false,
+    const pickGeom = new THREE.ShapeGeometry(hexShape(HEX_SIZE * 0.92));
+    pickGeom.rotateX(-Math.PI / 2);
+    const glowGeom = new THREE.CircleGeometry(HEX_SIZE * 0.78, 28);
+    glowGeom.rotateX(-Math.PI / 2);
+
+    const pickMat = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      side: THREE.DoubleSide,
     });
-    geom.rotateX(-Math.PI / 2);
-    geom.computeVertexNormals();
-    remapExtrudeLidUVs(geom, tileRadius);
-    const rimGeom = hexRimGeometry(tileRadius * 0.9, tileRadius * 0.985);
-    const meadowTopProto = getMeadowFloorMaterial();
+    const glowMatProto = new THREE.MeshBasicMaterial({
+      color: 0xfff0a0,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
 
     for (const hex of board.hexes.values()) {
       const { x, z } = axialToWorld(hex.q, hex.r);
-      const terrain = hex.terrain;
+      const y = field.heightAt(x, z);
 
-      const mat: THREE.Material | THREE.Material[] =
-        terrain === 'sheep'
-          ? [meadowTopProto.clone(), toonMat(STYLIZED_TERRAIN_SIDE.sheep)]
-          : toonMat(STYLIZED_TERRAIN[terrain]);
-      const mesh = new THREE.Mesh(geom, mat);
-      mesh.position.set(x, 0, z);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.userData = { kind: 'hex', id: hex.id, terrain, number: hex.number };
-      this.group.add(mesh);
-      this.pickables.push(mesh);
+      const pick = new THREE.Mesh(pickGeom, pickMat);
+      pick.position.set(x, y + 0.04, z);
+      pick.userData = { kind: 'hex', id: hex.id, terrain: hex.terrain, number: hex.number };
+      this.group.add(pick);
+      this.pickables.push(pick);
+
+      const glow = new THREE.Mesh(glowGeom, glowMatProto.clone());
+      glow.position.set(x, y + 0.05, z);
+      glow.renderOrder = 2;
+      this.group.add(glow);
 
       let numberToken: THREE.Mesh | null = null;
-      let numberRestY = TILE_HEIGHT + 0.04;
-
-      const skirt = new THREE.Mesh(
-        new THREE.CylinderGeometry(HEX_SIZE * 0.94, HEX_SIZE * 1.08, 0.22, 6),
-        toonMat(STYLE.dirt),
-      );
-      skirt.position.set(x, -0.1, z);
-      skirt.receiveShadow = true;
-      this.group.add(skirt);
-      this.accents.push(skirt);
-
-      const rim = new THREE.Mesh(
-        rimGeom,
-        new THREE.MeshBasicMaterial({
-          color: STYLIZED_TERRAIN_SIDE[terrain],
-          side: THREE.DoubleSide,
-        }),
-      );
-      rim.position.set(x, TILE_HEIGHT + 0.002, z);
-      this.group.add(rim);
-      this.accents.push(rim);
-
+      let numberRestY = y + 0.07;
       if (hex.number !== null) {
-        numberRestY = TILE_HEIGHT + 0.04;
         numberToken = new THREE.Mesh(
-          new THREE.CircleGeometry(0.3, 6),
+          new THREE.CircleGeometry(0.26, 24),
           new THREE.MeshBasicMaterial({ map: numberTexture(hex.number), transparent: true }),
         );
         numberToken.rotation.x = -Math.PI / 2;
@@ -155,15 +130,17 @@ export class Board {
       }
 
       this.hexVisuals.set(hex.id, {
-        mesh,
-        restingY: 0,
-        baseEmissive: 0,
+        pick,
+        glow,
+        restingY: y,
         numberToken,
         numberRestY,
+        worldX: x,
+        worldZ: z,
       });
     }
 
-    this.drawHarbors(board);
+    this.drawHarbors(board, field);
   }
 
   clear(): void {
@@ -180,28 +157,30 @@ export class Board {
     this.harborSprites = [];
   }
 
-  private drawHarbors(board: BoardState): void {
+  private drawHarbors(board: BoardState, field: IslandField): void {
     this.harborGroup.clear();
     this.harborSprites = [];
     for (const h of board.harbors) {
       const edge = board.edges.get(h.edgeId);
       if (!edge) continue;
       const outward = new THREE.Vector2(edge.midX, edge.midZ).normalize();
-      const px = edge.midX + outward.x * 0.7;
-      const pz = edge.midZ + outward.y * 0.7;
+      const px = edge.midX + outward.x * 0.85;
+      const pz = edge.midZ + outward.y * 0.85;
+      const py = Math.max(0.03, field.heightAt(px, pz));
 
       const pier = new THREE.Mesh(
-        new THREE.BoxGeometry(0.35, 0.06, 0.18),
+        new THREE.BoxGeometry(0.38, 0.05, 0.16),
         toonMat(STYLE.woodTrim),
       );
-      pier.position.set(px, 0.02, pz);
+      pier.position.set(px, py, pz);
       pier.rotation.y = -Math.atan2(outward.y, outward.x);
       pier.castShadow = true;
       this.harborGroup.add(pier);
+      this.accents.push(pier);
 
       const label = h.type === 'generic' ? '3:1' : `2:1 ${h.type[0].toUpperCase()}`;
       const sprite = makeLabelSprite(label, h.type === 'generic' ? '#ffe8c0' : '#fff0a8');
-      const bobBaseY = TILE_HEIGHT + 0.4;
+      const bobBaseY = py + 0.42;
       sprite.position.set(px, bobBaseY, pz);
       sprite.userData.bobPhase = Math.atan2(pz, px);
       sprite.userData.bobBaseY = bobBaseY;
@@ -212,48 +191,36 @@ export class Board {
 
   update(elapsed: number, dt: number, motion: MotionFeel): void {
     this.elapsed = elapsed;
-    this.updateLegalFade(dt, motion);
-    this.updateHoverAndPulse(dt, motion);
+    this.updateGlow(dt, motion);
     this.updateHarborBob(elapsed, motion);
   }
 
-  private updateLegalFade(dt: number, motion: MotionFeel): void {
+  private updateGlow(dt: number, motion: MotionFeel): void {
     const pulse = 0.82 + Math.sin(this.elapsed * 3.2) * 0.1;
     const step = 1 - Math.exp(-motion.highlightFade * dt);
-    for (const [id, vis] of this.hexVisuals) {
-      const target = this.legalHexes.has(id) ? 0.42 * pulse : 0;
-      for (const mat of hexToonMats(vis.mesh)) {
-        mat.emissiveIntensity += (target - mat.emissiveIntensity) * step;
-      }
-    }
-  }
+    const tokenStep = 1 - Math.exp(-10 * dt);
 
-  private updateHoverAndPulse(dt: number, motion: MotionFeel): void {
-    const step = 1 - Math.exp(-10 * dt);
     for (const [id, vis] of this.hexVisuals) {
-      vis.mesh.position.y = vis.restingY;
+      const legal = this.legalHexes.has(id);
       const hovered = this.hoverHexId === id;
-      const mats = hexToonMats(vis.mesh);
-      if (hovered && !this.legalHexes.has(id)) {
-        const lift = Math.min(0.22, motion.hoverLift * 4);
-        for (const mat of mats) {
-          mat.emissive.set(0x445566);
-          mat.emissiveIntensity = Math.max(mat.emissiveIntensity, lift);
-        }
+      let target = 0;
+      const mat = vis.glow.material as THREE.MeshBasicMaterial;
+      if (legal) {
+        target = 0.38 * pulse;
+        mat.color.set(0xffe08a);
+      } else if (hovered) {
+        target = Math.min(0.32, motion.hoverLift * 8);
+        mat.color.set(0xa8d4ff);
       }
 
-      let pulse = this.productionPulse.get(id) ?? 0;
-      if (pulse > 0) {
-        pulse = Math.max(0, pulse - dt);
-        this.productionPulse.set(id, pulse);
-        const wave = Math.sin((motion.productionPulseSec - pulse) * Math.PI * 3) * Math.min(1, pulse * 2);
+      let pulseLeft = this.productionPulse.get(id) ?? 0;
+      if (pulseLeft > 0) {
+        pulseLeft = Math.max(0, pulseLeft - dt);
+        this.productionPulse.set(id, pulseLeft);
+        const wave = Math.sin((motion.productionPulseSec - pulseLeft) * Math.PI * 3) * Math.min(1, pulseLeft * 2);
         const boost = Math.max(0, wave) * motion.productionPulseStrength;
-        if (!this.legalHexes.has(id)) {
-          for (const mat of mats) {
-            mat.emissive.set(0x886622);
-            mat.emissiveIntensity = Math.max(mat.emissiveIntensity, boost);
-          }
-        }
+        target = Math.max(target, boost * 0.55);
+        if (!legal) mat.color.set(0xffcc66);
         if (vis.numberToken) {
           const bob = Math.max(0, wave) * 0.08;
           const scale = 1 + Math.max(0, wave) * (0.12 + motion.productionPulseStrength * 0.2);
@@ -261,16 +228,19 @@ export class Board {
           vis.numberToken.scale.setScalar(scale);
         }
       } else if (vis.numberToken) {
-        vis.numberToken.position.y += (vis.numberRestY - vis.numberToken.position.y) * step;
+        vis.numberToken.position.y += (vis.numberRestY - vis.numberToken.position.y) * tokenStep;
         const s = vis.numberToken.scale.x;
-        vis.numberToken.scale.setScalar(s + (1 - s) * step);
+        vis.numberToken.scale.setScalar(s + (1 - s) * tokenStep);
       }
+
+      mat.opacity += (target - mat.opacity) * step;
+      vis.glow.visible = mat.opacity > 0.02;
     }
   }
 
   private updateHarborBob(time: number, motion: MotionFeel): void {
     for (const sprite of this.harborSprites) {
-      const base = (sprite.userData.bobBaseY as number) ?? TILE_HEIGHT + 0.4;
+      const base = (sprite.userData.bobBaseY as number) ?? 0.5;
       const phase = (sprite.userData.bobPhase as number) ?? 0;
       sprite.position.y = base + Math.sin(time * 1.4 + phase) * motion.harborBobAmp;
     }

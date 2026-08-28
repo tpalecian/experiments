@@ -7,6 +7,7 @@ import {
   STYLIZED_TERRAIN,
   STYLIZED_TERRAIN_SIDE,
   getMeadowFloorMaterial,
+  painterlyMat,
   toonMat,
 } from '../../style/style';
 import type { AssetCreateOptions } from './types';
@@ -259,11 +260,11 @@ export function makeTree(opts?: AssetCreateOptions): THREE.Object3D {
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.16, 5), toonMat(STYLE.woodTrim));
   trunk.position.y = 0.08;
   trunk.castShadow = true;
-  const canopy = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.32, 5), toonMat(0x3d9a4a));
-  canopy.position.y = 0.3;
+  const canopy = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.4, 6), toonMat(0x3d9a4a));
+  canopy.position.y = 0.36;
   canopy.castShadow = true;
-  const canopy2 = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.24, 5), toonMat(0x52b85c));
-  canopy2.position.y = 0.42;
+  const canopy2 = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.28, 6), toonMat(0x52b85c));
+  canopy2.position.y = 0.52;
   canopy2.castShadow = true;
   g.add(trunk, canopy, canopy2);
   g.scale.setScalar(scale);
@@ -303,6 +304,96 @@ export function makeCactus(_opts?: AssetCreateOptions): THREE.Object3D {
   arm.castShadow = true;
   cactus.add(trunk, arm);
   return cactus;
+}
+
+/** Faceted ore peak — silhouette-first mountain. */
+export function makeMountain(opts?: AssetCreateOptions): THREE.Object3D {
+  const g = new THREE.Group();
+  const rock = painterlyMat(0x8a909c, { flat: true });
+  const dark = painterlyMat(0x6a7280, { flat: true });
+  const peak = new THREE.Mesh(new THREE.ConeGeometry(0.38, 1.05, 5), rock);
+  peak.position.y = 0.52;
+  peak.castShadow = true;
+  const shoulder = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.62, 5), dark);
+  shoulder.position.set(0.22, 0.3, -0.08);
+  shoulder.rotation.y = 0.4;
+  shoulder.castShadow = true;
+  const nugget = new THREE.Mesh(new THREE.DodecahedronGeometry(0.08, 0), painterlyMat(0xc4a45a, { flat: true }));
+  nugget.position.set(-0.16, 0.12, 0.1);
+  nugget.castShadow = true;
+  g.add(peak, shoulder, nugget);
+  if (opts?.scale !== undefined) g.scale.setScalar(opts.scale);
+  return g;
+}
+
+/** Tiny wheat-field barn. */
+export function makeBarn(_opts?: AssetCreateOptions): THREE.Object3D {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.16, 0.2), toonMat(0xc45a3a));
+  body.position.y = 0.08;
+  body.castShadow = true;
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.14, 4), toonMat(STYLE.roof));
+  roof.position.y = 0.22;
+  roof.rotation.y = Math.PI / 4;
+  roof.scale.set(1.35, 1, 0.85);
+  roof.castShadow = true;
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.02), toonMat(STYLE.woodTrim));
+  door.position.set(0, 0.06, 0.11);
+  g.add(body, roof, door);
+  return g;
+}
+
+/** Tiny field windmill. */
+export function makeWindmill(_opts?: AssetCreateOptions): THREE.Object3D {
+  const g = new THREE.Group();
+  const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.32, 6), toonMat(0xe8dcc0));
+  tower.position.y = 0.16;
+  tower.castShadow = true;
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.08, 6), toonMat(STYLE.roof));
+  cap.position.y = 0.36;
+  cap.castShadow = true;
+  const hub = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 5), toonMat(STYLE.woodTrim));
+  hub.position.set(0, 0.3, 0.06);
+  const bladeGeo = new THREE.BoxGeometry(0.22, 0.03, 0.012);
+  for (let i = 0; i < 4; i++) {
+    const blade = new THREE.Mesh(bladeGeo, toonMat(0xf4efe4));
+    blade.position.set(0, 0.3, 0.07);
+    blade.rotation.z = (i * Math.PI) / 2;
+    blade.translateX(0.1);
+    blade.castShadow = true;
+    g.add(blade);
+  }
+  g.add(tower, cap, hub);
+  return g;
+}
+
+/** Fallen forest log. */
+export function makeFallenLog(opts?: AssetCreateOptions): THREE.Object3D {
+  const log = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 0.32, 6), toonMat(STYLE.woodTrim));
+  log.rotation.z = Math.PI / 2;
+  log.rotation.y = 0.3;
+  log.position.y = 0.04;
+  log.castShadow = true;
+  if (opts?.scale !== undefined) log.scale.setScalar(opts.scale);
+  return log;
+}
+
+/** Desert oasis — shallow pool + palms. */
+export function makeOasis(_opts?: AssetCreateOptions): THREE.Object3D {
+  const g = new THREE.Group();
+  const pool = new THREE.Mesh(
+    new THREE.CircleGeometry(0.16, 10),
+    new THREE.MeshBasicMaterial({ color: 0x3ec8d8, transparent: true, opacity: 0.85 }),
+  );
+  pool.rotation.x = -Math.PI / 2;
+  pool.position.y = 0.012;
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.02, 6, 12), toonMat(0xe8d4a8));
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.014;
+  const palm = makeTree({ scale: 0.45 });
+  palm.position.set(0.14, 0, 0.04);
+  g.add(pool, rim, palm);
+  return g;
 }
 
 export function makeNumberToken(opts?: AssetCreateOptions): THREE.Object3D {

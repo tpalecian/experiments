@@ -66,7 +66,7 @@ export class Lighting {
     this.rim.intensity = atm.rimIntensity;
 
     this.sun.castShadow = atm.shadowStrength > 0.05;
-    this.sun.shadow.radius = atm.shadowStrength < 0.55 ? 3.5 : 1.25;
+    this.sun.shadow.radius = atm.shadowStrength < 0.55 ? 4.8 : 2.4;
     this.sun.shadow.bias = -0.0008;
   }
 

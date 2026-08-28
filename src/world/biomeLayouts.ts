@@ -19,6 +19,11 @@ export const BIOME_PROP_KINDS = [
   'rock',
   'mesa',
   'cactus',
+  'barn',
+  'windmill',
+  'fallen-log',
+  'mountain',
+  'oasis',
 ] as const;
 
 export type BiomePropKind = (typeof BIOME_PROP_KINDS)[number];
@@ -90,40 +95,48 @@ function prop(
   return p;
 }
 
-/** One authored layout per terrain approximating the former procedural scatter. */
+/** One authored layout per terrain approximating silhouette-first diorama biomes. */
 export function createDefaultLayouts(): BiomeLayout[] {
   const layouts: BiomeLayout[] = [];
 
-  // Forest — 3 trees
+  // Forest — dense oversized trees
   {
     const rand = seeded(101);
     const props: BiomePropInstance[] = [];
-    for (let i = 0; i < 3; i++) {
-      const a = rand() * Math.PI * 2;
-      const d = 0.25 + rand() * 0.4;
-      props.push(prop(rand, 'tree', Math.cos(a) * d, Math.sin(a) * d, rand() * Math.PI, 0.7 + rand() * 0.4));
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + rand() * 0.4;
+      const d = 0.18 + rand() * 0.42;
+      props.push(prop(rand, 'tree', Math.cos(a) * d, Math.sin(a) * d, rand() * Math.PI, 0.95 + rand() * 0.55));
     }
+    props.push(prop(rand, 'fallen-log', 0.12, -0.28, 0.6, 0.9));
+    props.push(prop(rand, 'rock', -0.32, 0.18, rand() * Math.PI, 0.55));
     layouts.push({ id: 'wood-default', name: 'Grove', terrain: 'wood', props });
   }
   {
     const rand = seeded(102);
     const props: BiomePropInstance[] = [];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 8; i++) {
       const a = rand() * Math.PI * 2;
-      const d = 0.2 + rand() * 0.45;
-      props.push(prop(rand, 'tree', Math.cos(a) * d, Math.sin(a) * d, rand() * Math.PI, 0.65 + rand() * 0.45));
+      const d = 0.12 + rand() * 0.5;
+      props.push(prop(rand, 'tree', Math.cos(a) * d, Math.sin(a) * d, rand() * Math.PI, 0.85 + rand() * 0.6));
     }
+    props.push(prop(rand, 'pine', -0.38, 0.3, 0.2, 0.7));
+    props.push(prop(rand, 'fallen-log', -0.1, 0.22, -0.4, 0.8));
     layouts.push({ id: 'wood-dense', name: 'Dense canopy', terrain: 'wood', props });
   }
 
-  // Hills — mesa
+  // Brick — terraces and clay
   {
     const rand = seeded(201);
     layouts.push({
       id: 'brick-default',
       name: 'Mesa',
       terrain: 'brick',
-      props: [prop(rand, 'mesa', (rand() - 0.5) * 0.3, (rand() - 0.5) * 0.3, 0, 1)],
+      props: [
+        prop(rand, 'mesa', 0.05, -0.04, 0.1, 1.15),
+        prop(rand, 'rock', 0.32, 0.18, 0.4, 0.7),
+        prop(rand, 'bush', -0.28, 0.22, 0, 0.7, 1),
+      ],
     });
   }
   {
@@ -132,7 +145,11 @@ export function createDefaultLayouts(): BiomeLayout[] {
       id: 'brick-offset',
       name: 'Offset mesa',
       terrain: 'brick',
-      props: [prop(rand, 'mesa', 0.22, -0.12, rand() * 0.4, 1.05)],
+      props: [
+        prop(rand, 'mesa', 0.18, -0.12, rand() * 0.4, 1.05),
+        prop(rand, 'rock', -0.22, 0.2, 1.1, 0.6),
+        prop(rand, 'rock', 0.3, 0.28, 0.2, 0.45),
+      ],
     });
   }
 
@@ -148,9 +165,9 @@ export function createDefaultLayouts(): BiomeLayout[] {
       );
     }
     for (let e = 0; e < 6; e++) {
-      if (rand() > 0.62) continue;
+      if (rand() > 0.55) continue;
       const a = (e * Math.PI) / 3;
-      const d = 0.72;
+      const d = 0.58;
       props.push(
         prop(
           rand,
@@ -182,11 +199,6 @@ export function createDefaultLayouts(): BiomeLayout[] {
       const d = 0.25 + rand() * 0.4;
       props.push(prop(rand, 'flower-tuft', Math.cos(a) * d, Math.sin(a) * d, 0, 1, Math.floor(rand() * 2)));
     }
-    {
-      const a = rand() * Math.PI * 2;
-      const d = 0.42 + rand() * 0.28;
-      props.push(prop(rand, 'pine', Math.cos(a) * d, Math.sin(a) * d, rand() * Math.PI, 0.55 + rand() * 0.25));
-    }
     layouts.push({ id: 'sheep-default', name: 'Meadow flock', terrain: 'sheep', props });
   }
   {
@@ -201,75 +213,78 @@ export function createDefaultLayouts(): BiomeLayout[] {
     }
     for (let e = 0; e < 6; e += 2) {
       const a = (e * Math.PI) / 3;
-      const d = 0.7;
+      const d = 0.55;
       props.push(prop(rand, 'stone-wall', Math.cos(a) * d, Math.sin(a) * d, a + Math.PI * 0.5, 1, 0));
     }
+    props.push(prop(rand, 'flower-tuft', 0.2, -0.15, 0, 1.1, 0));
     layouts.push({ id: 'sheep-open', name: 'Open pasture', terrain: 'sheep', props });
   }
 
-  // Wheat — stalks
+  // Wheat — crop rows + barn / mill
   {
     const rand = seeded(401);
     const props: BiomePropInstance[] = [];
-    for (let i = 0; i < 5; i++) {
-      const a = rand() * Math.PI * 2;
-      const d = 0.2 + rand() * 0.45;
-      props.push(prop(rand, 'wheat', Math.cos(a) * d, Math.sin(a) * d, 0, 1));
+    for (let row = -2; row <= 2; row++) {
+      for (let col = -1; col <= 1; col++) {
+        props.push(prop(rand, 'wheat', col * 0.22 + 0.04, row * 0.16, 0.05, 0.95 + rand() * 0.15));
+      }
     }
+    props.push(prop(rand, 'barn', 0.28, 0.32, 0.4, 1));
     layouts.push({ id: 'wheat-default', name: 'Field rows', terrain: 'wheat', props });
   }
   {
     const rand = seeded(402);
     const props: BiomePropInstance[] = [];
-    for (let i = 0; i < 7; i++) {
-      const a = rand() * Math.PI * 2;
-      const d = 0.15 + rand() * 0.5;
-      props.push(prop(rand, 'wheat', Math.cos(a) * d, Math.sin(a) * d, rand() * 0.3, 0.9 + rand() * 0.2));
+    for (let i = 0; i < 9; i++) {
+      const col = (i % 3) - 1;
+      const row = Math.floor(i / 3) - 1;
+      props.push(prop(rand, 'wheat', col * 0.24, row * 0.18, rand() * 0.2, 0.9 + rand() * 0.2));
     }
+    props.push(prop(rand, 'windmill', -0.3, 0.28, 0.2, 1));
     layouts.push({ id: 'wheat-lush', name: 'Lush field', terrain: 'wheat', props });
   }
 
-  // Ore — rocks
+  // Ore — dramatic faceted peaks
   {
     const rand = seeded(501);
     const props: BiomePropInstance[] = [];
-    for (let i = 0; i < 3; i++) {
-      const a = rand() * Math.PI * 2;
-      const d = 0.2 + rand() * 0.4;
-      props.push(prop(rand, 'rock', Math.cos(a) * d, Math.sin(a) * d, rand() * Math.PI, 0.85 + rand() * 0.7));
-    }
+    props.push(prop(rand, 'mountain', 0.02, -0.04, 0.2, 1.05));
+    props.push(prop(rand, 'rock', 0.32, 0.18, rand() * Math.PI, 0.85));
+    props.push(prop(rand, 'rock', -0.28, 0.22, rand() * Math.PI, 0.7));
     layouts.push({ id: 'ore-default', name: 'Rock pile', terrain: 'ore', props });
   }
   {
     const rand = seeded(502);
     const props: BiomePropInstance[] = [];
-    for (let i = 0; i < 4; i++) {
-      const a = rand() * Math.PI * 2;
-      const d = 0.18 + rand() * 0.42;
-      props.push(prop(rand, 'rock', Math.cos(a) * d, Math.sin(a) * d, rand() * Math.PI, 0.7 + rand() * 0.8));
-    }
+    props.push(prop(rand, 'mountain', -0.12, 0.08, 0.5, 0.92));
+    props.push(prop(rand, 'mountain', 0.28, -0.18, -0.3, 0.62));
+    props.push(prop(rand, 'rock', 0.08, 0.34, rand() * Math.PI, 0.65));
     layouts.push({ id: 'ore-craggy', name: 'Craggy ridge', terrain: 'ore', props });
   }
 
-  // Desert — cactus
+  // Desert — dunes, cactus, oasis
   {
     const rand = seeded(601);
     layouts.push({
       id: 'desert-default',
       name: 'Lone cactus',
       terrain: 'desert',
-      props: [prop(rand, 'cactus', 0.25, -0.15, 0, 1)],
+      props: [
+        prop(rand, 'cactus', 0.22, -0.12, 0.1, 1.1),
+        prop(rand, 'cactus', -0.28, 0.18, -0.2, 0.75),
+        prop(rand, 'rock', 0.1, 0.3, 0.4, 0.45),
+      ],
     });
   }
   {
     const rand = seeded(602);
     layouts.push({
       id: 'desert-pair',
-      name: 'Cactus pair',
+      name: 'Oasis',
       terrain: 'desert',
       props: [
-        prop(rand, 'cactus', 0.2, -0.2, 0.2, 1),
-        prop(rand, 'cactus', -0.28, 0.15, -0.3, 0.75),
+        prop(rand, 'oasis', 0.05, 0.02, 0, 1),
+        prop(rand, 'cactus', -0.32, 0.22, -0.3, 0.8),
       ],
     });
   }
@@ -421,6 +436,8 @@ const SCALE_VIA_OPTS: ReadonlySet<BiomePropKind> = new Set([
   'pasture-rock',
   'flower-tuft',
   'rock',
+  'mountain',
+  'fallen-log',
 ]);
 
 /** Instantiate a layout prop as a Three.js object (local xz; preserves factory local y). */
@@ -448,12 +465,16 @@ export function stampLayout(
   worldX: number,
   worldY: number,
   worldZ: number,
+  heightAt?: (x: number, z: number) => number,
 ): void {
   for (const instance of layout.props) {
     const obj = createPropObject(instance);
     if (!obj) continue;
+    const wx = worldX + instance.x;
+    const wz = worldZ + instance.z;
+    const wy = heightAt ? heightAt(wx, wz) : worldY;
     obj.position.x += worldX;
-    obj.position.y += worldY;
+    obj.position.y += wy;
     obj.position.z += worldZ;
     parent.add(obj);
   }

@@ -21,7 +21,7 @@ export const STYLE = {
   dirt: 0x8b6a42,
 } as const;
 
-/** Hand-painted terrain tops. */
+/** Hand-painted terrain tops (legacy hex / asset-lab tiles). */
 export const STYLIZED_TERRAIN: Record<Terrain, number> = {
   wood: 0x3f8f4a,
   brick: 0xd4784a,
@@ -30,6 +30,19 @@ export const STYLIZED_TERRAIN: Record<Terrain, number> = {
   ore: 0x8a92a6,
   desert: 0xe8c988,
 };
+
+/** Diorama island vertex palette — vibrant, controlled, silhouette-first. */
+export const DIORAMA_TERRAIN: Record<Terrain, number> = {
+  wood: 0x2d7a3c,
+  brick: 0xc45e32,
+  sheep: 0x7ecf52,
+  wheat: 0xe8c24a,
+  ore: 0x8a909c,
+  desert: 0xe4d2a4,
+};
+
+export const DIORAMA_SAND = 0xe8dcc0;
+export const DIORAMA_SAND_WET = 0xd4c49a;
 
 /** Slightly darker sides for chunky hex blocks. */
 export const STYLIZED_TERRAIN_SIDE: Record<Terrain, number> = {
@@ -123,5 +136,17 @@ export function standardStylized(
     roughness: opts?.roughness ?? 0.72,
     metalness: 0.02,
     flatShading: opts?.flat ?? true,
+  });
+}
+
+/** Soft matte Lambert for the island mesh and painterly props. */
+export function painterlyMat(
+  color: number,
+  opts?: { flat?: boolean; vertexColors?: boolean },
+): THREE.MeshLambertMaterial {
+  return new THREE.MeshLambertMaterial({
+    color,
+    flatShading: opts?.flat ?? false,
+    vertexColors: opts?.vertexColors ?? false,
   });
 }

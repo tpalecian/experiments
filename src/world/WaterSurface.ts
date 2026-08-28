@@ -4,17 +4,18 @@ import { capWaterSegments, getQualityCaps } from '../core/Quality';
 import type { AtmosphereSnapshot } from './Atmosphere';
 import type { StyleConfig } from '../style/styleConfig';
 import { DEFAULT_STYLE_CONFIG } from '../style/styleConfig';
+import { WATER_INLAND_DISCARD, coastShaderChunk } from './islandField';
 
 /** Max land hexes supported by the water shoreline SDF (huge map = 61). */
 export const WATER_MAX_HEXES = 64;
 
 /**
- * Bruno Simon–inspired reflective water for the hex board (WebGL).
+ * Bruno Simon–inspired reflective water for the island diorama (WebGL).
  *
  * Port of folio-2025 `WaterSurface.js` ideas into WebGL:
  *   - frosted mirrored scene (hash-blur stand-in via multi-tap)
- *   - hex-SDF shore / discard (keep Catan tiles readable)
- *   - thin glowing shore lip flush to hex coast (Bruno `shoreNode`)
+ *   - organic coast SDF / discard (same field as the island mesh)
+ *   - thin glowing shore lip flush to the beach (Bruno `shoreNode`)
  *   - sparse thin arc ripples on near-shore proximity (Bruno `ripplesNode`)
  *   - quiet open-water brightness drift (craft; default off)
  *   - depth colour underneath (navy → cyan shelf)
@@ -37,23 +38,7 @@ varying vec3 vViewDir;
 varying float vWave;
 varying vec4 vReflectCoord;
 
-float sdHexagon(vec2 p, float r) {
-  p = abs(p.yx);
-  vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
-  p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
-  p -= vec2(clamp(p.x, -k.z * r, k.z * r), r);
-  return length(p) * sign(p.y);
-}
-
-float shoreDistance(vec2 p) {
-  float d = 1e5;
-  for (int i = 0; i < ${WATER_MAX_HEXES}; i++) {
-    float alive = step(float(i), float(uHexCount) - 0.5);
-    float hd = sdHexagon(p - uHexCenters[i], uHexApothem);
-    d = min(d, mix(1e5, hd, alive));
-  }
-  return d;
-}
+${coastShaderChunk(WATER_MAX_HEXES)}
 
 float swell(vec2 p, float t) {
   float w =
@@ -154,23 +139,7 @@ varying vec3 vViewDir;
 varying float vWave;
 varying vec4 vReflectCoord;
 
-float sdHexagon(vec2 p, float r) {
-  p = abs(p.yx);
-  vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
-  p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
-  p -= vec2(clamp(p.x, -k.z * r, k.z * r), r);
-  return length(p) * sign(p.y);
-}
-
-float shoreDistance(vec2 p) {
-  float d = 1e5;
-  for (int i = 0; i < ${WATER_MAX_HEXES}; i++) {
-    float alive = step(float(i), float(uHexCount) - 0.5);
-    float hd = sdHexagon(p - uHexCenters[i], uHexApothem);
-    d = min(d, mix(1e5, hd, alive));
-  }
-  return d;
-}
+${coastShaderChunk(WATER_MAX_HEXES)}
 
 float softBand(float x) {
   float s = 0.5 + 0.5 * sin(x);
@@ -226,13 +195,14 @@ void main() {
   float shore = max(uShoreWidth, 0.001);
   float deepSpan = max(uDeepFade, 0.001);
 
-  // Under land tiles — keep water out so hex edges stay crisp
-  if (shoreDist < 0.0) discard;
+  // Inland of the sand shelf — terrain covers this. Keep water over shallows.
+  if (shoreDist < -${WATER_INLAND_DISCARD.toFixed(3)}) discard;
 
-  // Depth colour must NOT use min(hex SDF) — those iso-contours paint
-  // hex-shaped light/dark bands and bubble arcs into the blue water.
-  // Circular island envelope + one continuous ramp (no multi-stop rings).
-  float depthDist = max(0.0, length(vWorldPos.xz) - uIslandRadius);
+  // Organic coast ramp near land; circular envelope only in open ocean
+  // so we do not paint hex-shaped iso-bands far from shore.
+  float organicDepth = max(0.0, shoreDist);
+  float radialDepth = max(0.0, length(vWorldPos.xz) - uIslandRadius);
+  float depthDist = mix(organicDepth, radialDepth, smoothstep(1.4, 8.0, organicDepth));
   float depthT = clamp(depthDist / (shore + deepSpan), 0.0, 1.0);
   depthT = depthT * depthT * (3.0 - 2.0 * depthT);
 
@@ -382,7 +352,8 @@ void main() {
   col = mix(col, fadeCol, haze);
   if (keep < 0.04) discard;
 
-  gl_FragColor = vec4(col, keep);
+  float shallowAlpha = mix(0.42, 1.0, smoothstep(-0.12, 1.7, shoreDist));
+  gl_FragColor = vec4(col, keep * shallowAlpha);
 }
 `;
 

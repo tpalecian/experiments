@@ -212,6 +212,10 @@ export class Game {
         break;
       case 'hex':
         this.engine.clickHex(hit.id);
+        {
+          const pos = this.world.getHexWorld(hit.id, this.robberLook);
+          if (pos) this.cameraRig.nudgeToward(pos, this.world.getMotion());
+        }
         break;
       default: {
         const _exhaustive: never = hit.kind;
