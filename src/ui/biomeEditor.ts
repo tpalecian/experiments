@@ -169,7 +169,7 @@ export function startBiomeEditor(): void {
   scene.add(stage);
 
   const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(5 * HEX_SIZE, 48),
+    new THREE.CircleGeometry(5, 48),
     new THREE.MeshToonMaterial({ color: 0xd8c4a0 }),
   );
   ground.rotation.x = -Math.PI / 2;
@@ -295,11 +295,11 @@ export function startBiomeEditor(): void {
   function applyCameraPreset(preset: CameraPreset): void {
     cameraPreset = preset;
     if (preset === 'isometric') {
-      camera.position.set(4.2, 4.6, 4.2);
+      camera.position.set(3.4, 3.8, 3.4);
       controls.target.set(0, TILE_HEIGHT * 0.4, 0);
       controls.enableRotate = true;
     } else {
-      camera.position.set(3.2, 2.8, 4.6);
+      camera.position.set(2.6, 2.4, 3.8);
       controls.target.set(0, TILE_HEIGHT * 0.5, 0);
     }
     controls.update();
