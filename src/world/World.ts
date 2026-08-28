@@ -20,7 +20,6 @@ export class World {
   private readonly pieces = new Pieces();
   private readonly props = new Props();
   private readonly water = new WaterSurface();
-  private pickables: THREE.Object3D[] = [];
   private motion: MotionFeel = motionFromStyle();
 
   constructor() {
@@ -32,7 +31,11 @@ export class World {
   }
 
   getPickables(): THREE.Object3D[] {
-    return this.pickables;
+    return [...this.board.getPickables(), ...this.highlights.getPickables()];
+  }
+
+  setCoarsePointer(coarse: boolean): void {
+    this.highlights.setCoarsePointer(coarse);
   }
 
   getRobberPosition(out = new THREE.Vector3()): THREE.Vector3 {
@@ -103,7 +106,6 @@ export class World {
     this.highlights.build(board);
     this.pieces.sync(board, this.motion, false);
     this.syncHighlights([], [], []);
-    this.pickables = [...this.board.getPickables(), ...this.highlights.getPickables()];
   }
 
   syncPieces(board: BoardState, animate = true): void {

@@ -21,6 +21,7 @@ export class Hud {
   private lastDiceKey = '';
   private assetLabHref = '?view=assets';
   private biomeEditorHref = '?view=biome-editor';
+  private onResetView: (() => void) | null = null;
 
   constructor(
     hudEl: HTMLElement,
@@ -41,6 +42,14 @@ export class Hud {
   setBiomeEditorHref(href: string): void {
     this.biomeEditorHref = href;
     if (this.engine.snapshot().phase === 'lobby') this.renderLobby();
+  }
+
+  setResetView(fn: () => void): void {
+    this.onResetView = fn;
+  }
+
+  private prefersTap(): boolean {
+    return window.matchMedia('(pointer: coarse), (max-width: 720px)').matches;
   }
 
   private renderLobby(): void {
@@ -118,9 +127,12 @@ export class Hud {
 
     this.root.innerHTML = `
       <div class="top-bar">
-        <div class="panel">
-          <h2>${escapeHtml(s.message)}</h2>
-          <p class="msg">${rollHtml} · ${MAP_SIZES[s.mapSize].label} · Win at ${s.winVp} VP · Phase: ${s.phase}${s.longestRoadOwner !== null ? ` · Longest Road: ${s.players[s.longestRoadOwner].name}` : ''}</p>
+        <div class="panel msg-panel">
+          <h2 class="msg-title">${escapeHtml(s.message)}</h2>
+          <p class="msg">
+            <span class="msg-dice">${rollHtml}</span>
+            <span class="msg-meta"> · ${MAP_SIZES[s.mapSize].label} · Win at ${s.winVp} VP · Phase: ${s.phase}${s.longestRoadOwner !== null ? ` · Longest Road: ${s.players[s.longestRoadOwner].name}` : ''}</span>
+          </p>
           ${s.productionLog ? `<p class="log${diceFresh ? ' log-enter' : ''}">${escapeHtml(s.productionLog)}</p>` : ''}
         </div>
         <div class="panel players">
@@ -129,21 +141,21 @@ export class Hud {
               (p) => `
             <div class="player-row ${p.id === s.currentPlayer ? 'current' : ''}">
               <span class="swatch" style="background:#${p.color.toString(16).padStart(6, '0')}"></span>
-              <span>${p.name}</span>
-              <span>${p.victoryPoints} VP</span>
-              <span>${bankTotal(p.resources)} cards</span>
+              <span class="player-name">${p.name}</span>
+              <span class="player-vp">${p.victoryPoints} VP</span>
+              <span class="player-cards">${bankTotal(p.resources)} cards</span>
             </div>`,
             )
             .join('')}
         </div>
       </div>
       <div class="bottom-bar">
-        <div class="panel">
-          <div style="margin-bottom:0.45rem;font-size:0.8rem;color:var(--muted)">${current.name}'s resources</div>
+        <div class="panel resources-panel">
+          <div class="resources-label">${current.name}'s resources</div>
           <div class="resources">
             ${RESOURCES.map(
               (r) => `
-              <span class="res-chip"><span class="res-dot" style="background:${RES_COLORS[r]}"></span>${r} ${current.resources[r]}</span>`,
+              <span class="res-chip"><span class="res-dot" style="background:${RES_COLORS[r]}"></span><span class="res-name">${r}</span> ${current.resources[r]}</span>`,
             ).join('')}
           </div>
         </div>
@@ -159,10 +171,10 @@ export class Hud {
 
   private actionButtons(s: EngineSnapshot): string {
     if (s.phase === 'gameOver') {
-      return `<button class="btn" data-action="restart">Play again</button>`;
+      return `<button class="btn btn-cta" data-action="restart">Play again</button>`;
     }
     if (s.phase === 'roll') {
-      return `<button class="btn" data-action="roll">Roll dice</button>`;
+      return `<button class="btn btn-cta" data-action="roll">Roll dice</button>`;
     }
     if (s.phase === 'main') {
       return `
@@ -170,11 +182,15 @@ export class Hud {
         <button class="btn secondary ${s.buildMode === 'settlement' ? 'active' : ''}" data-action="build-settlement">Settlement</button>
         <button class="btn secondary ${s.buildMode === 'city' ? 'active' : ''}" data-action="build-city">City</button>
         <button class="btn secondary" data-action="trade">Bank trade</button>
-        <button class="btn" data-action="end">End turn</button>
+        <button class="btn btn-cta" data-action="end">End turn</button>
       `;
     }
     if (s.phase === 'setupSettlement' || s.phase === 'setupRoad' || s.phase === 'robber') {
-      return `<span class="panel" style="pointer-events:none;font-size:0.85rem;color:var(--muted)">Click the board</span>`;
+      const hint = this.prefersTap() ? 'Tap the board' : 'Click the board';
+      return `
+        <span class="board-hint">${hint}</span>
+        <button class="btn secondary" data-action="reset-view">Reset view</button>
+      `;
     }
     return '';
   }
@@ -310,6 +326,9 @@ export class Hud {
             this.lobby.classList.remove('hidden');
             this.renderLobby();
             this.root.innerHTML = '';
+            break;
+          case 'reset-view':
+            this.onResetView?.();
             break;
           default:
             break;

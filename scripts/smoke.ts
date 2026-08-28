@@ -16,6 +16,7 @@ import { RESOURCES, emptyBank } from '../src/engine/types';
 import { CRAFT_CATEGORIES, CRAFT_FIELDS } from '../src/ui/style/craftSchema';
 import { applyWeather } from '../src/world/Weather';
 import { Highlights } from '../src/world/Highlights';
+import { isTap, TAP_SLOP_PX } from '../src/input/tap';
 import { Pieces } from '../src/world/Pieces';
 import { Props } from '../src/world/Props';
 import { motionFromStyle } from '../src/world/motion';
@@ -339,6 +340,22 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   const highlights = new Highlights();
   highlights.build(engine.board);
   assert(highlights.group.children.length > 0, 'highlights populated');
+  assert(highlights.getPickables().length === 0, 'illegal sites are not pickable');
+  const verts = legalSetupSettlements(engine.board);
+  assert(verts.length > 0, 'setup has legal vertices');
+  highlights.sync(verts, []);
+  assert(highlights.getPickables().length === verts.length, 'only legal vertices are pickable');
+  const legalId = verts[0];
+  assert(
+    highlights.getPickables().every((m) => m.userData.kind === 'vertex' && verts.includes(m.userData.id)),
+    'pickables are the synced legal vertices',
+  );
+  assert(
+    highlights.getPickables().some((m) => m.userData.id === legalId && m.children.length === 1),
+    'legal vertex has a fat-finger hit child',
+  );
+  highlights.sync([], []);
+  assert(highlights.getPickables().length === 0, 'clearing legal set empties pickables');
   highlights.clear();
   assert(highlights.group.children.length === 0, 'highlights.clear removes meshes');
 
@@ -356,6 +373,15 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   pieces.reset();
   assert(pieces.robber === robber && pieces.group.children.includes(robber), 'reset keeps robber');
   console.log('ok world scene-graph ownership');
+}
+
+{
+  assert(isTap(0, 0), 'zero movement is a tap');
+  assert(isTap(TAP_SLOP_PX, 0), 'movement on slop boundary is a tap');
+  assert(!isTap(TAP_SLOP_PX + 1, 0), 'movement past slop is a drag');
+  assert(!isTap(8, 8), 'diagonal past slop is a drag');
+  assert(isTap(6, 6), 'short diagonal is a tap');
+  console.log('ok tap vs drag');
 }
 
 console.log('smoke ok');

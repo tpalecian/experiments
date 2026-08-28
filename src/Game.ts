@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GameEngine } from './engine/engine';
 import { Picker, type PickResult } from './input/picker';
+import { isTap } from './input/tap';
 import { Time } from './core/Time';
 import { Viewport } from './core/Viewport';
 import { Rendering } from './core/Rendering';
@@ -46,6 +47,9 @@ export class Game {
   private lastProductionLog = '';
   private lastRobberHex = '';
   private styleApplyTimer = 0;
+  private pointerTap: { id: number; x: number; y: number } | null = null;
+  private activePointers = new Set<number>();
+  private multiTouch = false;
 
   constructor() {
     const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas')!;
@@ -81,6 +85,8 @@ export class Game {
     const hud = new Hud(hudEl, lobbyEl, this.engine);
     hud.setAssetLabHref(assetLabHref());
     hud.setBiomeEditorHref(biomeEditorHref());
+    hud.setResetView(() => this.cameraRig.resetView(true));
+    this.world.setCoarsePointer(window.matchMedia('(pointer: coarse)').matches);
 
     this.monitor = Monitoring.enabled() ? new Monitoring() : null;
 
@@ -88,6 +94,8 @@ export class Game {
     this.engine.subscribe(() => this.syncView());
 
     canvas.addEventListener('pointerdown', (ev) => this.onPointerDown(ev));
+    canvas.addEventListener('pointerup', (ev) => this.onPointerUp(ev));
+    canvas.addEventListener('pointercancel', (ev) => this.onPointerCancel(ev));
     canvas.addEventListener('pointermove', (ev) => this.onPointerMove(ev));
     canvas.addEventListener('pointerleave', () => this.world.setHoverHex(null));
 
@@ -194,11 +202,7 @@ export class Game {
     return this.picker.pick(ev.clientX, ev.clientY, this.world.getPickables());
   }
 
-  private onPointerDown(ev: PointerEvent): void {
-    this.world.setHoverHex(null);
-    if (ev.button !== 0) return;
-    const hit = this.pickFromPointer(ev);
-    if (!hit) return;
+  private applyPick(hit: PickResult): void {
     switch (hit.kind) {
       case 'vertex':
         this.engine.clickVertex(hit.id);
@@ -214,6 +218,41 @@ export class Game {
         return _exhaustive;
       }
     }
+  }
+
+  private onPointerDown(ev: PointerEvent): void {
+    this.world.setHoverHex(null);
+    this.world.setCoarsePointer(ev.pointerType !== 'mouse');
+    this.activePointers.add(ev.pointerId);
+    if (this.activePointers.size > 1) {
+      this.multiTouch = true;
+      this.pointerTap = null;
+      return;
+    }
+    if (ev.button !== 0) {
+      this.pointerTap = null;
+      return;
+    }
+    this.multiTouch = false;
+    this.pointerTap = { id: ev.pointerId, x: ev.clientX, y: ev.clientY };
+  }
+
+  private onPointerUp(ev: PointerEvent): void {
+    const wasMulti = this.multiTouch;
+    this.activePointers.delete(ev.pointerId);
+    const tap = this.pointerTap;
+    this.pointerTap = null;
+    if (this.activePointers.size === 0) this.multiTouch = false;
+    if (!tap || tap.id !== ev.pointerId || wasMulti) return;
+    if (!isTap(ev.clientX - tap.x, ev.clientY - tap.y)) return;
+    const hit = this.pickFromPointer(ev);
+    if (hit) this.applyPick(hit);
+  }
+
+  private onPointerCancel(ev: PointerEvent): void {
+    this.activePointers.delete(ev.pointerId);
+    if (this.pointerTap?.id === ev.pointerId) this.pointerTap = null;
+    if (this.activePointers.size === 0) this.multiTouch = false;
   }
 
   private onPointerMove(ev: PointerEvent): void {

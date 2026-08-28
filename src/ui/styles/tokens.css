@@ -21,6 +21,7 @@ html,
 body {
   margin: 0;
   height: 100%;
+  height: 100dvh;
   overflow: hidden;
   background:
     radial-gradient(ellipse 90% 70% at 30% 20%, #ffe0b0 0%, transparent 55%),
@@ -41,6 +42,7 @@ body {
   width: 100%;
   height: 100%;
   outline: none;
+  touch-action: none;
 }
 
 
@@ -85,6 +87,10 @@ button:disabled {
 .btn.danger {
   background: var(--danger);
   color: #fff;
+}
+
+.btn-cta {
+  font-weight: 700;
 }
 
 #debug-monitor {
