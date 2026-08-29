@@ -334,40 +334,56 @@ void main() {
   float nearShore = smoothstep(0.05, 0.35, prox) * (1.0 - smoothstep(0.55, 0.85, prox));
   float ripple = accept * arcGate * crest * nearShore * clamp(uRippleIntensity, 0.0, 1.2);
 
-  // Painterly surf: broken strokes on the WATER side of the beach mesh
-  float foamWidth = max(uFoamWidth, 0.12);
+  // Painterly surf on the WATER (sand mesh cuts at ~0.05 hex). Inner lip is a
+  // thick irregular white band; outer layer is sparse mint-white paint dabs —
+  // not an SDF iso-ring and not a thin glow.
+  float foamWidth = max(uFoamWidth, 0.45);
   vec2 foamP = vWorldPos.xz;
-  float nBig = valueNoise(foamP * 0.58);
-  float nMid = valueNoise(foamP * 1.22 + vec2(3.1, 1.4));
-  float nFine = valueNoise(foamP * 2.45 + vec2(-2.2, 4.7));
-  float surf = shoreDist + (nBig - 0.5) * foamWidth * 0.55 + (nMid - 0.5) * foamWidth * 0.22;
+  float nBig = valueNoise(foamP * 0.34);
+  float nMid = valueNoise(foamP * 0.78 + vec2(3.1, 1.4));
+  float nFine = valueNoise(foamP * 1.55 + vec2(-2.2, 4.7));
+  float nStretch = valueNoise(foamP * vec2(0.22, 0.7) + vec2(6.2, 1.1));
+  float surf = shoreDist
+    + (nBig - 0.5) * foamWidth * 0.7
+    + (nMid - 0.5) * foamWidth * 0.28
+    + (nStretch - 0.5) * foamWidth * 0.16;
+  float waterSide = smoothstep(-0.02, 0.05, shoreDist);
 
-  float innerBand = smoothstep(0.0, 0.06, surf) * (1.0 - smoothstep(0.05, foamWidth * 0.62, surf));
-  float innerStroke = smoothstep(0.22, 0.5, nMid * 0.55 + nFine * 0.45);
-  float innerFoam = innerBand * mix(0.72, 1.0, innerStroke);
+  float lipOuter = mix(0.28, foamWidth * 0.52, nMid);
+  float innerBand = smoothstep(0.0, 0.1, surf)
+                  * (1.0 - smoothstep(lipOuter, lipOuter + foamWidth * 0.28, surf));
+  float innerGate = smoothstep(0.1, 0.4, nStretch * 0.55 + nFine * 0.45);
+  float innerFoam = innerBand * mix(0.35, 1.0, innerGate) * waterSide;
 
-  float outerBand = smoothstep(foamWidth * 0.18, foamWidth * 0.4, surf)
-    * (1.0 - smoothstep(foamWidth * 0.55, foamWidth * 1.45, surf));
-  float outerStroke = smoothstep(0.38, 0.66, nBig * 0.45 + nMid * 0.55);
-  float gaps = 1.0 - smoothstep(0.58, 0.82, nFine);
-  float outerFoam = outerBand * outerStroke * gaps;
+  float outerWin = smoothstep(foamWidth * 0.16, foamWidth * 0.36, surf)
+                 * (1.0 - smoothstep(foamWidth * 0.72, foamWidth * 1.7, surf));
+  float blob = smoothstep(0.44, 0.7, nBig * 0.5 + nMid * 0.5)
+             * (1.0 - smoothstep(0.66, 0.9, nFine));
+  float outerFoam = outerWin * blob * waterSide;
 
-  vec3 foamMint = mix(uShallow, uFoamColor, 0.62);
-  col = mix(col, foamMint, clamp(outerFoam * uShoreFoam, 0.0, 0.92) * keep);
+  float dabWin = smoothstep(foamWidth * 0.38, foamWidth * 0.68, surf)
+               * (1.0 - smoothstep(foamWidth * 1.05, foamWidth * 1.95, surf));
+  float dabs = smoothstep(0.58, 0.82, nStretch) * (1.0 - smoothstep(0.52, 0.8, nBig));
+  float dabFoam = dabWin * dabs * waterSide;
+
+  vec3 foamMint = mix(uShallow, uFoamColor, 0.55);
+  col = mix(col, foamMint, clamp((outerFoam * 0.85 + dabFoam * 0.7) * uShoreFoam, 0.0, 0.95) * keep);
   col = mix(col, uFoamColor, clamp(innerFoam * uShoreFoam, 0.0, 1.0) * keep);
-  col = mix(col, uFoamColor, clamp(ripple * 0.1, 0.0, 0.25) * keep);
+  col = mix(col, uFoamColor, clamp(ripple * 0.08, 0.0, 0.2) * keep);
 
-  // Mossy depth patches in the shallows (reference underwater blotches)
-  float mossZone = smoothstep(0.22, 0.85, shoreDist) * (1.0 - smoothstep(2.1, 4.4, shoreDist));
+  // Mossy depth patches sit past the surf so they do not muddy the foam lip
+  float mossZone = smoothstep(1.1, 1.8, shoreDist) * (1.0 - smoothstep(3.2, 5.2, shoreDist));
   float mossBlob = smoothstep(0.5, 0.76, valueNoise(foamP * 0.4 + vec2(8.2, 2.0)));
-  col = mix(col, vec3(0.18, 0.46, 0.3), mossBlob * mossZone * 0.38 * keep);
+  col = mix(col, vec3(0.22, 0.52, 0.36), mossBlob * mossZone * 0.28 * keep);
 
   // 9. Horizon dissolve
   vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);
   col = mix(col, fadeCol, haze);
   if (keep < 0.04) discard;
 
-  float shallowAlpha = mix(0.2, 1.0, smoothstep(-0.04, 2.8, shoreDist));
+  // Opaque mint shallows — the reference water is a flat paint fill, not a
+  // see-through shelf that flashes the dark scene behind the sand cut.
+  float shallowAlpha = mix(0.9, 1.0, smoothstep(-0.02, 0.55, shoreDist));
   gl_FragColor = vec4(col, keep * shallowAlpha);
 }
 `;

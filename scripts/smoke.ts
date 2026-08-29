@@ -439,6 +439,21 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(pos && pos.count > 200, 'island mesh has vertices');
   assert(col && col.count === pos.count, 'island mesh has vertex colours');
   const vertCount = pos.count;
+
+  let maxShore = -1e9;
+  let coastH = 1e9;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const d = field.shoreDistance(x, z);
+    if (d > maxShore) maxShore = d;
+    if (Math.abs(d) < 0.12 * HEX_SIZE) coastH = Math.min(coastH, y);
+  }
+  assert(maxShore < 0.08 * HEX_SIZE, 'sand mesh stops at the waterline');
+  assert(coastH < 0.06, 'waterline height is a beach slope, not a cliff');
+  assert(DEFAULT_STYLE_CONFIG.waterFoamWidth >= 1.4, 'foam band is wide enough to read as surf');
+
   mesh.clear();
   console.log(`ok island field + mesh (${vertCount} verts)`);
 }

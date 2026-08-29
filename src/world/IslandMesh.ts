@@ -12,11 +12,11 @@ function gridStep(): number {
   const level = getQualityLevel();
   switch (level) {
     case 'low':
-      return 0.22 * HEX_SIZE;
+      return 0.16 * HEX_SIZE;
     case 'medium':
-      return 0.15 * HEX_SIZE;
-    case 'high':
       return 0.11 * HEX_SIZE;
+    case 'high':
+      return 0.08 * HEX_SIZE;
     default: {
       const _exhaustive: never = level;
       return _exhaustive;
@@ -32,6 +32,11 @@ export class IslandMesh {
 
   constructor() {
     this.material = painterlyMat(0xffffff, { vertexColors: true });
+    // Push the beach a hair behind the water plane so foam at the lip wins
+    // z-order instead of the sand cut covering it.
+    this.material.polygonOffset = true;
+    this.material.polygonOffsetFactor = 1;
+    this.material.polygonOffsetUnits = 1;
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), this.material);
     this.mesh.castShadow = true;
     this.mesh.receiveShadow = true;
@@ -81,7 +86,8 @@ function buildIslandGeometry(field: IslandField): THREE.BufferGeometry {
   for (let iz = 0; iz <= segs; iz++) {
     for (let ix = 0; ix <= segs; ix++) {
       const s = sampleAt(ix, iz);
-      if (s.shoreDist > 0.1 * HEX_SIZE) continue;
+        // Stop at the waterline so painterly foam on the water is visible.
+        if (s.shoreDist > 0.05 * HEX_SIZE) continue;
       const x = origin + ix * step;
       const z = origin + iz * step;
       const idx = positions.length / 3;
@@ -125,7 +131,11 @@ function darkenCrevices(geom: THREE.BufferGeometry): void {
   const col = geom.attributes.color;
   const nrm = geom.attributes.normal;
   if (!pos || !col || !nrm) return;
+  const beachY = 0.2 * HEX_SIZE;
   for (let i = 0; i < pos.count; i++) {
+    // Coast triangulation produces sideways normals at the waterline cut.
+    // Do not shade that lip as a rock crevice — it was reading as a dark cliff.
+    if (pos.getY(i) < beachY) continue;
     const ny = nrm.getY(i);
     const cavity = 0.62 + 0.38 * Math.max(0, ny);
     col.setXYZ(i, col.getX(i) * cavity, col.getY(i) * cavity, col.getZ(i) * cavity);

@@ -87,20 +87,22 @@ so the bigger hexes also read larger on screen.
 ## Water around the island
 
 Water is a flat sea plane whose land mask is the **same warped coast SDF**
-as the mesh (not a raw hex outline).
+as the mesh (not a raw hex outline). The island mesh stops at the waterline
+so surf is painted on the water, not under a sand skirt.
 
-Live path: `src/world/WaterSurface.ts` — Bruno folio shore (cyan rim + sparse
-arcs), frosted mirror, depth colour, transparent shallows over a sand shelf.
+Live path: `src/world/WaterSurface.ts` — mint shallows, layered paint-stroke
+foam, frosted mirror, depth colour. Ripples stay quiet so they do not fight
+the foam.
 
 Craft bases live in `StyleConfig`; day-night multiplies them via Environment
 State ([DAY_NIGHT.md](DAY_NIGHT.md)).
 
 | Effect | Intent |
 | --- | --- |
-| Depth colour | Navy open water → turquoise shelf at the organic coast |
-| Transparent shallows | Underwater sand visible around the shoreline |
-| Shore foam | Thin glowing lip along the beach |
-| Shore ripples | Sparse thin arcs marching on the coast SDF |
+| Depth colour | Pale mint shallows → lagoon → deeper green out to sea |
+| Opaque shallows | Flat paint fill at the beach; no dark see-through gap |
+| Shore foam | Thick broken white lip + mint-white paint-stroke blobs |
+| Shore ripples | Sparse thin arcs, kept off the foam lip |
 | Frosted mirror | Soft scene contact shadows on the plane |
 | Swells | Near-flat (folio amplitude is tiny) |
 | Caustics | Quiet, shallow only |
