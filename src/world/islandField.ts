@@ -235,11 +235,11 @@ export class IslandField implements GroundSampler {
     const beachMask =
       smoothstep(BEACH_WIDTH, -0.04 * HEX_SIZE, shoreDist) * smoothstep(-0.72 * HEX_SIZE, -0.08 * HEX_SIZE, shoreDist);
 
-    const beachH = HEX_SIZE * (0.012 + valueNoise(ux * 0.55, uz * 0.55) * 0.004);
+    const beachH = HEX_SIZE * (0.022 + valueNoise(ux * 0.55, uz * 0.55) * 0.006);
     height = height * landMask + beachH * beachMask * (1 - landMask * 0.35);
-    // Flatten into the water so the mesh edge is a sand plane, not a cliff.
-    const toWater = smoothstep(-0.4 * HEX_SIZE, 0.0, shoreDist);
-    height *= 1 - toWater;
+    // Ease the last strip down, but keep sand above the water plane (y = 0).
+    const toWater = smoothstep(-0.22 * HEX_SIZE, 0.04 * HEX_SIZE, shoreDist);
+    height = Math.max(0.01, height * (1 - toWater * 0.55));
 
     const wet =
       smoothstep(0.02 * HEX_SIZE, -0.08 * HEX_SIZE, shoreDist) *
