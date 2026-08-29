@@ -464,7 +464,7 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   shore.group.traverse((obj) => {
     if (obj instanceof THREE.InstancedMesh && obj.renderOrder === 1) foamCount += obj.count;
   });
-  assert(foamCount > 20 && foamCount < 700, 'paint-stroke foam dabs sit on the waterline');
+  assert(foamCount > 20 && foamCount < 450, 'paint-stroke foam dabs sit on the waterline');
   shore.clear();
   console.log(`ok island field + mesh (${vertCount} verts, ${foamCount} foam dabs)`);
 }

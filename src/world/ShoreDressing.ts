@@ -29,25 +29,25 @@ export class ShoreDressing {
     this.clear();
     this.foamWhite = this.buildFoamLayer(field, {
       minDist: 0.04 * HEX_SIZE,
-      maxDist: 0.42 * HEX_SIZE,
-      step: 0.14 * HEX_SIZE,
-      keepAbove: 0.42,
-      minScale: 0.07 * HEX_SIZE,
-      maxScale: 0.16 * HEX_SIZE,
+      maxDist: 0.38 * HEX_SIZE,
+      step: 0.18 * HEX_SIZE,
+      keepAbove: 0.6,
+      minScale: 0.08 * HEX_SIZE,
+      maxScale: 0.17 * HEX_SIZE,
       color: FOAM_WHITE,
       y: 0.018,
-      stretch: 1.35,
+      stretch: 1.45,
     });
     this.foamMint = this.buildFoamLayer(field, {
-      minDist: 0.28 * HEX_SIZE,
-      maxDist: 1.05 * HEX_SIZE,
-      step: 0.2 * HEX_SIZE,
-      keepAbove: 0.58,
-      minScale: 0.08 * HEX_SIZE,
-      maxScale: 0.18 * HEX_SIZE,
+      minDist: 0.22 * HEX_SIZE,
+      maxDist: 0.95 * HEX_SIZE,
+      step: 0.24 * HEX_SIZE,
+      keepAbove: 0.55,
+      minScale: 0.09 * HEX_SIZE,
+      maxScale: 0.2 * HEX_SIZE,
       color: FOAM_MINT,
       y: 0.014,
-      stretch: 1.5,
+      stretch: 1.55,
     });
     this.weed = this.buildWeed(field);
     if (this.foamMint) this.group.add(this.foamMint);
