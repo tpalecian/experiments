@@ -16,7 +16,6 @@ export const COAST_WARP_AMP = 0.72 * HEX_SIZE;
 export const COAST_WARP_FREQ2 = 0.82 / HEX_SIZE;
 export const COAST_WARP_AMP2 = 0.22 * HEX_SIZE;
 export const BEACH_WIDTH = 1.12 * HEX_SIZE;
-export const SHELF_WIDTH = 0.72 * HEX_SIZE;
 /** Water discards inland of this (keeps transparent shallows over the shelf). */
 export const WATER_INLAND_DISCARD = 0.48 * HEX_SIZE;
 
@@ -235,23 +234,17 @@ export class IslandField implements GroundSampler {
     const landMask = smoothstep(0.18 * HEX_SIZE, -0.1 * HEX_SIZE, shoreDist);
     const beachMask =
       smoothstep(BEACH_WIDTH, -0.04 * HEX_SIZE, shoreDist) * smoothstep(-0.72 * HEX_SIZE, -0.08 * HEX_SIZE, shoreDist);
-    const shelfMask =
-      smoothstep(-SHELF_WIDTH, -0.02 * HEX_SIZE, shoreDist) * smoothstep(0.14 * HEX_SIZE, -0.02 * HEX_SIZE, shoreDist);
 
-    const beachH = HEX_SIZE * (0.016 + valueNoise(ux * 0.55, uz * 0.55) * 0.006);
-    const shelfH = HEX_SIZE * 0.004 + shoreDist * 0.02;
+    const beachH = HEX_SIZE * (0.012 + valueNoise(ux * 0.55, uz * 0.55) * 0.004);
     height = height * landMask + beachH * beachMask * (1 - landMask * 0.35);
-    if (shelfMask > 0.01 && landMask < 0.5) {
-      height = height * (1 - shelfMask) + shelfH * shelfMask;
-    }
-    // Flatten into the water so the mesh edge is a wet sand slope, not a cliff.
-    const toWater = smoothstep(-0.32 * HEX_SIZE, 0.02 * HEX_SIZE, shoreDist);
-    height *= 1 - toWater * 0.94;
+    // Flatten into the water so the mesh edge is a sand plane, not a cliff.
+    const toWater = smoothstep(-0.4 * HEX_SIZE, 0.0, shoreDist);
+    height *= 1 - toWater;
 
     const wet =
-      smoothstep(0.06 * HEX_SIZE, -0.04 * HEX_SIZE, shoreDist) *
-      smoothstep(-0.42 * HEX_SIZE, -0.1 * HEX_SIZE, shoreDist) *
-      0.4;
+      smoothstep(0.02 * HEX_SIZE, -0.08 * HEX_SIZE, shoreDist) *
+      smoothstep(-0.5 * HEX_SIZE, -0.14 * HEX_SIZE, shoreDist) *
+      0.22;
     const patch = smoothstep(0.46, 0.72, valueNoise(ux * 0.36 + 1.7, uz * 0.36 - 0.9));
     const sandR = SAND.r * (1 - wet) + SAND_WET.r * wet;
     const sandG = SAND.g * (1 - wet) + SAND_WET.g * wet;
@@ -259,11 +252,6 @@ export class IslandField implements GroundSampler {
     cr = cr * (1 - beachMask) + (sandR * (1 - patch) + SAND_PATCH.r * patch) * beachMask;
     cg = cg * (1 - beachMask) + (sandG * (1 - patch) + SAND_PATCH.g * patch) * beachMask;
     cb = cb * (1 - beachMask) + (sandB * (1 - patch) + SAND_PATCH.b * patch) * beachMask;
-    if (shelfMask > 0.01) {
-      cr = cr * (1 - shelfMask) + SAND_WET.r * shelfMask;
-      cg = cg * (1 - shelfMask) + SAND_WET.g * shelfMask;
-      cb = cb * (1 - shelfMask) + SAND_WET.b * shelfMask;
-    }
 
     const speckAmt = 1 - beachMask * 0.85;
     const speck = (valueNoise(ux * 2.4, uz * 2.4) - 0.5) * 0.04 * speckAmt;

@@ -120,9 +120,22 @@ function buildIslandGeometry(field: IslandField): THREE.BufferGeometry {
   geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geom.setIndex(indices);
   geom.computeVertexNormals();
+  flattenBeachNormals(geom);
   darkenCrevices(geom);
   geom.computeBoundingSphere();
   return geom;
+}
+
+/** Coast cuts produce sideways normals; keep the beach lit as a flat floor. */
+function flattenBeachNormals(geom: THREE.BufferGeometry): void {
+  const pos = geom.attributes.position;
+  const nrm = geom.attributes.normal;
+  if (!pos || !nrm) return;
+  const beachY = 0.22 * HEX_SIZE;
+  for (let i = 0; i < pos.count; i++) {
+    if (pos.getY(i) < beachY) nrm.setXYZ(i, 0, 1, 0);
+  }
+  nrm.needsUpdate = true;
 }
 
 /** Cheap ambient occlusion: darken vertices whose normal points sideways (rocks/peaks). */
@@ -131,10 +144,8 @@ function darkenCrevices(geom: THREE.BufferGeometry): void {
   const col = geom.attributes.color;
   const nrm = geom.attributes.normal;
   if (!pos || !col || !nrm) return;
-  const beachY = 0.2 * HEX_SIZE;
+  const beachY = 0.22 * HEX_SIZE;
   for (let i = 0; i < pos.count; i++) {
-    // Coast triangulation produces sideways normals at the waterline cut.
-    // Do not shade that lip as a rock crevice — it was reading as a dark cliff.
     if (pos.getY(i) < beachY) continue;
     const ny = nrm.getY(i);
     const cavity = 0.62 + 0.38 * Math.max(0, ny);

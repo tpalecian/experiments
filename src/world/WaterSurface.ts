@@ -334,42 +334,36 @@ void main() {
   float nearShore = smoothstep(0.05, 0.35, prox) * (1.0 - smoothstep(0.55, 0.85, prox));
   float ripple = accept * arcGate * crest * nearShore * clamp(uRippleIntensity, 0.0, 1.2);
 
-  // Painterly surf on the WATER (sand mesh cuts at ~0.05 hex). Inner lip is a
-  // thick irregular white band; outer layer is sparse mint-white paint dabs —
-  // not an SDF iso-ring and not a thin glow.
-  float foamWidth = max(uFoamWidth, 0.45);
+  // Painterly surf on the water. Distance windows + noise gates, so the lip
+  // breaks into paint strokes instead of tracing the coast SDF as a ring.
+  float foamWidth = max(uFoamWidth, 0.8);
   vec2 foamP = vWorldPos.xz;
-  float nBig = valueNoise(foamP * 0.34);
-  float nMid = valueNoise(foamP * 0.78 + vec2(3.1, 1.4));
-  float nFine = valueNoise(foamP * 1.55 + vec2(-2.2, 4.7));
-  float nStretch = valueNoise(foamP * vec2(0.22, 0.7) + vec2(6.2, 1.1));
+  float nBig = valueNoise(foamP * 0.29);
+  float nMid = valueNoise(foamP * 0.62 + vec2(3.1, 1.4));
+  float nFine = valueNoise(foamP * 1.15 + vec2(-2.2, 4.7));
+  float nStretch = valueNoise(foamP * vec2(0.18, 0.52) + vec2(6.2, 1.1));
   float surf = shoreDist
-    + (nBig - 0.5) * foamWidth * 0.7
-    + (nMid - 0.5) * foamWidth * 0.28
-    + (nStretch - 0.5) * foamWidth * 0.16;
-  float waterSide = smoothstep(-0.02, 0.05, shoreDist);
+    + (nBig - 0.5) * foamWidth * 0.85
+    + (nMid - 0.5) * foamWidth * 0.38
+    + (nStretch - 0.5) * foamWidth * 0.22;
+  float waterSide = smoothstep(0.0, 0.08, shoreDist);
 
-  float lipOuter = mix(0.28, foamWidth * 0.52, nMid);
-  float innerBand = smoothstep(0.0, 0.1, surf)
-                  * (1.0 - smoothstep(lipOuter, lipOuter + foamWidth * 0.28, surf));
-  float innerGate = smoothstep(0.1, 0.4, nStretch * 0.55 + nFine * 0.45);
-  float innerFoam = innerBand * mix(0.35, 1.0, innerGate) * waterSide;
+  float lip = smoothstep(0.02, 0.16, surf) * (1.0 - smoothstep(0.42, 0.95, surf));
+  float lipBreak = smoothstep(0.28, 0.55, nStretch * 0.6 + nMid * 0.4);
+  float innerFoam = lip * lipBreak * waterSide;
 
-  float outerWin = smoothstep(foamWidth * 0.16, foamWidth * 0.36, surf)
-                 * (1.0 - smoothstep(foamWidth * 0.72, foamWidth * 1.7, surf));
-  float blob = smoothstep(0.44, 0.7, nBig * 0.5 + nMid * 0.5)
-             * (1.0 - smoothstep(0.66, 0.9, nFine));
-  float outerFoam = outerWin * blob * waterSide;
+  float blobWin = smoothstep(0.18, 0.5, surf) * (1.0 - smoothstep(1.05, 1.85, surf));
+  float blob = smoothstep(0.52, 0.74, nBig) * (1.0 - smoothstep(0.7, 0.9, nFine));
+  float outerFoam = blobWin * blob * waterSide;
 
-  float dabWin = smoothstep(foamWidth * 0.38, foamWidth * 0.68, surf)
-               * (1.0 - smoothstep(foamWidth * 1.05, foamWidth * 1.95, surf));
-  float dabs = smoothstep(0.58, 0.82, nStretch) * (1.0 - smoothstep(0.52, 0.8, nBig));
+  float dabWin = smoothstep(0.45, 0.85, surf) * (1.0 - smoothstep(1.4, 2.35, surf));
+  float dabs = smoothstep(0.6, 0.84, nStretch) * smoothstep(0.35, 0.62, nMid);
   float dabFoam = dabWin * dabs * waterSide;
 
-  vec3 foamMint = mix(uShallow, uFoamColor, 0.55);
-  col = mix(col, foamMint, clamp((outerFoam * 0.85 + dabFoam * 0.7) * uShoreFoam, 0.0, 0.95) * keep);
+  vec3 foamMint = mix(uShallow, uFoamColor, 0.42);
+  col = mix(col, foamMint, clamp((outerFoam * 0.95 + dabFoam * 0.8) * uShoreFoam, 0.0, 1.0) * keep);
   col = mix(col, uFoamColor, clamp(innerFoam * uShoreFoam, 0.0, 1.0) * keep);
-  col = mix(col, uFoamColor, clamp(ripple * 0.08, 0.0, 0.2) * keep);
+  col = mix(col, uFoamColor, clamp(ripple * 0.06, 0.0, 0.15) * keep);
 
   // Mossy depth patches sit past the surf so they do not muddy the foam lip
   float mossZone = smoothstep(1.1, 1.8, shoreDist) * (1.0 - smoothstep(3.2, 5.2, shoreDist));

@@ -167,7 +167,7 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   waterSpecularPower: 18,
 
   waterShoreFoam: 1.0,
-  waterFoamWidth: 1.55,
+  waterFoamWidth: 1.9,
   waterFoamPulse: 0.12,
   waterFoamPulseSpeed: 0.45,
 
@@ -301,7 +301,7 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-const STORAGE_KEY = 'catan-style-config-v25';
+const STORAGE_KEY = 'catan-style-config-v26';
 
 export function loadStyleConfig(): StyleConfig {
   try {

@@ -451,8 +451,8 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
     if (Math.abs(d) < 0.12 * HEX_SIZE) coastH = Math.min(coastH, y);
   }
   assert(maxShore < 0.08 * HEX_SIZE, 'sand mesh stops at the waterline');
-  assert(coastH < 0.06, 'waterline height is a beach slope, not a cliff');
-  assert(DEFAULT_STYLE_CONFIG.waterFoamWidth >= 1.4, 'foam band is wide enough to read as surf');
+  assert(coastH < 0.03, 'waterline height is a beach slope, not a cliff');
+  assert(DEFAULT_STYLE_CONFIG.waterFoamWidth >= 1.8, 'foam band is wide enough to read as surf');
 
   mesh.clear();
   console.log(`ok island field + mesh (${vertCount} verts)`);
