@@ -334,28 +334,28 @@ void main() {
   float nearShore = smoothstep(0.05, 0.35, prox) * (1.0 - smoothstep(0.55, 0.85, prox));
   float ripple = accept * arcGate * crest * nearShore * clamp(uRippleIntensity, 0.0, 1.2);
 
-  // Painterly surf: warped paint-stroke blobs, not an SDF iso-ring
+  // Painterly surf: broken strokes on the WATER side of the beach mesh
   float foamWidth = max(uFoamWidth, 0.12);
   vec2 foamP = vWorldPos.xz;
-  float nBig = valueNoise(foamP * 0.52);
-  float nMid = valueNoise(foamP * 1.28 + vec2(3.1, 1.4));
-  float nFine = valueNoise(foamP * 2.6 + vec2(-2.2, 4.7));
-  float surf = shoreDist + (nBig - 0.5) * foamWidth * 2.15 + (nMid - 0.5) * foamWidth * 0.85;
+  float nBig = valueNoise(foamP * 0.58);
+  float nMid = valueNoise(foamP * 1.22 + vec2(3.1, 1.4));
+  float nFine = valueNoise(foamP * 2.45 + vec2(-2.2, 4.7));
+  float surf = shoreDist + (nBig - 0.5) * foamWidth * 0.55 + (nMid - 0.5) * foamWidth * 0.22;
 
-  float innerBand = smoothstep(-0.16 * foamWidth, 0.05, surf) * (1.0 - smoothstep(0.02, foamWidth * 0.72, surf));
-  float innerStroke = smoothstep(0.3, 0.58, nMid * 0.62 + nFine * 0.38);
-  float innerFoam = innerBand * mix(0.22, 1.0, innerStroke);
+  float innerBand = smoothstep(0.0, 0.06, surf) * (1.0 - smoothstep(0.05, foamWidth * 0.62, surf));
+  float innerStroke = smoothstep(0.22, 0.5, nMid * 0.55 + nFine * 0.45);
+  float innerFoam = innerBand * mix(0.72, 1.0, innerStroke);
 
-  float outerBand = smoothstep(foamWidth * 0.12, foamWidth * 0.42, surf)
-    * (1.0 - smoothstep(foamWidth * 0.5, foamWidth * 1.7, surf));
-  float outerStroke = smoothstep(0.4, 0.68, nBig * 0.48 + nMid * 0.52);
-  float gaps = 1.0 - smoothstep(0.6, 0.84, nFine);
+  float outerBand = smoothstep(foamWidth * 0.18, foamWidth * 0.4, surf)
+    * (1.0 - smoothstep(foamWidth * 0.55, foamWidth * 1.45, surf));
+  float outerStroke = smoothstep(0.38, 0.66, nBig * 0.45 + nMid * 0.55);
+  float gaps = 1.0 - smoothstep(0.58, 0.82, nFine);
   float outerFoam = outerBand * outerStroke * gaps;
 
-  vec3 foamMint = mix(uShallow, uFoamColor, 0.7);
-  col = mix(col, foamMint, clamp(outerFoam * uShoreFoam, 0.0, 0.88) * keep);
+  vec3 foamMint = mix(uShallow, uFoamColor, 0.62);
+  col = mix(col, foamMint, clamp(outerFoam * uShoreFoam, 0.0, 0.92) * keep);
   col = mix(col, uFoamColor, clamp(innerFoam * uShoreFoam, 0.0, 1.0) * keep);
-  col = mix(col, uFoamColor, clamp(ripple * 0.18, 0.0, 0.4) * keep);
+  col = mix(col, uFoamColor, clamp(ripple * 0.1, 0.0, 0.25) * keep);
 
   // Mossy depth patches in the shallows (reference underwater blotches)
   float mossZone = smoothstep(0.22, 0.85, shoreDist) * (1.0 - smoothstep(2.1, 4.4, shoreDist));

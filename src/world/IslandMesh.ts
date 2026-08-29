@@ -81,7 +81,7 @@ function buildIslandGeometry(field: IslandField): THREE.BufferGeometry {
   for (let iz = 0; iz <= segs; iz++) {
     for (let ix = 0; ix <= segs; ix++) {
       const s = sampleAt(ix, iz);
-      if (s.shoreDist > 1.2 * HEX_SIZE) continue;
+      if (s.shoreDist > 0.1 * HEX_SIZE) continue;
       const x = origin + ix * step;
       const z = origin + iz * step;
       const idx = positions.length / 3;
