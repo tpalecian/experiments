@@ -245,7 +245,7 @@ export class IslandField implements GroundSampler {
       smoothstep(0.02 * HEX_SIZE, -0.08 * HEX_SIZE, shoreDist) *
       smoothstep(-0.5 * HEX_SIZE, -0.14 * HEX_SIZE, shoreDist) *
       0.22;
-    const patch = smoothstep(0.46, 0.72, valueNoise(ux * 0.36 + 1.7, uz * 0.36 - 0.9));
+    const patch = smoothstep(0.34, 0.58, valueNoise(ux * 0.36 + 1.7, uz * 0.36 - 0.9));
     const sandR = SAND.r * (1 - wet) + SAND_WET.r * wet;
     const sandG = SAND.g * (1 - wet) + SAND_WET.g * wet;
     const sandB = SAND.b * (1 - wet) + SAND_WET.b * wet;

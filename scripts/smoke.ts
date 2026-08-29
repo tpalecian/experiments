@@ -54,6 +54,7 @@ import {
 } from '../src/style/styleConfig';
 import { IslandField, sdHexagon, warpCoast } from '../src/world/islandField';
 import { IslandMesh } from '../src/world/IslandMesh';
+import { ShoreDressing } from '../src/world/ShoreDressing';
 import { CameraRig } from '../src/view/CameraRig';
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -455,7 +456,17 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(DEFAULT_STYLE_CONFIG.waterFoamWidth >= 1.8, 'foam band is wide enough to read as surf');
 
   mesh.clear();
-  console.log(`ok island field + mesh (${vertCount} verts)`);
+
+  const shore = new ShoreDressing();
+  shore.build(field);
+  assert(shore.group.children.length >= 1, 'shore dressing places foam along the coast');
+  let foamCount = 0;
+  shore.group.traverse((obj) => {
+    if (obj instanceof THREE.InstancedMesh && obj.renderOrder === 1) foamCount += obj.count;
+  });
+  assert(foamCount > 40, 'paint-stroke foam dabs sit on the waterline');
+  shore.clear();
+  console.log(`ok island field + mesh (${vertCount} verts, ${foamCount} foam dabs)`);
 }
 
 {
