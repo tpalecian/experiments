@@ -20,10 +20,10 @@ export interface WaterDepthPalette {
 
 export const WATER_DEPTH_PALETTES: Record<EnvironmentScheme, WaterDepthPalette> = {
   day: {
-    deep: '#0E2A5C',
-    ocean: '#164A8C',
-    lagoon: '#1FA8C8',
-    shelf: '#A8FFF4',
+    deep: '#1A6B62',
+    ocean: '#2A9A78',
+    lagoon: '#6EE0B0',
+    shelf: '#DCFFE8',
   },
   sunset: {
     deep: '#1A3A68',
@@ -41,7 +41,7 @@ export const WATER_DEPTH_PALETTES: Record<EnvironmentScheme, WaterDepthPalette> 
 
 /** Beach albedo tints (geometry unchanged). */
 export const BEACH_TINTS: Record<EnvironmentScheme, string> = {
-  day: '#F5E6C8', // warm ivory
+  day: '#F6C44A',
   sunset: '#E8A050', // golden orange
   night: '#8A9AAA', // cool grey
 };

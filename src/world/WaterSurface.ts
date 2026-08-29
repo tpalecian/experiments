@@ -4,17 +4,18 @@ import { capWaterSegments, getQualityCaps } from '../core/Quality';
 import type { AtmosphereSnapshot } from './Atmosphere';
 import type { StyleConfig } from '../style/styleConfig';
 import { DEFAULT_STYLE_CONFIG } from '../style/styleConfig';
+import { WATER_INLAND_DISCARD, coastShaderChunk } from './islandField';
 
 /** Max land hexes supported by the water shoreline SDF (huge map = 61). */
 export const WATER_MAX_HEXES = 64;
 
 /**
- * Bruno Simon–inspired reflective water for the hex board (WebGL).
+ * Bruno Simon–inspired reflective water for the island diorama (WebGL).
  *
  * Port of folio-2025 `WaterSurface.js` ideas into WebGL:
  *   - frosted mirrored scene (hash-blur stand-in via multi-tap)
- *   - hex-SDF shore / discard (keep Catan tiles readable)
- *   - thin glowing shore lip flush to hex coast (Bruno `shoreNode`)
+ *   - organic coast SDF / discard (same field as the island mesh)
+ *   - thin glowing shore lip flush to the beach (Bruno `shoreNode`)
  *   - sparse thin arc ripples on near-shore proximity (Bruno `ripplesNode`)
  *   - quiet open-water brightness drift (craft; default off)
  *   - depth colour underneath (navy → cyan shelf)
@@ -37,23 +38,7 @@ varying vec3 vViewDir;
 varying float vWave;
 varying vec4 vReflectCoord;
 
-float sdHexagon(vec2 p, float r) {
-  p = abs(p.yx);
-  vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
-  p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
-  p -= vec2(clamp(p.x, -k.z * r, k.z * r), r);
-  return length(p) * sign(p.y);
-}
-
-float shoreDistance(vec2 p) {
-  float d = 1e5;
-  for (int i = 0; i < ${WATER_MAX_HEXES}; i++) {
-    float alive = step(float(i), float(uHexCount) - 0.5);
-    float hd = sdHexagon(p - uHexCenters[i], uHexApothem);
-    d = min(d, mix(1e5, hd, alive));
-  }
-  return d;
-}
+${coastShaderChunk(WATER_MAX_HEXES)}
 
 float swell(vec2 p, float t) {
   float w =
@@ -80,7 +65,7 @@ void main() {
   vec2 d = swellDeriv(world.xz, t);
 
   float shore = shoreDistance(world.xz);
-  float nearLand = 1.0 - smoothstep(0.0, 3.2, shore);
+  float nearLand = 1.0 - smoothstep(0.0, ${(3.2 * HEX_SIZE).toFixed(3)}, shore);
   float amp = uWaveHeight * (1.0 - nearLand * 0.97);
   float displacement = mix(w * amp, abs(w) * amp * 0.15, nearLand);
   displacement = mix(displacement, max(displacement, 0.0), nearLand);
@@ -154,23 +139,7 @@ varying vec3 vViewDir;
 varying float vWave;
 varying vec4 vReflectCoord;
 
-float sdHexagon(vec2 p, float r) {
-  p = abs(p.yx);
-  vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
-  p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
-  p -= vec2(clamp(p.x, -k.z * r, k.z * r), r);
-  return length(p) * sign(p.y);
-}
-
-float shoreDistance(vec2 p) {
-  float d = 1e5;
-  for (int i = 0; i < ${WATER_MAX_HEXES}; i++) {
-    float alive = step(float(i), float(uHexCount) - 0.5);
-    float hd = sdHexagon(p - uHexCenters[i], uHexApothem);
-    d = min(d, mix(1e5, hd, alive));
-  }
-  return d;
-}
+${coastShaderChunk(WATER_MAX_HEXES)}
 
 float softBand(float x) {
   float s = 0.5 + 0.5 * sin(x);
@@ -226,13 +195,14 @@ void main() {
   float shore = max(uShoreWidth, 0.001);
   float deepSpan = max(uDeepFade, 0.001);
 
-  // Under land tiles — keep water out so hex edges stay crisp
-  if (shoreDist < 0.0) discard;
+  // Inland of the sand shelf — terrain covers this. Keep water over shallows.
+  if (shoreDist < -${WATER_INLAND_DISCARD.toFixed(3)}) discard;
 
-  // Depth colour must NOT use min(hex SDF) — those iso-contours paint
-  // hex-shaped light/dark bands and bubble arcs into the blue water.
-  // Circular island envelope + one continuous ramp (no multi-stop rings).
-  float depthDist = max(0.0, length(vWorldPos.xz) - uIslandRadius);
+  // Organic coast ramp near land; circular envelope only in open ocean
+  // so we do not paint hex-shaped iso-bands far from shore.
+  float organicDepth = max(0.0, shoreDist);
+  float radialDepth = max(0.0, length(vWorldPos.xz) - uIslandRadius);
+  float depthDist = mix(organicDepth, radialDepth, smoothstep(1.4, 8.0, organicDepth));
   float depthT = clamp(depthDist / (shore + deepSpan), 0.0, 1.0);
   depthT = depthT * depthT * (3.0 - 2.0 * depthT);
 
@@ -295,6 +265,7 @@ void main() {
   float fres = pow(1.0 - max(dot(N, V), 0.0), uFresnelPower);
   // Keep base depth colour dominant; reflection adds soft scene contact shadows
   float reflectAmt = clamp(uReflectStrength * (0.22 + fres * uFresnelStrength * 2.8), 0.0, 0.72) * keep;
+  reflectAmt *= smoothstep(0.9, 2.6, shoreDist);
   if (ruv.x > 0.0 && ruv.x < 1.0 && ruv.y > 0.0 && ruv.y < 1.0) {
     vec3 refl = sampleReflection(ruv, uReflectDistort * (0.5 + fres * 0.8));
     // Desaturate / darken reflection so water stays readable as painted navy
@@ -310,6 +281,7 @@ void main() {
   float spec = pow(max(dot(N, H), 0.0), uSpecularPower);
   spec = smoothstep(0.15, 1.0, spec);
   spec *= 0.7 + 0.3 * wave;
+  spec *= smoothstep(0.9, 2.6, shoreDist);
   col += uSunColor * spec * uSpecularIntensity * keep * (1.0 - reflectAmt * 0.65);
 
   // 7. Soft caustics in shallow water
@@ -358,31 +330,47 @@ void main() {
   float arcGate = smoothstep(0.48, 0.72, n1 * 0.55 + n2 * 0.45);
   float crest = 1.0 - abs(bandFrac - mix(0.55, 0.82, n3));
   crest = pow(max(crest, 0.0), 5.5);
-  // Keep crests closer to land so they still follow hex edges (less outer rounding)
-  float nearShore = smoothstep(0.22, 0.5, prox) * (1.0 - smoothstep(0.82, 0.98, prox));
+  // Keep crests off the beach so painterly foam owns the waterline
+  float nearShore = smoothstep(0.05, 0.35, prox) * (1.0 - smoothstep(0.55, 0.85, prox));
   float ripple = accept * arcGate * crest * nearShore * clamp(uRippleIntensity, 0.0, 1.2);
 
-  // Shore foam lip flush to hex coast
-  float foamWidth = max(uFoamWidth, 0.04);
-  float shoreCore = 1.0 - smoothstep(0.0, foamWidth * 0.4, shoreDist);
-  shoreCore = pow(max(shoreCore, 0.0), 2.8);
-  float shoreHalo = 1.0 - smoothstep(0.0, foamWidth * 1.1, shoreDist);
-  shoreHalo = pow(max(shoreHalo, 0.0), 1.8);
-  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 2.4 + wave * 2.0));
-  float shoreFoam = shoreCore * uShoreFoam * foamPulse;
-  float shoreGlowRim = shoreHalo * uShoreGlow * 1.6;
-
-  col = mix(col, mix(uShallow, uFoamColor, 0.25), clamp(shoreGlowRim, 0.0, 0.7) * keep);
-
-  float foam = max(ripple * 0.85, shoreFoam);
-  col = mix(col, uFoamColor, clamp(foam, 0.0, 0.88) * keep);
+  // Mossy depth patches sit past the surf so they do not muddy the foam lip
+  vec2 foamP = vWorldPos.xz;
+  float mossZone = smoothstep(1.1, 1.8, shoreDist) * (1.0 - smoothstep(3.2, 5.2, shoreDist));
+  float mossBlob = smoothstep(0.5, 0.76, valueNoise(foamP * 0.4 + vec2(8.2, 2.0)));
+  col = mix(col, vec3(0.22, 0.52, 0.36), mossBlob * mossZone * 0.28 * keep);
 
   // 9. Horizon dissolve
   vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);
   col = mix(col, fadeCol, haze);
   if (keep < 0.04) discard;
 
-  gl_FragColor = vec4(col, keep);
+  // Soft mint fringe only. Chunk foam is instanced paint dabs in ShoreDressing;
+  // a wide white shader band read as ice floes.
+  float nBig = valueNoise(foamP * 0.26);
+  float nMid = valueNoise(foamP * 0.54 + vec2(3.1, 1.4));
+  float nFine = valueNoise(foamP * 0.95 + vec2(-2.2, 4.7));
+  float nStretch = valueNoise(foamP * vec2(0.16, 0.48) + vec2(6.2, 1.1));
+  float surf = shoreDist + (nBig - 0.5) * 0.16 + (nMid - 0.5) * 0.08;
+
+  float lip = smoothstep(0.0, 0.06, surf) * (1.0 - smoothstep(0.2, 0.38, surf));
+  float lipBreak = smoothstep(0.2, 0.45, nStretch * 0.7 + nFine * 0.3);
+  float innerFoam = lip * lipBreak;
+
+  float blobWin = smoothstep(0.18, 0.4, surf) * (1.0 - smoothstep(0.7, 1.15, surf));
+  float blob = smoothstep(0.5, 0.68, nBig) * (1.0 - smoothstep(0.7, 0.9, nFine));
+  float outerFoam = blobWin * blob;
+
+  vec3 foamMint = mix(uShallow, uFoamColor, 0.35);
+  float foamAmt = clamp(uShoreFoam, 0.0, 1.4);
+  col = mix(col, foamMint, clamp(outerFoam * foamAmt * 0.4, 0.0, 0.45));
+  col = mix(col, uFoamColor, clamp(innerFoam * foamAmt * 0.5, 0.0, 0.55));
+  col = mix(col, uFoamColor, clamp(ripple * 0.04, 0.0, 0.1));
+
+  // Opaque mint shallows — the reference water is a flat paint fill, not a
+  // see-through shelf that flashes the dark scene behind the sand cut.
+  float shallowAlpha = mix(0.94, 1.0, smoothstep(-0.02, 0.55, shoreDist));
+  gl_FragColor = vec4(col, keep * shallowAlpha);
 }
 `;
 

@@ -139,17 +139,17 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
   skyZenith: '#4aa8e0',
   skyHorizon: '#d8eef8',
 
-  waterDeepOcean: '#0E2A5C',
-  waterOcean: '#164A8C',
-  waterLagoon: '#1FA8C8',
-  waterShallow: '#3ED8E0',
-  waterBeachEdge: '#A8FFF4',
+  waterDeepOcean: '#1A6B62',
+  waterOcean: '#2A9A78',
+  waterLagoon: '#6EE0B0',
+  waterShallow: '#B0F5D4',
+  waterBeachEdge: '#DCFFE8',
   waterFoam: '#FFFFFF',
 
-  waterShoreWidth: 7.0,
-  waterDeepFade: 18,
+  waterShoreWidth: 5.5,
+  waterDeepFade: 14,
   waterEdgeSoft: 90,
-  waterShoreGlow: 0.18,
+  waterShoreGlow: 0.1,
   waterColorWave: 0.03,
 
   waterWaveHeight: 0.035,
@@ -163,25 +163,25 @@ export const DEFAULT_STYLE_CONFIG: StyleConfig = {
 
   waterFresnelStrength: 0.1,
   waterFresnelPower: 3.2,
-  waterSpecularIntensity: 0.16,
+  waterSpecularIntensity: 0.06,
   waterSpecularPower: 18,
 
-  waterShoreFoam: 0.7,
-  waterFoamWidth: 0.22,
-  waterFoamPulse: 0.15,
-  waterFoamPulseSpeed: 0.5,
+  waterShoreFoam: 1.0,
+  waterFoamWidth: 1.9,
+  waterFoamPulse: 0.12,
+  waterFoamPulseSpeed: 0.45,
 
   waterCausticIntensity: 0.03,
   waterCausticScale: 0.55,
   waterCausticSpeed: 0.3,
 
-  waterReflectStrength: 0.48,
+  waterReflectStrength: 0.22,
   waterReflectDistort: 0.022,
   waterReflectBlur: 0.018,
   // Open-water drift off by default; shore ripples use Bruno proximity flow
   waterRippleFreq: 0.95,
   waterRippleSpeed: 0.22,
-  waterRippleIntensity: 0.75,
+  waterRippleIntensity: 0.08,
   waterDriftIntensity: 0,
   waterDriftScale: 0.16,
   waterDriftSpeed: 0.18,
@@ -301,7 +301,7 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-const STORAGE_KEY = 'catan-style-config-v22';
+const STORAGE_KEY = 'catan-style-config-v27';
 
 export function loadStyleConfig(): StyleConfig {
   try {

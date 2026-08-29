@@ -133,7 +133,7 @@ function envExtras(scheme: EnvironmentScheme): {
     waterOcean: p.ocean,
     waterLagoon: p.lagoon,
     // Shallow sits between lagoon and shelf — cyan near coast, navy farther out.
-    waterShallow: scheme === 'day' ? '#3ED8E0' : scheme === 'sunset' ? '#5EC8D0' : '#2A6A9A',
+    waterShallow: scheme === 'day' ? '#B0F5D4' : scheme === 'sunset' ? '#5EC8D0' : '#2A6A9A',
     waterShelf: p.shelf,
     waterFoamColor: scheme === 'night' ? '#C8F4FF' : scheme === 'sunset' ? '#FFF0E0' : '#FFFFFF',
     waveBandIntensity: WAVE_BAND_INTENSITY[scheme],
@@ -238,7 +238,7 @@ function snap(
   };
 }
 
-/** Authoritative look targets — tropical hex-board day cycle. */
+/** Authoritative look targets — tropical island-diorama day cycle. */
 export const ATMOSPHERE_PRESETS: Record<DayScheme, AtmosphereSnapshot> = {
   morning: snap('morning', {
     skyZenith: '#5aa8e0',

@@ -12,7 +12,9 @@ export {
 export {
   makeBush,
   makeCactus,
+  makeBarn,
   makeDirtSkirt,
+  makeFallenLog,
   makeFence,
   makeFlowerTuft,
   makeHarborLabel,
@@ -20,7 +22,9 @@ export {
   makeHexTile,
   makeLabelSprite,
   makeMesa,
+  makeMountain,
   makeNumberToken,
+  makeOasis,
   makePastureRock,
   makePine,
   makeRock,
@@ -28,5 +32,6 @@ export {
   makeStoneWall,
   makeTree,
   makeWheatStalk,
+  makeWindmill,
 } from './props';
 export { ASSET_CATALOG, ASSET_CATEGORIES, getAssetById } from './catalog';

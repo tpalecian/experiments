@@ -6,9 +6,10 @@
 >
 > The panel is a **craft tool**, not a settings dump — deeply complete, tightly categorised, and easy to use.
 >
-> The board stays **hex tiles**. Craft look and motion feel — do not expose organic-island generation as the product path.
+> The board is a **seamless island** over a hidden hex graph. Craft look and
+> motion feel — generation knobs stay gated to new games.
 >
-> **Edit live look and motion. Never rebuild hexes for day-night.**
+> **Edit live look and motion. Never rebuild the island for day-night.**
 
 ---
 
@@ -33,10 +34,10 @@ Empty categories are filtered out in the configurator as a safety net; the schem
 
 ## Goals
 
-1. **Edit everything that is live** — atmosphere, sky/clouds, lighting, fog/post, water, hex/prop look, piece motion feel.
+1. **Edit everything that is live** — atmosphere, sky/clouds, lighting, fog/post, water, island/prop look, piece motion feel.
 2. **Tightly categorised** — seven top-level groups with clear names; no wall of ungrouped sliders.
 3. **Easy to use** — searchable, collapsible, presets, live preview, global reset, sensible defaults and ranges.
-4. **Never rebuild the board for look tweaks** — day-night / palette / light changes update Environment State only ([DAY_NIGHT.md](DAY_NIGHT.md)). Map rebuilds (new game / map size) stay outside this panel.
+4. **Never rebuild the island for look tweaks** — day-night / palette / light changes update Environment State only ([DAY_NIGHT.md](DAY_NIGHT.md)). Map rebuilds (new game / map size) stay outside this panel.
 
 ---
 
@@ -51,7 +52,7 @@ Configurator
  ├── Lighting & Shadows
  ├── Fog & Post
  ├── Water
- ├── Hex Board & Props
+ ├── Island & Props
  └── Motion & Feedback
 ```
 
@@ -79,13 +80,13 @@ Tone-mapping **exposure** (single field; not duplicated under lighting).
 
 Depth palette (deep → ocean → lagoon → shallow → beach edge), foam colour, shore width, deep fade, horizon dissolve, swell, contour bands, foam, caustics, Fresnel, specular, reflection, shore ripples, drift waves, mesh segments.
 
-Colours here are **craft bases**; atmosphere may multiply / tint them by scheme. Water hugs **hex land masks** ([TERRAIN.md](TERRAIN.md)).
+Colours here are **craft bases**; atmosphere may multiply / tint them by scheme. Water hugs the **organic island coast** ([TERRAIN.md](TERRAIN.md)).
 
-### Hex Board & Props (`hexBoard`)
+### Island & Props (`hexBoard`)
 
 Hover glow, production-pulse duration / strength, harbor bob amplitude.
 
-No organic mask / SDF island generators here.
+Island generation is not a live craft rebuild — new games stamp a new mesh.
 
 ### Motion & Feedback (`motion`)
 
@@ -130,7 +131,7 @@ Apply debounce is in `Game`, not the panel.
 
 | Doc | Configurator owns |
 | --- | --- |
-| [TERRAIN.md](TERRAIN.md) | Hex board / water / prop look knobs |
+| [TERRAIN.md](TERRAIN.md) | Island / water / prop look knobs |
 | [DAY_NIGHT.md](DAY_NIGHT.md) | Atmosphere / palette / Fresnel / band opacity |
 | [VISION.md](VISION.md) | Module map + motion milestones + deep panel |
 
@@ -139,7 +140,7 @@ Apply debounce is in `Game`, not the panel.
 ## Milestone Guidance
 
 1. Keep the Style panel working from `CRAFT_CATEGORIES` + `CRAFT_FIELDS`.
-2. Expand fields as hex systems need knobs — **every new shader uniform gets a field in the same PR**, under the matching live category.
+2. Expand fields as island systems need knobs — **every new shader uniform gets a field in the same PR**, under the matching live category.
 3. Do not add Camera / Debug categories until they have real fields.
 
 **Rule of thumb:** a feature is not done until it is configurable from the panel, under the right category, with a clear label and safe default.

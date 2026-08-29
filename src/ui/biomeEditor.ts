@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import { HEX_SIZE } from '../engine/board';
 import type { Terrain } from '../engine/types';
 import { getAssetById, hexShape, makeHexTile, TILE_HEIGHT } from '../world/assets';
 import { STYLE } from '../style/style';
@@ -62,7 +63,7 @@ function disposeObject(root: THREE.Object3D): void {
   });
 }
 
-function clampHex(x: number, z: number, radius = 0.82): { x: number; z: number } {
+function clampHex(x: number, z: number, radius = HEX_SIZE * 0.82): { x: number; z: number } {
   const d = Math.hypot(x, z);
   if (d <= radius || d < 1e-6) return { x, z };
   const s = radius / d;
@@ -142,22 +143,22 @@ export function startBiomeEditor(): void {
   controls.target.set(0, TILE_HEIGHT * 0.5, 0);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.minDistance = 1.2;
-  controls.maxDistance = 12;
+  controls.minDistance = 1.8;
+  controls.maxDistance = 18;
   controls.maxPolarAngle = Math.PI * 0.48;
 
   const hemi = new THREE.HemisphereLight(STYLE.ambientSky, STYLE.ambientGround, 0.95);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(STYLE.sun, 1.35);
-  sun.position.set(4, 8, 3);
+  sun.position.set(6, 10, 4);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.camera.near = 0.5;
-  sun.shadow.camera.far = 24;
-  sun.shadow.camera.left = -4;
-  sun.shadow.camera.right = 4;
-  sun.shadow.camera.top = 4;
-  sun.shadow.camera.bottom = -4;
+  sun.shadow.camera.far = 32;
+  sun.shadow.camera.left = -7;
+  sun.shadow.camera.right = 7;
+  sun.shadow.camera.top = 7;
+  sun.shadow.camera.bottom = -7;
   sun.shadow.bias = -0.0008;
   scene.add(sun);
   const fill = new THREE.DirectionalLight(STYLE.fill, 0.35);
@@ -221,7 +222,7 @@ export function startBiomeEditor(): void {
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = 4;
 
-    const radius = 0.98;
+    const radius = HEX_SIZE * 0.98;
     const shape = hexShape(radius);
     const geom = new THREE.ShapeGeometry(shape);
     // ShapeGeometry UVs are raw shape XY — remap into 0–1 over the hex bounds.
@@ -253,7 +254,7 @@ export function startBiomeEditor(): void {
   stage.add(propsRoot);
 
   const placementGhost = new THREE.Mesh(
-    new THREE.RingGeometry(0.1, 0.14, 28),
+    new THREE.RingGeometry(0.14, 0.2, 28),
     new THREE.MeshBasicMaterial({ color: 0x5bc4e8, side: THREE.DoubleSide, depthTest: false }),
   );
   placementGhost.rotation.x = -Math.PI / 2;
@@ -262,7 +263,7 @@ export function startBiomeEditor(): void {
   stage.add(placementGhost);
 
   const transform = new TransformControls(camera, canvas);
-  transform.setSize(0.85);
+  transform.setSize(1.05);
   transform.setTranslationSnap(snapStep);
   transform.setRotationSnap(THREE.MathUtils.degToRad(15));
   transform.setScaleSnap(0.05);
@@ -294,11 +295,11 @@ export function startBiomeEditor(): void {
   function applyCameraPreset(preset: CameraPreset): void {
     cameraPreset = preset;
     if (preset === 'isometric') {
-      camera.position.set(3.2, 3.6, 3.2);
+      camera.position.set(3.4, 3.8, 3.4);
       controls.target.set(0, TILE_HEIGHT * 0.4, 0);
       controls.enableRotate = true;
     } else {
-      camera.position.set(2.4, 2.2, 3.6);
+      camera.position.set(2.6, 2.4, 3.8);
       controls.target.set(0, TILE_HEIGHT * 0.5, 0);
     }
     controls.update();

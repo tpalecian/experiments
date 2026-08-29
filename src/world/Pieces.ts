@@ -1,10 +1,13 @@
 import * as THREE from 'three';
-import { axialToWorld } from '../engine/board';
+import { HEX_SIZE, axialToWorld } from '../engine/board';
 import type { BoardState, PlayerId } from '../engine/types';
 import { TILE_HEIGHT, makeCity, makeRoad, makeRobber, makeSettlement } from './assets';
 import { STYLIZED_PLAYER } from '../style/style';
 import { TweenPlayer, ease } from '../core/tween';
 import type { MotionFeel } from './motion';
+import type { GroundSampler } from './islandField';
+
+const FLAT: GroundSampler = { heightAt: () => TILE_HEIGHT };
 
 type BuildingKind = 'settlement' | 'city';
 
@@ -32,6 +35,7 @@ export class Pieces {
   private robberHopping = false;
   private robberTargetHex: string | null = null;
   private readonly robberRest = new THREE.Vector3();
+  private ground: GroundSampler = FLAT;
 
   constructor() {
     this.robber = makeRobber();
@@ -40,6 +44,14 @@ export class Pieces {
 
   addTo(parent: THREE.Group): void {
     parent.add(this.group);
+  }
+
+  setGround(ground: GroundSampler | null): void {
+    this.ground = ground ?? FLAT;
+  }
+
+  private yAt(x: number, z: number, extra = 0): number {
+    return this.ground.heightAt(x, z) + extra;
   }
 
   getRobberPosition(out = new THREE.Vector3()): THREE.Vector3 {
@@ -70,7 +82,8 @@ export class Pieces {
 
       const e = board.edges.get(road.edgeId)!;
       const mesh = makeRoad({ color: STYLIZED_PLAYER[road.owner] });
-      mesh.position.set(e.midX, TILE_HEIGHT + 0.09, e.midZ);
+      const roadY = this.yAt(e.midX, e.midZ, 0.09);
+      mesh.position.set(e.midX, roadY, e.midZ);
       mesh.rotation.y = -e.angle;
       const restingScale = 1;
       mesh.scale.set(0.15, 0.15, 0.15);
@@ -83,13 +96,13 @@ export class Pieces {
           (u) => {
             const s = 0.15 + (restingScale - 0.15) * u;
             mesh.scale.set(s, s * (0.6 + 0.4 * u), s);
-            mesh.position.y = TILE_HEIGHT + 0.09 + (1 - u) * 0.18;
+            mesh.position.y = roadY + (1 - u) * 0.18;
           },
           {
             ease: ease.easeOutBack,
             onComplete: () => {
               mesh.scale.setScalar(restingScale);
-              mesh.position.y = TILE_HEIGHT + 0.09;
+              mesh.position.y = roadY;
             },
           },
         );
@@ -119,14 +132,15 @@ export class Pieces {
         const old = existing.mesh;
         const city = makeCity({ color });
         const restingScale = 1.1;
-        city.position.set(v.x, TILE_HEIGHT, v.z);
+        const groundY = this.yAt(v.x, v.z);
+        city.position.set(v.x, groundY, v.z);
         city.scale.setScalar(0.01);
         this.group.add(city);
         this.buildings.set(b.vertexId, {
           mesh: city,
           kind: 'city',
           owner: b.owner,
-          restingY: TILE_HEIGHT,
+          restingY: groundY,
           restingScale,
         });
 
@@ -135,16 +149,16 @@ export class Pieces {
             motion.upgradeSec,
             (u) => {
               old.scale.setScalar(existing.restingScale * (1 - u * 0.85));
-              old.position.y = TILE_HEIGHT + u * 0.35;
+              old.position.y = groundY + u * 0.35;
               city.scale.setScalar(restingScale * ease.easeOutBack(u));
-              city.position.y = TILE_HEIGHT + (1 - u) * 0.45;
+              city.position.y = groundY + (1 - u) * 0.45;
             },
             {
               ease: ease.linear,
               onComplete: () => {
                 this.group.remove(old);
                 city.scale.setScalar(restingScale);
-                city.position.y = TILE_HEIGHT;
+                city.position.y = groundY;
               },
             },
           );
@@ -162,13 +176,14 @@ export class Pieces {
 
       const piece = b.kind === 'city' ? makeCity({ color }) : makeSettlement({ color });
       const baked = piece.scale.x;
+      const groundY = this.yAt(v.x, v.z);
       piece.scale.setScalar(0.01);
-      piece.position.set(v.x, TILE_HEIGHT + (animate ? 0.55 : 0), v.z);
+      piece.position.set(v.x, groundY + (animate ? 0.55 : 0), v.z);
       this.buildings.set(b.vertexId, {
         mesh: piece,
         kind: b.kind,
         owner: b.owner,
-        restingY: TILE_HEIGHT,
+        restingY: groundY,
         restingScale: baked,
       });
       this.group.add(piece);
@@ -178,19 +193,19 @@ export class Pieces {
           motion.pieceSpawnSec,
           (u) => {
             piece.scale.setScalar(baked * u);
-            piece.position.y = TILE_HEIGHT + (1 - u) * 0.55 - Math.sin(u * Math.PI) * 0.08 * (1 - u);
+            piece.position.y = groundY + (1 - u) * 0.55 - Math.sin(u * Math.PI) * 0.08 * (1 - u);
           },
           {
             ease: ease.easeOutBack,
             onComplete: () => {
               piece.scale.setScalar(baked);
-              piece.position.y = TILE_HEIGHT;
+              piece.position.y = groundY;
             },
           },
         );
       } else {
         piece.scale.setScalar(baked);
-        piece.position.y = TILE_HEIGHT;
+        piece.position.y = groundY;
       }
     }
 
@@ -205,9 +220,9 @@ export class Pieces {
     const robberHex = board.hexes.get(board.robberHexId);
     if (!robberHex) return;
     const { x, z } = axialToWorld(robberHex.q, robberHex.r);
-    const tx = x + 0.35;
-    const tz = z + 0.2;
-    const ty = TILE_HEIGHT;
+    const tx = x + 0.35 * HEX_SIZE;
+    const tz = z + 0.2 * HEX_SIZE;
+    const ty = this.yAt(tx, tz);
     this.robberRest.set(tx, ty, tz);
 
     if (this.robberTargetHex === board.robberHexId && (this.robberHopping || !animate)) {
@@ -273,5 +288,6 @@ export class Pieces {
     this.robberHopping = false;
     this.robberTargetHex = null;
     this.robberRest.set(0, 0, 0);
+    this.ground = FLAT;
   }
 }

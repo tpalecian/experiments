@@ -8,22 +8,30 @@ import { Board } from './Board';
 import { Highlights } from './Highlights';
 import { Pieces } from './Pieces';
 import { Props } from './Props';
+import { IslandField } from './islandField';
+import { IslandMesh } from './IslandMesh';
+import { ShoreDressing } from './ShoreDressing';
 import { motionFromStyle, type MotionFeel } from './motion';
 
 /**
- * Live hex-board presentation — tiles, props, pieces, water, highlights.
+ * Island diorama presentation — terrain mesh, props, pieces, water, highlights.
+ * Gameplay still uses the hidden hex graph.
  */
 export class World {
   readonly root = new THREE.Group();
+  private readonly island = new IslandMesh();
   private readonly board = new Board();
   private readonly highlights = new Highlights();
   private readonly pieces = new Pieces();
   private readonly props = new Props();
   private readonly water = new WaterSurface();
+  private readonly shore = new ShoreDressing();
   private motion: MotionFeel = motionFromStyle();
 
   constructor() {
     this.root.add(this.water.mesh);
+    this.shore.addTo(this.root);
+    this.island.addTo(this.root);
     this.board.addTo(this.root);
     this.props.addTo(this.root);
     this.highlights.addTo(this.root);
@@ -40,6 +48,10 @@ export class World {
 
   getRobberPosition(out = new THREE.Vector3()): THREE.Vector3 {
     return this.pieces.getRobberPosition(out);
+  }
+
+  getHexWorld(id: string, out = new THREE.Vector3()): THREE.Vector3 | null {
+    return this.board.getHexWorld(id, out);
   }
 
   getMotion(): MotionFeel {
@@ -76,20 +88,30 @@ export class World {
     camera: THREE.Camera,
   ): void {
     const harborsWereVisible = this.board.harborGroup.visible;
+    const shoreWasVisible = this.shore.group.visible;
     this.board.harborGroup.visible = false;
+    this.shore.group.visible = false;
     this.water.renderReflection(renderer, scene, camera);
     this.board.harborGroup.visible = harborsWereVisible;
+    this.shore.group.visible = shoreWasVisible;
   }
 
   applyAtmosphere(atm: AtmosphereSnapshot): void {
     this.water.applyAtmosphere(atm);
     this.board.applyBoardTint(atm);
+    this.island.applyBoardTint(atm);
     this.props.applyTint(atm);
+    this.shore.applyTint(atm);
   }
 
   build(board: BoardState): void {
     this.clearDynamic();
     this.props.reload();
+
+    const field = IslandField.fromBoard(board);
+    this.island.build(field);
+    this.pieces.setGround(field);
+    this.props.setHeightHint((x, z) => field.heightAt(x, z));
 
     this.water.resize(board.rings);
     const landCenters: { x: number; z: number }[] = [];
@@ -97,13 +119,14 @@ export class World {
       landCenters.push(axialToWorld(hex.q, hex.r));
     }
     this.water.setLandHexes(landCenters, HEX_SIZE);
+    this.shore.build(field);
 
-    this.board.build(board);
+    this.board.build(board, field);
     for (const hex of board.hexes.values()) {
       const { x, z } = axialToWorld(hex.q, hex.r);
-      this.props.stamp(hex.terrain, x, z, hex.id);
+      this.props.stamp(hex.terrain, x, z, hex.id, field.heightAt(x, z));
     }
-    this.highlights.build(board);
+    this.highlights.build(board, field);
     this.pieces.sync(board, this.motion, false);
     this.syncHighlights([], [], []);
   }
@@ -122,5 +145,7 @@ export class World {
     this.highlights.clear();
     this.pieces.reset();
     this.props.reset();
+    this.shore.clear();
+    this.island.clear();
   }
 }

@@ -6,14 +6,18 @@ import { makeCity, makeRoad, makeRobber, makeSettlement } from './pieces';
 import {
   makeBush,
   makeCactus,
+  makeBarn,
   makeDirtSkirt,
+  makeFallenLog,
   makeFence,
   makeFlowerTuft,
   makeHarborLabel,
   makeHarborPier,
   makeHexTile,
   makeMesa,
+  makeMountain,
   makeNumberToken,
+  makeOasis,
   makePastureRock,
   makePine,
   makeRock,
@@ -21,6 +25,7 @@ import {
   makeStoneWall,
   makeTree,
   makeWheatStalk,
+  makeWindmill,
 } from './props';
 
 export const ASSET_CATALOG: AssetDefinition[] = [
@@ -138,6 +143,41 @@ export const ASSET_CATALOG: AssetDefinition[] = [
     category: 'props',
     description: 'Desert cactus prop.',
     create: makeCactus,
+  },
+  {
+    id: 'mountain',
+    name: 'Boulder pile',
+    category: 'props',
+    description: 'Chunky faceted ore boulders.',
+    create: makeMountain,
+  },
+  {
+    id: 'barn',
+    name: 'Barn',
+    category: 'props',
+    description: 'Tiny wheat-field barn.',
+    create: makeBarn,
+  },
+  {
+    id: 'windmill',
+    name: 'Windmill',
+    category: 'props',
+    description: 'Tiny field windmill.',
+    create: makeWindmill,
+  },
+  {
+    id: 'fallen-log',
+    name: 'Fallen log',
+    category: 'props',
+    description: 'Forest floor log.',
+    create: makeFallenLog,
+  },
+  {
+    id: 'oasis',
+    name: 'Oasis',
+    category: 'props',
+    description: 'Desert pool with a palm.',
+    create: makeOasis,
   },
   {
     id: 'number-token',

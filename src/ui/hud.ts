@@ -58,7 +58,7 @@ export class Hud {
     this.lobby.innerHTML = `
       <div class="lobby-card">
         <h1>Catan</h1>
-        <p>Cozy low-poly fantasy island. Pick a map size, then players.</p>
+        <p>A stylized island diorama. Pick a map size, then players.</p>
         <div class="lobby-section">
           <div class="lobby-label">Map size</div>
           <div class="lobby-actions map-sizes">

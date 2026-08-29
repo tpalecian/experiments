@@ -2,6 +2,7 @@
  * Player piece factories (settlement, city, road, robber).
  */
 import * as THREE from 'three';
+import { HEX_SIZE } from '../../engine/board';
 import { STYLE, toonMat } from '../../style/style';
 import { resolvePlayerColor, type AssetCreateOptions } from './types';
 
@@ -18,7 +19,7 @@ export function makeSettlement(opts?: AssetCreateOptions): THREE.Object3D {
   const door = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.02), toonMat(STYLE.woodTrim));
   door.position.set(0, 0.12, 0.17);
   g.add(base, roof, door);
-  g.scale.setScalar(1.15);
+  g.scale.setScalar(1.35);
   return g;
 }
 
@@ -37,13 +38,13 @@ export function makeCity(opts?: AssetCreateOptions): THREE.Object3D {
   const flag = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.02), toonMat(STYLE.highlight));
   flag.position.set(0.28, 0.72, 0.05);
   g.add(keep, tower, roof, flag);
-  g.scale.setScalar(1.1);
+  g.scale.setScalar(1.28);
   return g;
 }
 
 export function makeRoad(opts?: AssetCreateOptions): THREE.Mesh {
   const color = resolvePlayerColor(opts);
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.12, 0.2), toonMat(color));
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.92 * HEX_SIZE, 0.12, 0.2), toonMat(color));
   mesh.castShadow = true;
   mesh.position.y = 0.06;
   return mesh;
@@ -65,6 +66,7 @@ export function makeRobber(_opts?: AssetCreateOptions): THREE.Object3D {
   const eyeR = eyeL.clone();
   eyeR.position.x = 0.05;
   g.add(body, head, eyeL, eyeR);
+  g.scale.setScalar(1.22);
   return g;
 }
 
