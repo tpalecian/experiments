@@ -71,9 +71,10 @@ Mountains are **boulder piles**: overlapping faceted grey rocks with light tops
 and dark sides. The island mesh stays a low rocky floor; silhouette comes from
 the props. Trees stay oversized enough to read from the diorama camera.
 
-The beach is a **wide warm-sand band** with thick white foam blobs along the
-organic coast and bright turquoise shallows — toy shoreline, not a thin glow
-ring.
+The beach is a **wide warm-sand band** with darker orange blotches. Surf is
+**layered white-to-mint paint-stroke foam** warped off the coast SDF — not a
+thin glow ring and not a hex contour. Shallows are pale mint with mossy
+depth patches.
 
 Each land hex uses circumradius `HEX_SIZE` (1.75, about 3× the old floor
 area) so groves, fields, and flocks can be composed instead of stacked on a

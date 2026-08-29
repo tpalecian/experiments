@@ -20,10 +20,10 @@ export interface WaterDepthPalette {
 
 export const WATER_DEPTH_PALETTES: Record<EnvironmentScheme, WaterDepthPalette> = {
   day: {
-    deep: '#0A6A88',
-    ocean: '#14B8C8',
-    lagoon: '#3EE8D8',
-    shelf: '#C8FFF4',
+    deep: '#1A6B62',
+    ocean: '#2A9A78',
+    lagoon: '#6EE0B0',
+    shelf: '#DCFFE8',
   },
   sunset: {
     deep: '#1A3A68',

@@ -265,6 +265,7 @@ void main() {
   float fres = pow(1.0 - max(dot(N, V), 0.0), uFresnelPower);
   // Keep base depth colour dominant; reflection adds soft scene contact shadows
   float reflectAmt = clamp(uReflectStrength * (0.22 + fres * uFresnelStrength * 2.8), 0.0, 0.72) * keep;
+  reflectAmt *= smoothstep(0.9, 2.6, shoreDist);
   if (ruv.x > 0.0 && ruv.x < 1.0 && ruv.y > 0.0 && ruv.y < 1.0) {
     vec3 refl = sampleReflection(ruv, uReflectDistort * (0.5 + fres * 0.8));
     // Desaturate / darken reflection so water stays readable as painted navy
@@ -280,6 +281,7 @@ void main() {
   float spec = pow(max(dot(N, H), 0.0), uSpecularPower);
   spec = smoothstep(0.15, 1.0, spec);
   spec *= 0.7 + 0.3 * wave;
+  spec *= smoothstep(0.9, 2.6, shoreDist);
   col += uSunColor * spec * uSpecularIntensity * keep * (1.0 - reflectAmt * 0.65);
 
   // 7. Soft caustics in shallow water
@@ -328,29 +330,44 @@ void main() {
   float arcGate = smoothstep(0.48, 0.72, n1 * 0.55 + n2 * 0.45);
   float crest = 1.0 - abs(bandFrac - mix(0.55, 0.82, n3));
   crest = pow(max(crest, 0.0), 5.5);
-  // Keep crests closer to land so they still follow hex edges (less outer rounding)
-  float nearShore = smoothstep(0.22, 0.5, prox) * (1.0 - smoothstep(0.82, 0.98, prox));
+  // Keep crests off the beach so painterly foam owns the waterline
+  float nearShore = smoothstep(0.05, 0.35, prox) * (1.0 - smoothstep(0.55, 0.85, prox));
   float ripple = accept * arcGate * crest * nearShore * clamp(uRippleIntensity, 0.0, 1.2);
 
-  // Shore foam — thick blob lip like a toy shoreline, not a thin glow ring
-  float foamWidth = max(uFoamWidth, 0.08);
-  float foamBand = smoothstep(-0.04, 0.0, shoreDist) * (1.0 - smoothstep(0.0, foamWidth * 1.35, shoreDist));
-  float blobA = valueNoise(vWorldPos.xz * 1.65);
-  float blobB = valueNoise(vWorldPos.xz * 3.4 + vec2(2.1, -1.4));
-  float blob = smoothstep(0.18, 0.55, blobA * 0.65 + blobB * 0.35);
-  float thickFoam = foamBand * mix(0.82, 1.0, blob);
-  float foamPulse = 1.0 - uFoamPulse + uFoamPulse * (0.5 + 0.5 * sin(uTime * uFoamPulseSpeed + shoreDist * 1.6 + wave * 1.4));
-  float shoreFoam = thickFoam * uShoreFoam * foamPulse;
+  // Painterly surf: warped paint-stroke blobs, not an SDF iso-ring
+  float foamWidth = max(uFoamWidth, 0.12);
+  vec2 foamP = vWorldPos.xz;
+  float nBig = valueNoise(foamP * 0.52);
+  float nMid = valueNoise(foamP * 1.28 + vec2(3.1, 1.4));
+  float nFine = valueNoise(foamP * 2.6 + vec2(-2.2, 4.7));
+  float surf = shoreDist + (nBig - 0.5) * foamWidth * 2.15 + (nMid - 0.5) * foamWidth * 0.85;
 
-  float foam = max(ripple * 0.22, shoreFoam);
-  col = mix(col, uFoamColor, clamp(foam, 0.0, 1.0) * keep);
+  float innerBand = smoothstep(-0.16 * foamWidth, 0.05, surf) * (1.0 - smoothstep(0.02, foamWidth * 0.72, surf));
+  float innerStroke = smoothstep(0.3, 0.58, nMid * 0.62 + nFine * 0.38);
+  float innerFoam = innerBand * mix(0.22, 1.0, innerStroke);
+
+  float outerBand = smoothstep(foamWidth * 0.12, foamWidth * 0.42, surf)
+    * (1.0 - smoothstep(foamWidth * 0.5, foamWidth * 1.7, surf));
+  float outerStroke = smoothstep(0.4, 0.68, nBig * 0.48 + nMid * 0.52);
+  float gaps = 1.0 - smoothstep(0.6, 0.84, nFine);
+  float outerFoam = outerBand * outerStroke * gaps;
+
+  vec3 foamMint = mix(uShallow, uFoamColor, 0.7);
+  col = mix(col, foamMint, clamp(outerFoam * uShoreFoam, 0.0, 0.88) * keep);
+  col = mix(col, uFoamColor, clamp(innerFoam * uShoreFoam, 0.0, 1.0) * keep);
+  col = mix(col, uFoamColor, clamp(ripple * 0.18, 0.0, 0.4) * keep);
+
+  // Mossy depth patches in the shallows (reference underwater blotches)
+  float mossZone = smoothstep(0.22, 0.85, shoreDist) * (1.0 - smoothstep(2.1, 4.4, shoreDist));
+  float mossBlob = smoothstep(0.5, 0.76, valueNoise(foamP * 0.4 + vec2(8.2, 2.0)));
+  col = mix(col, vec3(0.18, 0.46, 0.3), mossBlob * mossZone * 0.38 * keep);
 
   // 9. Horizon dissolve
   vec3 fadeCol = uHorizon * (1.0 + uHorizonHaze * 0.55);
   col = mix(col, fadeCol, haze);
   if (keep < 0.04) discard;
 
-  float shallowAlpha = mix(0.28, 1.0, smoothstep(-0.08, 2.1, shoreDist));
+  float shallowAlpha = mix(0.2, 1.0, smoothstep(-0.04, 2.8, shoreDist));
   gl_FragColor = vec4(col, keep * shallowAlpha);
 }
 `;

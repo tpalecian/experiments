@@ -7,16 +7,16 @@
  */
 import { HEX_SIZE, axialToWorld, boardRadiusWorld } from '../engine/board';
 import type { BoardState, Terrain } from '../engine/types';
-import { DIORAMA_TERRAIN, DIORAMA_SAND, DIORAMA_SAND_WET } from '../style/style';
+import { DIORAMA_TERRAIN, DIORAMA_SAND, DIORAMA_SAND_WET, DIORAMA_SAND_PATCH } from '../style/style';
 
 export const COAST_HEX_PAD = 0.18 * HEX_SIZE;
 export const COAST_ROUND = 0.36 * HEX_SIZE;
 export const COAST_WARP_FREQ = 0.38 / HEX_SIZE;
-export const COAST_WARP_AMP = 0.55 * HEX_SIZE;
+export const COAST_WARP_AMP = 0.72 * HEX_SIZE;
 export const COAST_WARP_FREQ2 = 0.82 / HEX_SIZE;
-export const COAST_WARP_AMP2 = 0.14 * HEX_SIZE;
-export const BEACH_WIDTH = 0.78 * HEX_SIZE;
-export const SHELF_WIDTH = 0.62 * HEX_SIZE;
+export const COAST_WARP_AMP2 = 0.22 * HEX_SIZE;
+export const BEACH_WIDTH = 1.12 * HEX_SIZE;
+export const SHELF_WIDTH = 0.72 * HEX_SIZE;
 /** Water discards inland of this (keeps transparent shallows over the shelf). */
 export const WATER_INLAND_DISCARD = 0.48 * HEX_SIZE;
 
@@ -114,6 +114,7 @@ const BIOME_RGB: Record<Terrain, { r: number; g: number; b: number }> = {
 
 const SAND = hexToRgb(DIORAMA_SAND);
 const SAND_WET = hexToRgb(DIORAMA_SAND_WET);
+const SAND_PATCH = hexToRgb(DIORAMA_SAND_PATCH);
 
 /** GLSL matching warp + rounded-hex union. Injected into water shaders. */
 export function coastShaderChunk(maxHexes: number): string {
@@ -231,23 +232,27 @@ export class IslandField implements GroundSampler {
     const roll = (valueNoise(ux * 0.31, uz * 0.31) - 0.5) * 0.045 * HEX_SIZE;
     height += roll;
 
-    const landMask = smoothstep(0.12 * HEX_SIZE, -0.08 * HEX_SIZE, shoreDist);
+    const landMask = smoothstep(0.18 * HEX_SIZE, -0.1 * HEX_SIZE, shoreDist);
     const beachMask =
-      smoothstep(BEACH_WIDTH, -0.02 * HEX_SIZE, shoreDist) * smoothstep(-0.48 * HEX_SIZE, -0.04 * HEX_SIZE, shoreDist);
+      smoothstep(BEACH_WIDTH, -0.04 * HEX_SIZE, shoreDist) * smoothstep(-0.72 * HEX_SIZE, -0.08 * HEX_SIZE, shoreDist);
     const shelfMask =
-      smoothstep(-SHELF_WIDTH, -0.02 * HEX_SIZE, shoreDist) * smoothstep(0.12 * HEX_SIZE, -0.02 * HEX_SIZE, shoreDist);
+      smoothstep(-SHELF_WIDTH, -0.02 * HEX_SIZE, shoreDist) * smoothstep(0.14 * HEX_SIZE, -0.02 * HEX_SIZE, shoreDist);
 
-    const beachH = HEX_SIZE * (0.05 + valueNoise(ux * 0.9, uz * 0.9) * 0.01);
+    const beachH = HEX_SIZE * (0.048 + valueNoise(ux * 0.55, uz * 0.55) * 0.012);
     const shelfH = HEX_SIZE * -0.055 + shoreDist * 0.04;
     height = height * landMask + beachH * beachMask * (1 - landMask * 0.35);
     if (shelfMask > 0.01 && landMask < 0.5) {
       height = height * (1 - shelfMask) + shelfH * shelfMask;
     }
 
-    const wet = smoothstep(0.1 * HEX_SIZE, -0.2 * HEX_SIZE, shoreDist);
-    cr = cr * (1 - beachMask) + (SAND.r * (1 - wet) + SAND_WET.r * wet) * beachMask;
-    cg = cg * (1 - beachMask) + (SAND.g * (1 - wet) + SAND_WET.g * wet) * beachMask;
-    cb = cb * (1 - beachMask) + (SAND.b * (1 - wet) + SAND_WET.b * wet) * beachMask;
+    const wet = smoothstep(0.12 * HEX_SIZE, -0.28 * HEX_SIZE, shoreDist);
+    const patch = smoothstep(0.46, 0.72, valueNoise(ux * 0.36 + 1.7, uz * 0.36 - 0.9));
+    const sandR = SAND.r * (1 - wet) + SAND_WET.r * wet;
+    const sandG = SAND.g * (1 - wet) + SAND_WET.g * wet;
+    const sandB = SAND.b * (1 - wet) + SAND_WET.b * wet;
+    cr = cr * (1 - beachMask) + (sandR * (1 - patch) + SAND_PATCH.r * patch) * beachMask;
+    cg = cg * (1 - beachMask) + (sandG * (1 - patch) + SAND_PATCH.g * patch) * beachMask;
+    cb = cb * (1 - beachMask) + (sandB * (1 - patch) + SAND_PATCH.b * patch) * beachMask;
     if (shelfMask > 0.01) {
       cr = cr * (1 - shelfMask) + SAND_WET.r * shelfMask;
       cg = cg * (1 - shelfMask) + SAND_WET.g * shelfMask;

@@ -87,7 +87,8 @@ function buildIslandGeometry(field: IslandField): THREE.BufferGeometry {
       const idx = positions.length / 3;
       indexAt[iz * (segs + 1) + ix] = idx;
       positions.push(x, s.height, z);
-      const ao = 0.78 + Math.min(0.22, Math.max(0, s.height) * 0.12);
+      const ao =
+        s.beachMask > 0.4 ? 0.97 : 0.78 + Math.min(0.22, Math.max(0, s.height) * 0.12);
       colors.push(s.color.r * ao, s.color.g * ao, s.color.b * ao);
     }
   }

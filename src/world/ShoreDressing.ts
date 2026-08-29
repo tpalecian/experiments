@@ -60,7 +60,7 @@ export class ShoreDressing {
         const d = field.shoreDistance(x, z);
         if (d < 0.08 * HEX_SIZE || d > 0.48 * HEX_SIZE) continue;
         const n = hash21(x * 1.7 + 4.2, z * 1.9 - 2.1);
-        if (n < 0.78) continue;
+        if (n < 0.9) continue;
         dummy.position.set(x, 0.02, z);
         const s = (0.08 + n * 0.06) * HEX_SIZE;
         dummy.scale.set(s * 0.35, s * 1.8, s * 0.35);
