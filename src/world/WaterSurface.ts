@@ -345,31 +345,27 @@ void main() {
   col = mix(col, fadeCol, haze);
   if (keep < 0.04) discard;
 
-  // Painterly surf AFTER haze so the lip is not washed out. Noise breaks the
-  // band into strokes; warp stays small so foam stays on the waterline.
+  // Soft mint fringe only. Chunk foam is instanced paint dabs in ShoreDressing;
+  // a wide white shader band read as ice floes.
   float nBig = valueNoise(foamP * 0.26);
   float nMid = valueNoise(foamP * 0.54 + vec2(3.1, 1.4));
   float nFine = valueNoise(foamP * 0.95 + vec2(-2.2, 4.7));
   float nStretch = valueNoise(foamP * vec2(0.16, 0.48) + vec2(6.2, 1.1));
-  float surf = shoreDist + (nBig - 0.5) * 0.22 + (nMid - 0.5) * 0.1;
+  float surf = shoreDist + (nBig - 0.5) * 0.16 + (nMid - 0.5) * 0.08;
 
-  float lip = smoothstep(0.0, 0.1, surf) * (1.0 - smoothstep(0.55, 0.95, surf));
-  float lipBreak = smoothstep(0.18, 0.42, nStretch * 0.7 + nFine * 0.3);
+  float lip = smoothstep(0.0, 0.06, surf) * (1.0 - smoothstep(0.2, 0.38, surf));
+  float lipBreak = smoothstep(0.2, 0.45, nStretch * 0.7 + nFine * 0.3);
   float innerFoam = lip * lipBreak;
 
-  float blobWin = smoothstep(0.2, 0.45, surf) * (1.0 - smoothstep(1.15, 1.85, surf));
-  float blob = smoothstep(0.48, 0.66, nBig) * (1.0 - smoothstep(0.72, 0.9, nFine));
+  float blobWin = smoothstep(0.18, 0.4, surf) * (1.0 - smoothstep(0.7, 1.15, surf));
+  float blob = smoothstep(0.5, 0.68, nBig) * (1.0 - smoothstep(0.7, 0.9, nFine));
   float outerFoam = blobWin * blob;
 
-  float dabWin = smoothstep(0.55, 0.9, surf) * (1.0 - smoothstep(1.5, 2.3, surf));
-  float dabs = smoothstep(0.58, 0.78, nStretch) * smoothstep(0.3, 0.55, 1.0 - nMid);
-  float dabFoam = dabWin * dabs;
-
-  vec3 foamMint = mix(uShallow, uFoamColor, 0.38);
+  vec3 foamMint = mix(uShallow, uFoamColor, 0.35);
   float foamAmt = clamp(uShoreFoam, 0.0, 1.4);
-  col = mix(col, foamMint, clamp((outerFoam * 0.9 + dabFoam * 0.75) * foamAmt, 0.0, 1.0));
-  col = mix(col, uFoamColor, clamp(innerFoam * foamAmt, 0.0, 1.0));
-  col = mix(col, uFoamColor, clamp(ripple * 0.05, 0.0, 0.12));
+  col = mix(col, foamMint, clamp(outerFoam * foamAmt * 0.4, 0.0, 0.45));
+  col = mix(col, uFoamColor, clamp(innerFoam * foamAmt * 0.5, 0.0, 0.55));
+  col = mix(col, uFoamColor, clamp(ripple * 0.04, 0.0, 0.1));
 
   // Opaque mint shallows — the reference water is a flat paint fill, not a
   // see-through shelf that flashes the dark scene behind the sand cut.

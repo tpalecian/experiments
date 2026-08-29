@@ -28,26 +28,26 @@ export class ShoreDressing {
   build(field: IslandField): void {
     this.clear();
     this.foamWhite = this.buildFoamLayer(field, {
-      minDist: 0.03 * HEX_SIZE,
-      maxDist: 0.48 * HEX_SIZE,
-      step: 0.2 * HEX_SIZE,
-      keepAbove: 0.5,
-      minScale: 0.16 * HEX_SIZE,
-      maxScale: 0.34 * HEX_SIZE,
+      minDist: 0.04 * HEX_SIZE,
+      maxDist: 0.42 * HEX_SIZE,
+      step: 0.14 * HEX_SIZE,
+      keepAbove: 0.42,
+      minScale: 0.07 * HEX_SIZE,
+      maxScale: 0.16 * HEX_SIZE,
       color: FOAM_WHITE,
       y: 0.018,
-      stretch: 1.65,
+      stretch: 1.35,
     });
     this.foamMint = this.buildFoamLayer(field, {
-      minDist: 0.32 * HEX_SIZE,
-      maxDist: 1.25 * HEX_SIZE,
-      step: 0.3 * HEX_SIZE,
-      keepAbove: 0.64,
-      minScale: 0.14 * HEX_SIZE,
-      maxScale: 0.36 * HEX_SIZE,
+      minDist: 0.28 * HEX_SIZE,
+      maxDist: 1.05 * HEX_SIZE,
+      step: 0.2 * HEX_SIZE,
+      keepAbove: 0.58,
+      minScale: 0.08 * HEX_SIZE,
+      maxScale: 0.18 * HEX_SIZE,
       color: FOAM_MINT,
       y: 0.014,
-      stretch: 1.85,
+      stretch: 1.5,
     });
     this.weed = this.buildWeed(field);
     if (this.foamMint) this.group.add(this.foamMint);
@@ -127,7 +127,7 @@ export class ShoreDressing {
         if (d < opts.minDist || d > opts.maxDist) continue;
         dummy.position.set(px, opts.y, pz);
         const s = opts.minScale + (opts.maxScale - opts.minScale) * n;
-        dummy.scale.set(s * opts.stretch, 0.01, s * (0.38 + n2 * 0.28));
+        dummy.scale.set(s * opts.stretch, 0.01, s * (0.42 + n2 * 0.22));
         dummy.rotation.set(0, n * 6.2, 0);
         dummy.updateMatrix();
         matrices.push(dummy.matrix.clone());
