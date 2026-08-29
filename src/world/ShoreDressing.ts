@@ -28,24 +28,26 @@ export class ShoreDressing {
   build(field: IslandField): void {
     this.clear();
     this.foamWhite = this.buildFoamLayer(field, {
-      minDist: 0.02 * HEX_SIZE,
-      maxDist: 0.72 * HEX_SIZE,
-      step: 0.16 * HEX_SIZE,
-      keepAbove: 0.34,
-      minScale: 0.22 * HEX_SIZE,
-      maxScale: 0.42 * HEX_SIZE,
+      minDist: 0.03 * HEX_SIZE,
+      maxDist: 0.48 * HEX_SIZE,
+      step: 0.2 * HEX_SIZE,
+      keepAbove: 0.5,
+      minScale: 0.16 * HEX_SIZE,
+      maxScale: 0.34 * HEX_SIZE,
       color: FOAM_WHITE,
       y: 0.018,
+      stretch: 1.65,
     });
     this.foamMint = this.buildFoamLayer(field, {
-      minDist: 0.28 * HEX_SIZE,
-      maxDist: 1.35 * HEX_SIZE,
-      step: 0.22 * HEX_SIZE,
-      keepAbove: 0.52,
-      minScale: 0.18 * HEX_SIZE,
-      maxScale: 0.4 * HEX_SIZE,
+      minDist: 0.32 * HEX_SIZE,
+      maxDist: 1.25 * HEX_SIZE,
+      step: 0.3 * HEX_SIZE,
+      keepAbove: 0.64,
+      minScale: 0.14 * HEX_SIZE,
+      maxScale: 0.36 * HEX_SIZE,
       color: FOAM_MINT,
       y: 0.014,
+      stretch: 1.85,
     });
     this.weed = this.buildWeed(field);
     if (this.foamMint) this.group.add(this.foamMint);
@@ -106,12 +108,13 @@ export class ShoreDressing {
       maxScale: number;
       color: number;
       y: number;
+      stretch: number;
     },
   ): THREE.InstancedMesh | null {
     const dummy = new THREE.Object3D();
     const matrices: THREE.Matrix4[] = [];
     const radius = field.radius;
-    const jitter = opts.step * 0.45;
+    const jitter = opts.step * 0.55;
 
     for (let z = -radius; z <= radius; z += opts.step) {
       for (let x = -radius; x <= radius; x += opts.step) {
@@ -124,7 +127,7 @@ export class ShoreDressing {
         if (d < opts.minDist || d > opts.maxDist) continue;
         dummy.position.set(px, opts.y, pz);
         const s = opts.minScale + (opts.maxScale - opts.minScale) * n;
-        dummy.scale.set(s * (0.75 + n2 * 0.7), 0.01, s * (0.55 + n * 0.5));
+        dummy.scale.set(s * opts.stretch, 0.01, s * (0.38 + n2 * 0.28));
         dummy.rotation.set(0, n * 6.2, 0);
         dummy.updateMatrix();
         matrices.push(dummy.matrix.clone());
