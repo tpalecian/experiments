@@ -1,18 +1,14 @@
-import { MAP_SIZES, createBoard } from './board';
+import { MAP_SIZE_ORDER, MAP_SIZES, createBoard } from './board';
 import type { MapSizeId } from './board';
 import {
   addResources,
-  canAfford,
   computeVictoryPoints,
   discardCount,
   distributeProduction,
-  legalCities,
-  legalRoads,
-  legalSettlements,
   legalSetupRoads,
   legalSetupSettlements,
+  legalTargets,
   payCost,
-  pieceLimits,
   playersAdjacentToHex,
   tradeRate,
   updateLongestRoad,
@@ -125,7 +121,9 @@ export class GameEngine {
   }
 
   startGame(playerCount: number, mapSize: MapSizeId = this.mapSize, seed = this.seed): void {
-    if (playerCount < 2 || playerCount > 4) return;
+    if (!Number.isInteger(playerCount) || playerCount < 2 || playerCount > 4) return;
+    if (!isMapSizeId(mapSize)) return;
+    if (!Number.isInteger(seed)) return;
     this.seed = seed;
     this.mapSize = mapSize;
     this.board = createBoard(seed, mapSize);
@@ -170,9 +168,8 @@ export class GameEngine {
 
   private computeLegalVertices(): string[] {
     if (this.phase === 'setupSettlement') return legalSetupSettlements(this.board);
-    if (this.phase === 'main') {
-      if (this.buildMode === 'settlement') return legalSettlements(this.board, this.currentPlayer);
-      if (this.buildMode === 'city') return legalCities(this.board, this.currentPlayer);
+    if (this.phase === 'main' && (this.buildMode === 'settlement' || this.buildMode === 'city')) {
+      return legalTargets(this.board, this.player(), this.buildMode);
     }
     return [];
   }
@@ -182,7 +179,7 @@ export class GameEngine {
       return legalSetupRoads(this.board, this.currentPlayer, this.lastSetupSettlement);
     }
     if (this.phase === 'main' && this.buildMode === 'road') {
-      return legalRoads(this.board, this.currentPlayer);
+      return legalTargets(this.board, this.player(), this.buildMode);
     }
     return [];
   }
@@ -193,6 +190,7 @@ export class GameEngine {
   }
 
   placeSettlement(vertexId: string): boolean {
+    if (!this.board.vertices.has(vertexId)) return false;
     if (this.phase === 'setupSettlement') {
       const legal = legalSetupSettlements(this.board);
       if (!legal.includes(vertexId)) return false;
@@ -217,10 +215,7 @@ export class GameEngine {
 
     if (this.phase === 'main' && this.buildMode === 'settlement') {
       const p = this.player();
-      const limits = pieceLimits(this.board);
-      if (p.settlements >= limits.maxSettlements) return false;
-      if (!canAfford(p, BUILD_COSTS.settlement)) return false;
-      if (!legalSettlements(this.board, p.id).includes(vertexId)) return false;
+      if (!legalTargets(this.board, p, 'settlement').includes(vertexId)) return false;
       payCost(p, BUILD_COSTS.settlement);
       this.board.buildings.set(vertexId, {
         vertexId,
@@ -228,17 +223,13 @@ export class GameEngine {
         kind: 'settlement',
       });
       p.settlements += 1;
-      this.buildMode = 'none';
-      this.refreshAwardsAndVp();
-      this.checkWin();
-      this.message = `${p.name} built a settlement.`;
-      this.emit();
-      return true;
+      return this.completeBuild(`${p.name} built a settlement.`);
     }
     return false;
   }
 
   placeRoad(edgeId: string): boolean {
+    if (!this.board.edges.has(edgeId)) return false;
     if (this.phase === 'setupRoad') {
       if (!this.lastSetupSettlement) return false;
       const legal = legalSetupRoads(this.board, this.currentPlayer, this.lastSetupSettlement);
@@ -252,41 +243,27 @@ export class GameEngine {
 
     if (this.phase === 'main' && this.buildMode === 'road') {
       const p = this.player();
-      const limits = pieceLimits(this.board);
-      if (p.roads >= limits.maxRoads) return false;
-      if (!canAfford(p, BUILD_COSTS.road)) return false;
-      if (!legalRoads(this.board, p.id).includes(edgeId)) return false;
+      if (!legalTargets(this.board, p, 'road').includes(edgeId)) return false;
       payCost(p, BUILD_COSTS.road);
       this.board.roads.set(edgeId, { edgeId, owner: p.id });
       p.roads += 1;
-      this.buildMode = 'none';
-      this.refreshAwardsAndVp();
-      this.checkWin();
-      this.message = `${p.name} built a road.`;
-      this.emit();
-      return true;
+      return this.completeBuild(`${p.name} built a road.`);
     }
     return false;
   }
 
   placeCity(vertexId: string): boolean {
     if (this.phase !== 'main' || this.buildMode !== 'city') return false;
+    if (!this.board.vertices.has(vertexId)) return false;
     const p = this.player();
-    const limits = pieceLimits(this.board);
-    if (p.cities >= limits.maxCities) return false;
-    if (!canAfford(p, BUILD_COSTS.city)) return false;
-    if (!legalCities(this.board, p.id).includes(vertexId)) return false;
+    if (!legalTargets(this.board, p, 'city').includes(vertexId)) return false;
+    const building = this.board.buildings.get(vertexId);
+    if (!building) return false;
     payCost(p, BUILD_COSTS.city);
-    const b = this.board.buildings.get(vertexId)!;
-    b.kind = 'city';
+    building.kind = 'city';
     p.settlements -= 1;
     p.cities += 1;
-    this.buildMode = 'none';
-    this.refreshVp();
-    this.checkWin();
-    this.message = `${p.name} upgraded to a city.`;
-    this.emit();
-    return true;
+    return this.completeBuild(`${p.name} upgraded to a city.`);
   }
 
   private grantInitialResources(vertexId: string): void {
@@ -294,8 +271,8 @@ export class GameEngine {
     if (!v) return;
     const gain = emptyBank();
     for (const hid of v.hexIds) {
-      const hex = this.board.hexes.get(hid)!;
-      if (hex.terrain === 'desert') continue;
+      const hex = this.board.hexes.get(hid);
+      if (!hex || hex.terrain === 'desert') continue;
       gain[hex.terrain] += 1;
     }
     addResources(this.player(), gain);
@@ -307,8 +284,9 @@ export class GameEngine {
     this.lastSetupSettlement = null;
 
     if (this.setupIndex >= totalPlacements) {
-      this.phase = 'roll';
       this.currentPlayer = 0;
+      if (this.checkWin()) return;
+      this.phase = 'roll';
       this.message = `${this.player().name}: roll the dice.`;
       return;
     }
@@ -374,13 +352,18 @@ export class GameEngine {
 
   discard(playerId: PlayerId, resources: Partial<ResourceBank>): boolean {
     if (this.phase !== 'discard') return false;
+    if (!this.existingPlayer(playerId)) return false;
     const need = this.discardRemaining.get(playerId);
-    if (!need) return false;
+    if (need === undefined || need <= 0) return false;
+    if (!resources || typeof resources !== 'object' || Array.isArray(resources)) return false;
+    for (const key of Object.keys(resources)) {
+      if (!isResource(key)) return false;
+    }
     const p = this.players[playerId];
     let total = 0;
     for (const r of RESOURCES) {
       const n = resources[r] ?? 0;
-      if (n < 0 || n > p.resources[r]) return false;
+      if (!Number.isInteger(n) || n < 0 || n > p.resources[r]) return false;
       total += n;
     }
     if (total !== need) return false;
@@ -404,13 +387,13 @@ export class GameEngine {
     if (hexId === this.board.robberHexId) return false;
     this.board.robberHexId = hexId;
     const targets = playersAdjacentToHex(this.board, hexId, this.currentPlayer).filter(
-      (pid) => bankTotal(this.players[pid].resources) > 0,
+      (pid) => this.existingPlayer(pid) && bankTotal(this.players[pid].resources) > 0,
     );
     if (targets.length === 0) {
       this.phase = 'main';
       this.message = `${this.player().name}: robber moved. Trade or build, then end turn.`;
     } else if (targets.length === 1) {
-      this.stealFrom(targets[0]);
+      this.transferStolenCard(targets[0]);
       return true;
     } else {
       this.stealTargets = targets;
@@ -422,32 +405,19 @@ export class GameEngine {
   }
 
   stealFrom(target: PlayerId): boolean {
-    if (this.phase !== 'steal' && this.phase !== 'robber') return false;
-    if (this.phase === 'steal' && !this.stealTargets.includes(target)) return false;
+    if (this.phase !== 'steal') return false;
+    if (!this.existingPlayer(target)) return false;
+    if (target === this.currentPlayer) return false;
+    if (!this.stealTargets.includes(target)) return false;
     const victim = this.players[target];
-    const pool: Resource[] = [];
-    for (const r of RESOURCES) {
-      for (let i = 0; i < victim.resources[r]; i++) pool.push(r);
-    }
-    if (pool.length === 0) {
-      this.phase = 'main';
-      this.stealTargets = [];
-      this.message = `${this.player().name}: nothing to steal.`;
-      this.emit();
-      return true;
-    }
-    const stolen = pool[Math.floor(this.random() * pool.length)];
-    victim.resources[stolen] -= 1;
-    this.player().resources[stolen] += 1;
-    this.stealTargets = [];
-    this.phase = 'main';
-    this.message = `${this.player().name} stole ${stolen} from ${victim.name}.`;
-    this.emit();
+    if (bankTotal(victim.resources) === 0) return false;
+    this.transferStolenCard(target);
     return true;
   }
 
   setBuildMode(mode: BuildMode): void {
     if (this.phase !== 'main') return;
+    if (!isBuildMode(mode)) return;
     this.buildMode = this.buildMode === mode ? 'none' : mode;
     const labels: Record<BuildMode, string> = {
       none: 'Select an action.',
@@ -455,12 +425,13 @@ export class GameEngine {
       settlement: 'Click a highlighted vertex to build a settlement.',
       city: 'Click a settlement to upgrade to a city.',
     };
-    this.message = labels[mode];
+    this.message = labels[this.buildMode];
     this.emit();
   }
 
   bankTrade(give: Resource, receive: Resource): boolean {
     if (this.phase !== 'main') return false;
+    if (!isResource(give) || !isResource(receive)) return false;
     if (give === receive) return false;
     const p = this.player();
     const rate = tradeRate(this.board, p.id, give);
@@ -476,9 +447,23 @@ export class GameEngine {
     if (this.phase !== 'main') return false;
     this.buildMode = 'none';
     this.currentPlayer = ((this.currentPlayer + 1) % this.playerCount) as PlayerId;
-    this.phase = 'roll';
     this.productionLog = '';
+    if (this.checkWin()) {
+      this.emit();
+      return true;
+    }
+    this.phase = 'roll';
     this.message = `${this.player().name}: roll the dice.`;
+    this.emit();
+    return true;
+  }
+
+  private completeBuild(message: string): boolean {
+    this.buildMode = 'none';
+    this.refreshAwardsAndVp();
+    if (!this.checkWin()) {
+      this.message = message;
+    }
     this.emit();
     return true;
   }
@@ -494,17 +479,42 @@ export class GameEngine {
     }
   }
 
-  private checkWin(): void {
-    this.refreshVp();
+  private checkWin(): boolean {
+    const p = this.player();
     const winVp = MAP_SIZES[this.mapSize].winVp;
-    for (const p of this.players) {
-      if (p.victoryPoints >= winVp) {
-        this.winner = p.id;
-        this.phase = 'gameOver';
-        this.message = `${p.name} wins with ${p.victoryPoints} victory points!`;
-        return;
-      }
+    if (p.victoryPoints >= winVp) {
+      this.winner = p.id;
+      this.phase = 'gameOver';
+      this.buildMode = 'none';
+      this.message = `${p.name} wins with ${p.victoryPoints} victory points!`;
+      return true;
     }
+    return false;
+  }
+
+  private transferStolenCard(target: PlayerId): void {
+    const victim = this.players[target];
+    const pool: Resource[] = [];
+    for (const r of RESOURCES) {
+      for (let i = 0; i < victim.resources[r]; i++) pool.push(r);
+    }
+    this.stealTargets = [];
+    if (pool.length === 0) {
+      this.phase = 'main';
+      this.message = `${this.player().name}: nothing to steal.`;
+      this.emit();
+      return;
+    }
+    const stolen = pool[Math.floor(this.random() * pool.length)];
+    victim.resources[stolen] -= 1;
+    this.player().resources[stolen] += 1;
+    this.phase = 'main';
+    this.message = `${this.player().name} stole ${stolen} from ${victim.name}.`;
+    this.emit();
+  }
+
+  private existingPlayer(id: PlayerId): boolean {
+    return Number.isInteger(id) && this.players.some((p) => p.id === id);
   }
 
   clickVertex(vertexId: string): void {
@@ -526,4 +536,18 @@ export class GameEngine {
   clickHex(hexId: string): void {
     if (this.phase === 'robber') this.moveRobber(hexId);
   }
+}
+
+const BUILD_MODES: readonly BuildMode[] = ['none', 'road', 'settlement', 'city'];
+
+function isMapSizeId(value: string): value is MapSizeId {
+  return (MAP_SIZE_ORDER as readonly string[]).includes(value);
+}
+
+function isResource(value: string): value is Resource {
+  return (RESOURCES as readonly string[]).includes(value);
+}
+
+function isBuildMode(value: string): value is BuildMode {
+  return (BUILD_MODES as readonly string[]).includes(value);
 }

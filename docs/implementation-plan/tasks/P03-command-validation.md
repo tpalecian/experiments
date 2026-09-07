@@ -1,6 +1,6 @@
 # P03 — Command boundaries, legal targets, and victory
 
-**Status:** Not started. **Dependencies:** P02. **Goal:** rejected actions are no-ops, legal affordances agree with engine rules, and a winning move emits the final message.
+**Status:** Complete. **Dependencies:** P02. **Goal:** rejected actions are no-ops, legal affordances agree with engine rules, and a winning move emits the final message.
 
 ## Read and edit
 
