@@ -229,7 +229,7 @@ export class GameEngine {
       });
       p.settlements += 1;
       this.buildMode = 'none';
-      this.refreshVp();
+      this.refreshAwardsAndVp();
       this.checkWin();
       this.message = `${p.name} built a settlement.`;
       this.emit();
@@ -259,9 +259,8 @@ export class GameEngine {
       payCost(p, BUILD_COSTS.road);
       this.board.roads.set(edgeId, { edgeId, owner: p.id });
       p.roads += 1;
-      this.longestRoadOwner = updateLongestRoad(this.board, this.players, this.longestRoadOwner);
       this.buildMode = 'none';
-      this.refreshVp();
+      this.refreshAwardsAndVp();
       this.checkWin();
       this.message = `${p.name} built a road.`;
       this.emit();
@@ -482,6 +481,11 @@ export class GameEngine {
     this.message = `${this.player().name}: roll the dice.`;
     this.emit();
     return true;
+  }
+
+  private refreshAwardsAndVp(): void {
+    this.longestRoadOwner = updateLongestRoad(this.board, this.players, this.longestRoadOwner);
+    this.refreshVp();
   }
 
   private refreshVp(): void {

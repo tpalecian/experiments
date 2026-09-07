@@ -9,20 +9,27 @@ import {
   canAfford,
   computeVictoryPoints,
   legalCities,
+  legalSettlements,
   legalSetupRoads,
   legalSetupSettlements,
   longestRoadLength,
   updateLongestRoad,
 } from '../src/engine/rules';
 import { BUILD_COSTS, RESOURCES, emptyBank } from '../src/engine/types';
+import type { PlayerId } from '../src/engine/types';
 import { parseReviewQuery, REVIEW_DEFAULTS } from '../src/ui/reviewRoute';
 import {
   addBlockingSettlement,
+  addRoad,
   addRoadChain,
+  arrangeLegalRouteInterruption,
+  awardPlayers,
   boardLayoutFingerprint,
   diceSequence,
   emptyRoadGraph,
   fixtureStateFingerprint,
+  growOpenLongestRoad,
+  permute,
   prepareAffordableMain,
   sequenceRandom,
   startSeededGame,
@@ -452,6 +459,147 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(graph.buildings.get('p0v2')?.owner === 1, 'blocking settlement recorded');
   assert(longestRoadLength(graph, 1) === 5, 'unblocked synthetic chain is length 5');
   console.log('ok P01 fixtures and rng injection');
+}
+
+{
+  function graphWithLengths(entries: Array<{ player: PlayerId; edges: number }>) {
+    const graph = emptyRoadGraph();
+    for (const entry of entries) {
+      addRoadChain(graph, entry.player, entry.edges, `p${entry.player}`);
+    }
+    return graph;
+  }
+
+  function assertAward(
+    entries: Array<{ player: PlayerId; edges: number }>,
+    order: PlayerId[],
+    current: PlayerId | null,
+    expected: PlayerId | null,
+    msg: string,
+  ): void {
+    const graph = graphWithLengths(entries);
+    const got = updateLongestRoad(graph, awardPlayers(order), current);
+    assert(got === expected, `${msg} (order ${order.join(',')}: got ${got}, expected ${expected})`);
+  }
+
+  const two = permute<PlayerId>([0, 1]);
+  for (const order of two) {
+    assertAward([{ player: 0, edges: 6 }, { player: 1, edges: 4 }], order, null, 0, 'unique leader ≥5');
+    assertAward([{ player: 0, edges: 4 }, { player: 1, edges: 6 }], order, null, 1, 'unique leader is player 1');
+    assertAward([{ player: 0, edges: 4 }, { player: 1, edges: 3 }], order, null, null, 'all below five');
+    assertAward([{ player: 0, edges: 5 }, { player: 1, edges: 5 }], order, null, null, 'two leaders with no incumbent');
+    assertAward([{ player: 0, edges: 5 }, { player: 1, edges: 5 }], order, 0, 0, 'tied eligible incumbent 0');
+    assertAward([{ player: 0, edges: 5 }, { player: 1, edges: 5 }], order, 1, 1, 'tied eligible incumbent 1');
+  }
+
+  const three = permute<PlayerId>([0, 1, 2]);
+  for (const order of three) {
+    assertAward(
+      [{ player: 0, edges: 5 }, { player: 1, edges: 6 }, { player: 2, edges: 6 }],
+      order,
+      0,
+      null,
+      'incumbent overtaken by tied successors',
+    );
+    assertAward(
+      [{ player: 0, edges: 6 }, { player: 1, edges: 6 }, { player: 2, edges: 4 }],
+      order,
+      1,
+      1,
+      'tied eligible incumbent among three',
+    );
+    assertAward(
+      [{ player: 0, edges: 5 }, { player: 1, edges: 6 }, { player: 2, edges: 4 }],
+      order,
+      0,
+      1,
+      'unique successor overtakes incumbent',
+    );
+  }
+
+  const split = emptyRoadGraph();
+  addRoadChain(split, 0, 5, 'p0');
+  addRoadChain(split, 1, 3, 'p1');
+  addBlockingSettlement(split, 'p0v2', 1);
+  assert(longestRoadLength(split, 0) === 3, 'split-to-below-five leaves a 3-edge fragment');
+  assert(updateLongestRoad(split, awardPlayers([0, 1]), 0) === null, 'split-to-below-five drops the award');
+
+  const ends = emptyRoadGraph();
+  addRoadChain(ends, 0, 5, 'p');
+  addBlockingSettlement(ends, 'pv0', 1);
+  assert(longestRoadLength(ends, 0) === 5, 'edge leading to opponent at start still counts');
+  addBlockingSettlement(ends, 'pv5', 1);
+  assert(longestRoadLength(ends, 0) === 5, 'edge leading to opponent at both endpoints still counts');
+
+  const mid = emptyRoadGraph();
+  addRoadChain(mid, 0, 5, 'p');
+  addBlockingSettlement(mid, 'pv2', 1);
+  assert(longestRoadLength(mid, 0) === 3, 'continuation through a blocking vertex does not count');
+  assert(longestRoadLength(mid, 0) !== 5, 'blocked chain is not the unsplit length');
+
+  const loop = emptyRoadGraph();
+  addRoad(loop, 0, 'ab', 'a', 'b');
+  addRoad(loop, 0, 'bc', 'b', 'c');
+  addRoad(loop, 0, 'cd', 'c', 'd');
+  addRoad(loop, 0, 'da', 'd', 'a');
+  addRoad(loop, 0, 'ae', 'a', 'e');
+  addRoad(loop, 0, 'ef', 'e', 'f');
+  const loopLen = longestRoadLength(loop, 0);
+  assert(loopLen === 6, `cycle with branch counts every edge once, got ${loopLen}`);
+  assert(loopLen <= loop.roads.size, 'route length never reuses an edge');
+
+  const playable = startSeededGame(11, { completeSetup: true });
+  playable.phase = 'main';
+  assert(growOpenLongestRoad(playable, 0, 5), 'player 0 can legally grow a five-edge route');
+  assert(playable.longestRoadOwner === 0, 'fifth legal road awards Longest Road');
+  assert(playable.players[0].victoryPoints === 4, 'award is worth 2 VP on top of two settlements');
+  assert(playable.snapshot().winVp === 10, 'standard map still wins at 10 VP');
+  assert(startSeededGame(11, { mapSize: 'large' }).snapshot().winVp === 12, 'large map still wins at 12 VP');
+  assert(startSeededGame(11, { mapSize: 'huge' }).snapshot().winVp === 15, 'huge map still wins at 15 VP');
+
+  const arranged = arrangeLegalRouteInterruption(11);
+  assert(arranged, 'legal interruption fixture exists on the real seed-11 board');
+  const { engine, blockVertex } = arranged;
+  assert(engine.longestRoadOwner === 0, 'incumbent holds Longest Road before the interrupt');
+  assert(arranged.p0LengthBefore >= 5, 'current owner route is eligible');
+  assert(legalSettlements(engine.board, 1).includes(blockVertex), 'block vertex is a legal connected settlement site');
+  const beforeOwner = engine.longestRoadOwner;
+  const beforeP0 = engine.players[0].victoryPoints;
+  const beforeP1 = engine.players[1].victoryPoints;
+  const notifies: Array<{ owner: PlayerId | null; p0: number; p1: number }> = [];
+  const stop = engine.subscribe(() => {
+    notifies.push({
+      owner: engine.longestRoadOwner,
+      p0: engine.players[0].victoryPoints,
+      p1: engine.players[1].victoryPoints,
+    });
+  });
+  assert(engine.placeSettlement(blockVertex), 'opposing settlement is a legal main-phase placement');
+  stop();
+  assert(notifies.length === 1, 'award and VP update in the same emitted snapshot');
+  const afterLen = longestRoadLength(engine.board, 0);
+  assert(afterLen < 5, `interrupted owner length drops below five, got ${afterLen}`);
+  assert(engine.longestRoadOwner !== beforeOwner || engine.longestRoadOwner === null, 'interrupted chain loses or transfers the award');
+  assert(engine.players[0].victoryPoints === notifies[0].p0, 'snapshot VP matches owner 0 after emit');
+  assert(engine.players[1].victoryPoints === notifies[0].p1, 'snapshot VP matches owner 1 after emit');
+  assert(engine.players[0].victoryPoints === beforeP0 - 2, 'old owner loses the 2 VP award');
+  if (engine.longestRoadOwner === 1) {
+    assert(engine.players[1].victoryPoints === beforeP1 + 1 + 2, 'new owner gains settlement VP plus the award');
+  } else {
+    assert(engine.longestRoadOwner === null, 'award is vacant when no unique successor remains');
+    assert(engine.players[1].victoryPoints === beforeP1 + 1, 'interrupter gains only the settlement');
+  }
+
+  const reject = startSeededGame(11, { completeSetup: true });
+  prepareAffordableMain(reject, ['road']);
+  reject.setBuildMode('road');
+  const occupied = [...reject.board.roads.keys()][0];
+  const roadsBefore = reject.players[0].roads;
+  assert(!reject.placeRoad(occupied), 'occupied edge is still an illegal road');
+  assert(reject.players[0].roads === roadsBefore, 'rejected road is a no-op');
+  assert(!reject.placeRoad('nope'), 'missing edge id is still rejected');
+
+  console.log('ok P02 longest road award and interruption');
 }
 
 console.log('smoke ok');

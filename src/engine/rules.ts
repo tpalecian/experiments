@@ -224,21 +224,16 @@ export function updateLongestRoad(
   players: PlayerState[],
   currentOwner: PlayerId | null,
 ): PlayerId | null {
-  let bestLen = 0;
-  let bestPlayer: PlayerId | null = null;
-  for (const p of players) {
-    const len = longestRoadLength(board, p.id);
-    if (len > bestLen) {
-      bestLen = len;
-      bestPlayer = p.id;
-    }
+  const lengths = players.map((p) => ({ id: p.id, len: longestRoadLength(board, p.id) }));
+  let max = 0;
+  for (const row of lengths) {
+    if (row.len > max) max = row.len;
   }
-  if (bestLen < 5) return null;
-  if (currentOwner !== null) {
-    const currentLen = longestRoadLength(board, currentOwner);
-    if (currentLen >= bestLen && currentLen >= 5) return currentOwner;
-  }
-  return bestPlayer;
+  if (max < 5) return null;
+  const leaders = lengths.filter((row) => row.len === max).map((row) => row.id);
+  if (currentOwner !== null && leaders.includes(currentOwner)) return currentOwner;
+  if (leaders.length === 1) return leaders[0];
+  return null;
 }
 
 export function playersAdjacentToHex(board: BoardState, hexId: string, exclude: PlayerId): PlayerId[] {

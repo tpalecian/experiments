@@ -22,7 +22,7 @@ Recorded 2026-09-05 against the audited sources, before fixture work:
 | Task | Status | Evidence / notes |
 | --- | --- | --- |
 | P01 | Complete | Fixtures, RNG injection, review route. See report below. |
-| P02 | Not started | |
+| P02 | Complete | Longest Road ties and settlement interruption. See report below. |
 | P03 | Not started | Victory text still overwritten after checkWin; victory still considers inactive players. |
 | P04 | Not started | |
 | P05 | Not started | |
@@ -57,6 +57,12 @@ Recorded 2026-09-05 against the audited sources, before fixture work:
 - RNG helpers: `src/engine/rng.ts` (re-exported from `scripts/fixtures/random.ts`) — `sequenceRandom`, `unitForDie`, `diceSequence`.
 - Synthetic road graphs (test-only): `scripts/fixtures/roads.ts` — `emptyRoadGraph`, `addRoad`, `addRoadChain`, `addBlockingSettlement`.
 - Canonical review URL: `?view=review&seed=11&map=standard&look=day`. Supported maps: standard/large/huge. Looks: day/sunset/night. Invalid values fall back to 11/standard/day. Optional second seed: 29.
+
+## Helper APIs introduced in P02
+
+- `updateLongestRoad` — compute each length once; `max < 5` → `null`; keep `currentOwner` if they are a leader; otherwise the unique leader, or `null` on a successor tie.
+- `GameEngine` private `refreshAwardsAndVp()` — updates Longest Road then VP; used after main-phase settlement and road placement, before `checkWin` / emit.
+- Test helpers in `scripts/fixtures/longestRoad.ts` (re-exported from `scripts/fixtures/index.ts`): `awardPlayers`, `permute`, `growOpenLongestRoad`, `arrangeLegalRouteInterruption`.
 
 ```text
 Task ID: P01
@@ -113,5 +119,42 @@ Remaining limitations:
   Existing smoke blocks still monkeypatch Math.random; new tests use injection. Default RNG is a live Math.random wrapper so those old patches keep working.
   Screenshot binary is gitignored; do not add it to source control by default.
 Next task (do not start automatically): P02 — Longest Road correctness
+```
+
+```text
+Task ID: P02
+Status: complete
+Source files changed:
+  src/engine/rules.ts
+  src/engine/engine.ts
+  scripts/smoke.ts
+  scripts/fixtures/roads.ts
+  scripts/fixtures/longestRoad.ts
+  scripts/fixtures/index.ts
+  docs/implementation-plan/STATUS.md
+  docs/implementation-plan/tasks/P02-longest-road.md
+Contract/API changes:
+  updateLongestRoad no longer breaks successor ties by player-array order.
+  Main-phase placeSettlement recomputes Longest Road before VP and checkWin.
+  Shared private refreshAwardsAndVp sequences award then VP without an extra emit.
+  Test helpers: addRoad, awardPlayers, permute, growOpenLongestRoad, arrangeLegalRouteInterruption.
+Targeted cases passed:
+  Unique leader ≥5, all below five, two leaders with no incumbent, tied eligible incumbent, incumbent overtaken by tied successors — all player-order permutations.
+  Historical two disjoint 5-edge chains with no incumbent → null (was 0).
+  Split-to-below-five synthetic block drops the award.
+  Blocking settlement at both chain endpoints still counts the edge that meets the opponent; continuation through that vertex does not.
+  Cycle with a branch has length 6 of 6 unique edges (no reuse).
+  Seed-11 legal main-phase settlement on an existing graph vertex interrupts the incumbent; one snapshot updates award and both players' VP.
+  Map win thresholds remain 10/12/15. Occupied/missing road placements remain no-ops.
+Commands and outcomes:
+  npx tsc --noEmit — pass
+  node --import tsx scripts/smoke.ts — pass (includes `ok P02 longest road award and interruption`)
+Browser/device/capture evidence:
+  Not required for this rules-only task.
+Remaining limitations:
+  Victory-message overwrite remains: checkWin sets winner text, then placeSettlement/placeRoad/placeCity replace it with the build sentence (P03).
+  checkWin still inspects every player, so a transferred Longest Road could end the game on a non-active turn (P03).
+  Fractional discard, robber steal adjacency, and unaffordable advertised build sites are also P03, not victory-specific.
+Next task (do not start automatically): P03 — Command validation and victory
 ```
 
