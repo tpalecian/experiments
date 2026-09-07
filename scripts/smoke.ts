@@ -13,10 +13,11 @@ import {
   legalSetupRoads,
   legalSetupSettlements,
   longestRoadLength,
+  playersAdjacentToHex,
   updateLongestRoad,
 } from '../src/engine/rules';
-import { BUILD_COSTS, RESOURCES, emptyBank } from '../src/engine/types';
-import type { PlayerId } from '../src/engine/types';
+import { BUILD_COSTS, RESOURCES, bankTotal, emptyBank } from '../src/engine/types';
+import type { BuildMode, PlayerId, Resource, ResourceBank } from '../src/engine/types';
 import { parseReviewQuery, REVIEW_DEFAULTS } from '../src/ui/reviewRoute';
 import {
   addBlockingSettlement,
@@ -600,6 +601,349 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(!reject.placeRoad('nope'), 'missing edge id is still rejected');
 
   console.log('ok P02 longest road award and interruption');
+}
+
+{
+  function commandInvariant(engine: GameEngine) {
+    return {
+      resources: engine.players
+        .map((p) => `${p.id}:${RESOURCES.map((r) => p.resources[r]).join(',')}:${bankTotal(p.resources)}`)
+        .join('|'),
+      occupancy: [
+        [...engine.board.buildings.values()].map((b) => `${b.vertexId}:${b.owner}:${b.kind}`).sort().join(','),
+        [...engine.board.roads.values()].map((r) => `${r.edgeId}:${r.owner}`).sort().join(','),
+        engine.board.robberHexId,
+      ].join('|'),
+      phase: engine.phase,
+      winner: engine.winner,
+      awardOwner: engine.longestRoadOwner,
+      lastRoll: engine.lastRoll ? `${engine.lastRoll[0]}+${engine.lastRoll[1]}` : '-',
+      message: engine.message,
+      currentPlayer: engine.currentPlayer,
+      buildMode: engine.buildMode,
+      stealTargets: [...engine.stealTargets].join(','),
+      discard: [...engine.discardRemaining.entries()].map(([id, n]) => `${id}:${n}`).sort().join(','),
+    };
+  }
+
+  function assertRejected(engine: GameEngine, action: () => unknown, msg: string): void {
+    const before = commandInvariant(engine);
+    let notifies = 0;
+    const stop = engine.subscribe(() => {
+      notifies += 1;
+    });
+    let result: unknown;
+    try {
+      result = action();
+    } finally {
+      stop();
+    }
+    const after = commandInvariant(engine);
+    assert(notifies === 0, `${msg}: notification count ${notifies}`);
+    assert(after.resources === before.resources, `${msg}: resource totals changed`);
+    assert(after.occupancy === before.occupancy, `${msg}: occupancy changed`);
+    assert(after.phase === before.phase, `${msg}: phase changed`);
+    assert(after.winner === before.winner, `${msg}: winner changed`);
+    assert(after.awardOwner === before.awardOwner, `${msg}: award owner changed`);
+    assert(after.lastRoll === before.lastRoll, `${msg}: roll identity changed`);
+    assert(after.message === before.message, `${msg}: last action text changed`);
+    assert(after.currentPlayer === before.currentPlayer, `${msg}: current player changed`);
+    assert(after.discard === before.discard, `${msg}: pending discard changed`);
+    assert(after.stealTargets === before.stealTargets, `${msg}: steal targets changed`);
+    if (typeof result === 'boolean') assert(result === false, `${msg}: expected boolean false`);
+  }
+
+  function fillStock(engine: GameEngine, player: PlayerId = engine.currentPlayer): void {
+    for (const r of RESOURCES) engine.players[player].resources[r] = 99;
+  }
+
+  function addBuildings(
+    engine: GameEngine,
+    player: PlayerId,
+    cities: number,
+    extraSettlements: number,
+    reserved: ReadonlySet<string> = new Set(),
+  ): void {
+    const empty = [...engine.board.vertices.keys()].filter(
+      (id) => !engine.board.buildings.has(id) && !reserved.has(id),
+    );
+    empty.sort((a, b) => {
+      const incident = (id: string) => {
+        const vertex = engine.board.vertices.get(id);
+        if (!vertex) return 99;
+        return vertex.edgeIds.reduce((n, eid) => n + (engine.board.roads.has(eid) ? 1 : 0), 0);
+      };
+      return incident(a) - incident(b);
+    });
+    let i = 0;
+    for (let c = 0; c < cities; c++) {
+      const vertexId = empty[i++];
+      assert(vertexId, 'enough empty vertices for cities');
+      engine.board.buildings.set(vertexId, { vertexId, owner: player, kind: 'city' });
+      engine.players[player].cities += 1;
+    }
+    for (let s = 0; s < extraSettlements; s++) {
+      const vertexId = empty[i++];
+      assert(vertexId, 'enough empty vertices for settlements');
+      engine.board.buildings.set(vertexId, { vertexId, owner: player, kind: 'settlement' });
+      engine.players[player].settlements += 1;
+    }
+  }
+
+  function neighborhood(engine: GameEngine, vertexId: string): Set<string> {
+    const out = new Set<string>([vertexId]);
+    const vertex = engine.board.vertices.get(vertexId);
+    if (!vertex) return out;
+    for (const edgeId of vertex.edgeIds) {
+      const edge = engine.board.edges.get(edgeId);
+      if (!edge) continue;
+      out.add(edge.vertexIds[0]);
+      out.add(edge.vertexIds[1]);
+    }
+    return out;
+  }
+
+  function assertWinMessage(engine: GameEngine, playerName: string): void {
+    assert(engine.phase === 'gameOver', `${playerName} win enters gameOver`);
+    assert(engine.message === `${playerName} wins with ${engine.players[engine.winner!].victoryPoints} victory points!`, 'winning move keeps winner text');
+    assert(!engine.message.includes('built a'), 'build sentence must not overwrite victory');
+    assert(!engine.message.includes('upgraded'), 'upgrade sentence must not overwrite victory');
+  }
+
+  const started = startSeededGame(11);
+  assertRejected(started, () => started.startGame(1), 'player count 1');
+  assertRejected(started, () => started.startGame(5), 'player count 5');
+  assertRejected(started, () => started.startGame(2.5), 'fractional player count');
+  assertRejected(started, () => started.startGame(NaN), 'NaN player count');
+  assertRejected(started, () => started.startGame(2, 'planet' as MapSizeId), 'unknown map');
+  assertRejected(started, () => started.startGame(2, 'standard', 1.5), 'fractional seed');
+  assertRejected(started, () => started.startGame(2, 'standard', NaN), 'NaN seed');
+  assertRejected(started, () => started.startGame(2, 'standard', Infinity), 'infinite seed');
+
+  const modeEngine = startSeededGame(11, { completeSetup: true });
+  prepareAffordableMain(modeEngine, ['road']);
+  modeEngine.setBuildMode('road');
+  assert(modeEngine.buildMode === 'road', 'build mode on');
+  assert(modeEngine.message.includes('edge'), 'road prompt from resulting mode');
+  modeEngine.setBuildMode('road');
+  assert(modeEngine.buildMode === 'none', 'same mode toggles off');
+  assert(modeEngine.message === 'Select an action.', 'toggle-off message comes from resulting none, not requested road');
+  assertRejected(modeEngine, () => modeEngine.setBuildMode('portal' as BuildMode), 'unknown build mode');
+
+  const ids = startSeededGame(11, { completeSetup: true });
+  prepareAffordableMain(ids, ['road', 'settlement', 'city']);
+  ids.setBuildMode('settlement');
+  assertRejected(ids, () => ids.placeSettlement('nope'), 'missing vertex');
+  ids.setBuildMode('road');
+  assertRejected(ids, () => ids.placeRoad('nope'), 'missing edge');
+  assertRejected(ids, () => ids.bankTrade('gold' as Resource, 'wood'), 'unknown give resource');
+  assertRejected(ids, () => ids.bankTrade('wood', 'gold' as Resource), 'unknown receive resource');
+
+  const discardEngine = startSeededGame(11, { random: diceSequence([1, 6]), completeSetup: true });
+  discardEngine.players[0].resources = { wood: 4, brick: 4, sheep: 0, wheat: 0, ore: 0 };
+  discardEngine.players[1].resources = emptyBank();
+  assert(discardEngine.rollDice(), 'injected 1+6 is a seven');
+  assert(discardEngine.phase === 'discard', 'seven with 8 cards enters discard');
+  assert(discardEngine.discardRemaining.get(0) === 4, 'discard half of 8');
+  assertRejected(discardEngine, () => discardEngine.discard(0, { wood: 0.5, sheep: 0.5, brick: 3 }), 'fractional discard');
+  assertRejected(discardEngine, () => discardEngine.discard(0, { wood: 2.5, brick: 1.5 }), 'split fractional discard');
+  assertRejected(discardEngine, () => discardEngine.discard(0, { wood: Number.NaN }), 'NaN discard');
+  assertRejected(discardEngine, () => discardEngine.discard(0, { wood: Number.POSITIVE_INFINITY }), 'infinite discard');
+  assertRejected(discardEngine, () => discardEngine.discard(0, { wood: -1 }), 'negative discard');
+  assertRejected(discardEngine, () => discardEngine.discard(0, { wood: 4, gold: 1 } as Partial<ResourceBank>), 'unknown discard key');
+  assertRejected(discardEngine, () => discardEngine.discard(0, { wood: 5 }), 'discard more than holdings');
+  assertRejected(discardEngine, () => discardEngine.discard(0, { wood: 1 }), 'discard short of required total');
+  assertRejected(discardEngine, () => discardEngine.discard(3, { wood: 4 }), 'missing player discard');
+  assertRejected(discardEngine, () => discardEngine.discard(1, { wood: 0 }), 'player without pending discard');
+  assert(discardEngine.players[0].resources.wood === 4 && discardEngine.players[0].resources.brick === 4, 'holdings intact after rejects');
+  assert(discardEngine.discardRemaining.get(0) === 4, 'pending discard intact after rejects');
+  assert(discardEngine.discard(0, { wood: 4 }), 'exact integer discard accepted');
+  assert(discardEngine.players[0].resources.wood === 0 && discardEngine.players[0].resources.brick === 4, 'only requested integer cards removed');
+  assert(discardEngine.phase === 'robber', 'finished discard enters robber');
+
+  assertRejected(discardEngine, () => discardEngine.stealFrom(1), 'direct theft during robber');
+  assertRejected(discardEngine, () => discardEngine.moveRobber('nope'), 'missing hex');
+  assertRejected(discardEngine, () => discardEngine.moveRobber(discardEngine.board.robberHexId), 'robber stays put');
+
+  discardEngine.players[1].resources = { ...emptyBank(), ore: 2 };
+  const autoHex = [...discardEngine.board.hexes.keys()].find((id) => {
+    if (id === discardEngine.board.robberHexId) return false;
+    const victims = playersAdjacentToHex(discardEngine.board, id, 0).filter(
+      (pid) => bankTotal(discardEngine.players[pid].resources) > 0,
+    );
+    return victims.length === 1 && victims[0] === 1;
+  });
+  assert(autoHex, 'seed 11 has a single-victim robber hex');
+  const woodBefore = discardEngine.players[0].resources.wood;
+  const oreBefore = discardEngine.players[1].resources.ore;
+  assert(discardEngine.moveRobber(autoHex), 'auto single-victim theft');
+  assert(discardEngine.phase === 'main', 'auto theft returns to main');
+  assert(discardEngine.stealTargets.length === 0, 'auto theft does not enter selection');
+  assert(
+    discardEngine.players[0].resources.ore === 1 && discardEngine.players[1].resources.ore === oreBefore - 1,
+    'auto theft transferred one card',
+  );
+  assert(discardEngine.players[0].resources.wood === woodBefore, 'non-stolen resource unchanged');
+
+  const selectEngine = startSeededGame(11, { playerCount: 3, random: sequenceRandom([0]), completeSetup: true });
+  selectEngine.phase = 'steal';
+  selectEngine.stealTargets = [1, 2];
+  selectEngine.players[1].resources = { ...emptyBank(), wood: 1 };
+  selectEngine.players[2].resources = { ...emptyBank(), brick: 1 };
+  assertRejected(selectEngine, () => selectEngine.stealFrom(0), 'cannot steal from self');
+  assertRejected(selectEngine, () => selectEngine.stealFrom(3), 'cannot steal missing player');
+  selectEngine.stealTargets = [1];
+  assertRejected(selectEngine, () => selectEngine.stealFrom(2), 'cannot steal unlisted opponent');
+  selectEngine.players[1].resources = emptyBank();
+  selectEngine.stealTargets = [1];
+  assertRejected(selectEngine, () => selectEngine.stealFrom(1), 'cannot steal from listed opponent with no cards');
+  selectEngine.players[1].resources = { ...emptyBank(), wheat: 1 };
+  const wheatBefore = selectEngine.players[0].resources.wheat;
+  assert(selectEngine.stealFrom(1), 'legal listed theft');
+  assert(selectEngine.phase === 'main', 'legal theft returns to main');
+  assert(selectEngine.players[0].resources.wheat === wheatBefore + 1, 'stolen wheat received');
+  assert(selectEngine.players[1].resources.wheat === 0, 'victim lost wheat');
+
+  const three = startSeededGame(11, { playerCount: 3, completeSetup: true });
+  three.phase = 'robber';
+  three.currentPlayer = 0;
+  for (const p of three.players) fillStock(three, p.id);
+  let pairHex: string | undefined;
+  for (const hex of three.board.hexes.values()) {
+    if (hex.id === three.board.robberHexId) continue;
+    const victims = playersAdjacentToHex(three.board, hex.id, 0).filter(
+      (pid) => bankTotal(three.players[pid].resources) > 0,
+    );
+    if (victims.length >= 2) {
+      pairHex = hex.id;
+      break;
+    }
+  }
+  if (!pairHex) {
+    const hex = [...three.board.hexes.values()].find((h) => h.id !== three.board.robberHexId && h.vertexIds.length >= 2)!;
+    three.board.buildings.set(hex.vertexIds[0], { vertexId: hex.vertexIds[0], owner: 1, kind: 'settlement' });
+    three.board.buildings.set(hex.vertexIds[1], { vertexId: hex.vertexIds[1], owner: 2, kind: 'settlement' });
+    pairHex = hex.id;
+  }
+  assert(three.moveRobber(pairHex), 'multi-victim robber enters selection');
+  assert(three.phase === 'steal', 'two victims require a choice');
+  assert(three.stealTargets.length >= 2, 'eligible victims computed once from destination');
+
+  const afford = startSeededGame(11, { completeSetup: true });
+  prepareAffordableMain(afford, ['city', 'road', 'settlement']);
+  afford.buildMode = 'city';
+  assert(afford.snapshot().legalVertices.length > 0, 'affordable city sites are advertised');
+  afford.player().resources = emptyBank();
+  assert(afford.snapshot().legalVertices.length === 0, 'unaffordable city sites disappear');
+  prepareAffordableMain(afford, ['road']);
+  afford.buildMode = 'road';
+  assert(afford.snapshot().legalEdges.length > 0, 'affordable road sites are advertised');
+  afford.player().roads = MAP_SIZES.standard.maxRoads;
+  assert(afford.snapshot().legalEdges.length === 0, 'road sites disappear at piece limit');
+
+  const settleAfford = startSeededGame(11, { completeSetup: true });
+  settleAfford.phase = 'main';
+  assert(growOpenLongestRoad(settleAfford, 0, 4), 'expand a route so a settlement site exists');
+  fillStock(settleAfford);
+  settleAfford.buildMode = 'settlement';
+  assert(settleAfford.snapshot().legalVertices.length > 0, 'affordable settlement sites are advertised');
+  settleAfford.player().resources = emptyBank();
+  assert(settleAfford.snapshot().legalVertices.length === 0, 'unaffordable settlement sites disappear');
+  fillStock(settleAfford);
+  settleAfford.player().settlements = MAP_SIZES.standard.maxSettlements;
+  assert(settleAfford.snapshot().legalVertices.length === 0, 'settlement sites disappear at piece limit');
+
+  const cityWin = startSeededGame(11, { completeSetup: true });
+  cityWin.phase = 'main';
+  cityWin.currentPlayer = 0;
+  addBuildings(cityWin, 0, 3, 1);
+  fillStock(cityWin);
+  cityWin.buildMode = 'city';
+  const cityId = cityWin.snapshot().legalVertices[0];
+  assert(cityId, 'legal city upgrade exists for 9 VP mix');
+  assert(cityWin.placeCity(cityId), 'winning city upgrade');
+  assert(cityWin.winner === 0, 'current player wins on city');
+  assertWinMessage(cityWin, 'Red');
+  assert(cityWin.snapshot().winVp === 10, 'standard threshold remains 10');
+
+  const settleWin = startSeededGame(11, { completeSetup: true });
+  settleWin.phase = 'main';
+  settleWin.currentPlayer = 0;
+  assert(growOpenLongestRoad(settleWin, 0, 4), 'expand a route for a legal settlement');
+  fillStock(settleWin);
+  settleWin.buildMode = 'settlement';
+  const settleId = settleWin.snapshot().legalVertices[0];
+  assert(settleId, 'legal settlement site exists for 9 VP mix');
+  addBuildings(settleWin, 0, 3, 1, neighborhood(settleWin, settleId));
+  settleWin.buildMode = 'settlement';
+  assert(settleWin.placeSettlement(settleId), 'winning settlement');
+  assert(settleWin.winner === 0, 'current player wins on settlement');
+  assertWinMessage(settleWin, 'Red');
+
+  const roadWin = startSeededGame(11, { completeSetup: true });
+  roadWin.phase = 'main';
+  addBuildings(roadWin, 0, 3, 0);
+  fillStock(roadWin);
+  assert(growOpenLongestRoad(roadWin, 0, 5), 'fifth road can be placed toward Longest Road');
+  assert(roadWin.winner === 0, 'current player wins on Longest Road');
+  assertWinMessage(roadWin, 'Red');
+
+  const transferWin = startSeededGame(11, { completeSetup: true });
+  transferWin.phase = 'main';
+  assert(growOpenLongestRoad(transferWin, 1, 5), 'player 1 claims Longest Road first');
+  assert(transferWin.longestRoadOwner === 1, 'incumbent is player 1');
+  assert(transferWin.winner === null, 'player 1 is not at threshold');
+  addBuildings(transferWin, 0, 3, 0);
+  fillStock(transferWin, 0);
+  assert(growOpenLongestRoad(transferWin, 0, 6), 'player 0 grows a unique longer route');
+  assert(transferWin.winner === 0, 'Longest Road transfer can win for the active player');
+  assertWinMessage(transferWin, 'Red');
+
+  const inactive = startSeededGame(11, { completeSetup: true });
+  inactive.phase = 'main';
+  inactive.currentPlayer = 0;
+  addBuildings(inactive, 1, 4, 0);
+  fillStock(inactive, 0);
+  inactive.buildMode = 'road';
+  const quietRoad = inactive.snapshot().legalEdges[0];
+  assert(quietRoad, 'active player has a legal road');
+  assert(inactive.placeRoad(quietRoad), 'active player can still build');
+  assert(inactive.winner === null, 'inactive player at threshold does not win yet');
+  assert(inactive.phase === 'main', 'turn continues for the current player');
+  assert(inactive.players[1].victoryPoints >= 10, 'inactive player is at the threshold');
+  assert(inactive.currentPlayer === 0, 'current player unchanged');
+  const rollBefore = inactive.lastRoll;
+  assert(inactive.endTurn(), 'ending the turn checks the next player');
+  assert(inactive.winner === 1, 'inactive player wins on entering their turn');
+  assertWinMessage(inactive, 'Blue');
+  assert(inactive.lastRoll === rollBefore, 'dice are not requested after a turn-entry win');
+
+  assertRejected(inactive, () => inactive.rollDice(), 'gameOver roll');
+  assertRejected(inactive, () => inactive.endTurn(), 'gameOver endTurn');
+  assertRejected(inactive, () => inactive.placeSettlement('nope'), 'gameOver settlement');
+  assertRejected(inactive, () => inactive.placeRoad('nope'), 'gameOver road');
+  inactive.buildMode = 'city';
+  assertRejected(inactive, () => inactive.placeCity([...inactive.board.buildings.keys()][0]), 'gameOver city');
+  assertRejected(inactive, () => inactive.setBuildMode('road'), 'gameOver build mode');
+  assertRejected(inactive, () => inactive.bankTrade('wood', 'brick'), 'gameOver trade');
+  assertRejected(inactive, () => inactive.discard(0, { wood: 1 }), 'gameOver discard');
+  assertRejected(inactive, () => inactive.moveRobber([...inactive.board.hexes.keys()][0]), 'gameOver robber');
+  assertRejected(inactive, () => inactive.stealFrom(0), 'gameOver steal');
+
+  const large = startSeededGame(11, { mapSize: 'large', completeSetup: true });
+  large.phase = 'main';
+  addBuildings(large, 0, 4, 0);
+  fillStock(large);
+  large.buildMode = 'road';
+  const largeRoad = large.snapshot().legalEdges[0];
+  assert(largeRoad, 'large map has a legal road');
+  assert(large.placeRoad(largeRoad), '10 VP does not end a large-map game');
+  assert(large.winner === null && large.phase === 'main', 'large threshold stays 12');
+  assert(large.players[0].victoryPoints === 10, 'large-map player can sit at 10');
+  assert(large.snapshot().winVp === 12, 'large map still wins at 12 VP');
+  assert(startSeededGame(11, { mapSize: 'huge' }).snapshot().winVp === 15, 'huge map still wins at 15 VP');
+
+  console.log('ok P03 command validation and victory');
 }
 
 console.log('smoke ok');

@@ -23,7 +23,7 @@ Recorded 2026-09-05 against the audited sources, before fixture work:
 | --- | --- | --- |
 | P01 | Complete | Fixtures, RNG injection, review route. See report below. |
 | P02 | Complete | Longest Road ties and settlement interruption. See report below. |
-| P03 | Not started | Victory text still overwritten after checkWin; victory still considers inactive players. |
+| P03 | Complete | Rejected commands are no-ops; winning move keeps winner text; only the current player can win. See report below. |
 | P04 | Not started | |
 | P05 | Not started | |
 | P06 | Not started | |
@@ -158,3 +158,46 @@ Remaining limitations:
 Next task (do not start automatically): P03 — Command validation and victory
 ```
 
+```text
+Task ID: P03
+Status: complete
+Source files changed:
+  src/engine/engine.ts
+  scripts/smoke.ts
+  docs/implementation-plan/STATUS.md
+  docs/implementation-plan/tasks/P03-command-validation.md
+Contract/API changes:
+  Public command signatures unchanged (boolean results; startGame/setBuildMode remain void no-ops when invalid).
+  startGame validates integer player count 2–4, a known map ID, and a finite integer seed before any mutation.
+  bankTrade validates resource enum names at runtime.
+  placeSettlement/placeRoad/placeCity/moveRobber/discard/stealFrom validate IDs and player existence before dereference.
+  discard accepts only finite nonnegative integers, exact pending total, known resource keys, an existing player with a pending discard.
+  stealFrom is valid only during steal, and only for an existing listed opponent who has cards. Direct theft during robber is rejected.
+  moveRobber computes eligible victims from the destination once, then auto-transfers via private transferStolenCard or enters selection.
+  Main-phase snapshot legalVertices/legalEdges use rules.legalTargets (audit name legalBuildTargets; the existing export was kept).
+  setBuildMode derives the prompt from the resulting mode, including toggle-off to none.
+  Successful main-phase builds share completeBuild: graph mutation → refreshAwardsAndVp → checkWin → exactly one message → emit.
+  checkWin returns boolean and inspects only the current player. endTurn (and setup-complete turn entry) check that player before requesting a roll.
+  Discrepancy: the task named legalBuildTargets; source already exports legalTargets. Contract kept; no rename/new architecture.
+Targeted cases passed:
+  Fractional/NaN/infinite/negative/unknown-key/oversize/short/missing-player discards are no-ops; a real 1+6 seven then exact integer discard works.
+  Direct robber-phase theft, missing/same hex, unlisted/empty/self/missing steal targets leave state unchanged; auto single-victim theft and listed steal work.
+  Invalid startGame args, unknown build mode, unknown trade resources, missing vertex/edge IDs are no-ops.
+  Toggle-off build mode message is "Select an action." from resulting none.
+  Affordable city/road/settlement highlights disappear when cost or piece supply is not met.
+  City, settlement, and Longest Road (including transfer) wins keep winner text and do not write the build sentence.
+  Inactive player at ≥10 VP does not win during the opponent's turn; they win on turn entry before a dice request.
+  gameOver commands leave winner/phase/last action/roll identity/notification count unchanged.
+  Map thresholds remain 10/12/15; 10 VP does not end a large-map game.
+Commands and outcomes:
+  npx tsc --noEmit — pass
+  node --import tsx scripts/smoke.ts — pass (includes `ok P03 command validation and victory`)
+  npm run build — pass. JS 740.99 kB (gzip 194.70 kB), CSS 24.81 kB. Expected chunk warning.
+Browser/device/capture evidence:
+  Not required for this rules-only task.
+Remaining limitations:
+  HUD still does not explain why a command was rejected (P18).
+  EngineSnapshot still has no gameId/rollId/productionHexIds (P04).
+  Public snapshots remain live/mutable; this task did not add deep clones.
+Next task (do not start automatically): P04 — Reliable gameplay feedback identity
+```
