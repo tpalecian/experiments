@@ -1,6 +1,6 @@
 # P02 — Longest Road award and interruption
 
-**Status:** Not started. **Dependencies:** P01. **Goal:** awards and VP reflect the current graph immediately.
+**Status:** Complete. **Dependencies:** P01. **Goal:** awards and VP reflect the current graph immediately.
 
 ## Read and edit
 
