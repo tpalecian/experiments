@@ -6,13 +6,27 @@ import * as THREE from 'three';
 import { hexCountForRings, MAP_SIZES, type MapSizeId } from '../src/engine/board';
 import { GameEngine } from '../src/engine/engine';
 import {
+  canAfford,
   computeVictoryPoints,
   legalCities,
   legalSetupRoads,
   legalSetupSettlements,
+  longestRoadLength,
   updateLongestRoad,
 } from '../src/engine/rules';
-import { RESOURCES, emptyBank } from '../src/engine/types';
+import { BUILD_COSTS, RESOURCES, emptyBank } from '../src/engine/types';
+import { parseReviewQuery, REVIEW_DEFAULTS } from '../src/ui/reviewRoute';
+import {
+  addBlockingSettlement,
+  addRoadChain,
+  boardLayoutFingerprint,
+  diceSequence,
+  emptyRoadGraph,
+  fixtureStateFingerprint,
+  prepareAffordableMain,
+  sequenceRandom,
+  startSeededGame,
+} from './fixtures';
 import { CRAFT_CATEGORIES, CRAFT_FIELDS } from '../src/ui/style/craftSchema';
 import { applyWeather } from '../src/world/Weather';
 import { Highlights } from '../src/world/Highlights';
@@ -382,6 +396,62 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(!isTap(8, 8), 'diagonal past slop is a drag');
   assert(isTap(6, 6), 'short diagonal is a tap');
   console.log('ok tap vs drag');
+}
+
+{
+  const fallback = parseReviewQuery('?view=review&seed=nope&map=planet&look=noon');
+  assert(fallback.seed === REVIEW_DEFAULTS.seed, 'invalid seed falls back to 11');
+  assert(fallback.map === 'standard', 'invalid map falls back to standard');
+  assert(fallback.look === 'day', 'invalid look falls back to day');
+  const explicit = parseReviewQuery('view=review&seed=29&map=huge&look=night');
+  assert(explicit.seed === 29 && explicit.map === 'huge' && explicit.look === 'night', 'valid review query parsed');
+
+  const layoutA = startSeededGame(11, { mapSize: 'standard' });
+  const layoutB = startSeededGame(11, { mapSize: 'standard', random: sequenceRandom([0.99, 0.99]) });
+  assert(
+    boardLayoutFingerprint(layoutA.board) === boardLayoutFingerprint(layoutB.board),
+    'same seed keeps hex resources, numbers, and harbors',
+  );
+
+  const low = startSeededGame(11, { random: diceSequence([1, 1]), completeSetup: true });
+  const high = startSeededGame(11, { random: diceSequence([6, 6]), completeSetup: true });
+  assert(boardLayoutFingerprint(low.board) === boardLayoutFingerprint(high.board), 'injected dice do not change the board');
+  assert(low.rollDice() && high.rollDice(), 'injected rolls accepted');
+  assert(low.lastRoll?.[0] === 1 && low.lastRoll[1] === 1, 'sequence 1+1');
+  assert(high.lastRoll?.[0] === 6 && high.lastRoll[1] === 6, 'sequence 6+6');
+  assert(
+    fixtureStateFingerprint(low) !== fixtureStateFingerprint(high),
+    'different injected sequences change fixture dice state',
+  );
+
+  const stealLow = startSeededGame(11, { random: sequenceRandom([0]), completeSetup: true });
+  const stealHigh = startSeededGame(11, { random: sequenceRandom([0.99]), completeSetup: true });
+  stealLow.phase = 'steal';
+  stealHigh.phase = 'steal';
+  stealLow.stealTargets = [1];
+  stealHigh.stealTargets = [1];
+  stealLow.players[0].resources = emptyBank();
+  stealHigh.players[0].resources = emptyBank();
+  stealLow.players[1].resources = { ...emptyBank(), wood: 1, ore: 1 };
+  stealHigh.players[1].resources = { ...emptyBank(), wood: 1, ore: 1 };
+  assert(stealLow.stealFrom(1) && stealHigh.stealFrom(1), 'injected theft');
+  assert(stealLow.players[0].resources.wood === 1, 'random 0 steals first pooled resource');
+  assert(stealHigh.players[0].resources.ore === 1, 'random 0.99 steals later pooled resource');
+
+  const playable = startSeededGame(11);
+  prepareAffordableMain(playable, ['road', 'settlement', 'city']);
+  assert(playable.phase === 'main', 'affordable helper enters main');
+  assert(canAfford(playable.player(), BUILD_COSTS.city), 'city is affordable');
+  assert(canAfford(playable.player(), BUILD_COSTS.road), 'road is affordable');
+
+  const graph = emptyRoadGraph();
+  addRoadChain(graph, 0, 5, 'p0');
+  addRoadChain(graph, 1, 5, 'p1');
+  addBlockingSettlement(graph, 'p0v2', 1);
+  assert(graph.roads.size === 10, 'synthetic chains added');
+  assert(graph.buildings.get('p0v2')?.owner === 1, 'blocking settlement recorded');
+  assert(longestRoadLength(graph, 1) === 5, 'unblocked synthetic chain is length 5');
+  console.log('ok P01 fixtures and rng injection');
 }
 
 console.log('smoke ok');

@@ -905,3 +905,66 @@ body.biome-editor-mode #style-config-root {
     overflow: auto;
   }
 }
+
+/* ——— Review fixture ——— */
+
+#review-ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+
+#review-ui.hidden {
+  display: none;
+}
+
+body.review-mode #lobby,
+body.review-mode #style-config-root,
+body.review-mode #asset-lab,
+body.review-mode #biome-editor {
+  display: none !important;
+}
+
+.review-panel {
+  pointer-events: auto;
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
+  max-width: min(280px, calc(100% - 2rem));
+  background: var(--panel);
+  border: 2px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  box-shadow: 0 6px 0 rgba(92, 61, 46, 0.12);
+  color: var(--ink);
+}
+
+.review-panel h2 {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  margin: 0 0 0.2rem;
+}
+
+.review-meta,
+.review-status {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.review-status {
+  margin-top: 0.25rem;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.7rem;
+}
+
+.review-actions .btn {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.8rem;
+}

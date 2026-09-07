@@ -7,14 +7,18 @@ import type { AtmosphereSnapshot } from './Atmosphere';
 /** Authored biome decoration stamp per hex. */
 export class Props {
   readonly group = new THREE.Group();
-  private library: BiomeLayoutLibrary = loadBiomeLayouts();
+  private library: BiomeLayoutLibrary;
+
+  constructor(library?: BiomeLayoutLibrary) {
+    this.library = library ?? loadBiomeLayouts();
+  }
 
   addTo(parent: THREE.Group): void {
     parent.add(this.group);
   }
 
-  reload(): void {
-    this.library = loadBiomeLayouts();
+  reload(library?: BiomeLayoutLibrary): void {
+    this.library = library ?? loadBiomeLayouts();
   }
 
   stamp(terrain: Terrain, x: number, z: number, id: string): void {

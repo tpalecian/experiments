@@ -82,9 +82,11 @@ export class GameEngine {
   seed: number;
 
   private listeners = new Set<Listener>();
+  private readonly random: () => number;
 
-  constructor(seed = Date.now()) {
+  constructor(seed = Date.now(), random: () => number = () => Math.random()) {
     this.seed = seed;
+    this.random = random;
   }
 
   subscribe(fn: Listener): () => void {
@@ -330,8 +332,8 @@ export class GameEngine {
 
   rollDice(): boolean {
     if (this.phase !== 'roll') return false;
-    const d1 = 1 + Math.floor(Math.random() * 6);
-    const d2 = 1 + Math.floor(Math.random() * 6);
+    const d1 = 1 + Math.floor(this.random() * 6);
+    const d2 = 1 + Math.floor(this.random() * 6);
     this.lastRoll = [d1, d2];
     const total = d1 + d2;
     this.productionLog = '';
@@ -435,7 +437,7 @@ export class GameEngine {
       this.emit();
       return true;
     }
-    const stolen = pool[Math.floor(Math.random() * pool.length)];
+    const stolen = pool[Math.floor(this.random() * pool.length)];
     victim.resources[stolen] -= 1;
     this.player().resources[stolen] += 1;
     this.stealTargets = [];

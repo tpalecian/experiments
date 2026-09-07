@@ -9,6 +9,12 @@ import { Highlights } from './Highlights';
 import { Pieces } from './Pieces';
 import { Props } from './Props';
 import { motionFromStyle, type MotionFeel } from './motion';
+import type { BiomeLayoutLibrary } from './biomeLayouts';
+
+export interface WorldOptions {
+  /** When set, stamps this library instead of reading biome localStorage. */
+  biomeLibrary?: BiomeLayoutLibrary;
+}
 
 /**
  * Live hex-board presentation — tiles, props, pieces, water, highlights.
@@ -18,11 +24,14 @@ export class World {
   private readonly board = new Board();
   private readonly highlights = new Highlights();
   private readonly pieces = new Pieces();
-  private readonly props = new Props();
+  private readonly props: Props;
   private readonly water = new WaterSurface();
   private motion: MotionFeel = motionFromStyle();
+  private readonly biomeLibrary?: BiomeLayoutLibrary;
 
-  constructor() {
+  constructor(options: WorldOptions = {}) {
+    this.biomeLibrary = options.biomeLibrary;
+    this.props = new Props(options.biomeLibrary);
     this.root.add(this.water.mesh);
     this.board.addTo(this.root);
     this.props.addTo(this.root);
@@ -89,7 +98,7 @@ export class World {
 
   build(board: BoardState): void {
     this.clearDynamic();
-    this.props.reload();
+    this.props.reload(this.biomeLibrary);
 
     this.water.resize(board.rings);
     const landCenters: { x: number; z: number }[] = [];
