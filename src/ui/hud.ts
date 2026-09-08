@@ -111,8 +111,8 @@ export class Hud {
     }
 
     const current = s.players[s.currentPlayer];
-    const diceKey = s.lastRoll !== null ? `${s.lastRoll[0]}:${s.lastRoll[1]}` : '';
-    const diceFresh = diceKey !== '' && diceKey !== this.lastDiceKey;
+    const diceKey = `${s.gameId}:${s.rollId}`;
+    const diceFresh = s.rollId !== 0 && diceKey !== this.lastDiceKey;
     this.lastDiceKey = diceKey;
     const rollHtml =
       s.lastRoll !== null

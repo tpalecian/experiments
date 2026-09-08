@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GameEngine } from './engine/engine';
+import { GameEngine, type EngineSnapshot } from './engine/engine';
 import { Picker, type PickResult } from './input/picker';
 import { isTap } from './input/tap';
 import { Time } from './core/Time';
@@ -44,7 +44,7 @@ export class Game {
   private boardBuilt = false;
   private lastTimeOfDay: StyleConfig['timeOfDay'];
   private styleLive: StyleConfig;
-  private lastProductionLog = '';
+  private lastRollIdentity = '';
   private lastRobberHex = '';
   private styleApplyTimer = 0;
   private pointerTap: { id: number; x: number; y: number } | null = null;
@@ -152,7 +152,7 @@ export class Game {
     const snap = this.engine.snapshot();
     if (snap.phase === 'lobby') {
       this.boardBuilt = false;
-      this.lastProductionLog = '';
+      this.lastRollIdentity = '';
       this.lastRobberHex = '';
       this.world.setHoverHex(null);
       return;
@@ -167,18 +167,19 @@ export class Game {
       this.world.syncPieces(snap.board, true);
     }
     this.world.syncHighlights(snap.legalVertices, snap.legalEdges, snap.legalHexes);
-    this.pulseIfProduced(snap.productionLog, snap.lastRoll);
+    this.pulseIfProduced(snap);
     this.followRobber(snap.board.robberHexId);
   }
 
-  private pulseIfProduced(productionLog: string, lastRoll: [number, number] | null): void {
-    if (!productionLog) {
-      this.lastProductionLog = '';
+  private pulseIfProduced(snap: EngineSnapshot): void {
+    const identity = `${snap.gameId}:${snap.rollId}`;
+    if (snap.rollId === 0) {
+      this.lastRollIdentity = identity;
       return;
     }
-    if (productionLog === this.lastProductionLog || !lastRoll) return;
-    this.lastProductionLog = productionLog;
-    this.world.pulseProduction(lastRoll[0] + lastRoll[1]);
+    if (identity === this.lastRollIdentity) return;
+    this.lastRollIdentity = identity;
+    this.world.pulseProduction(snap.productionHexIds);
   }
 
   private followRobber(robberHexId: string): void {

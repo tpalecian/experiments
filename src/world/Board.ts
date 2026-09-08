@@ -48,11 +48,10 @@ export class Board {
     this.hoverHexId = id;
   }
 
-  pulseProduction(total: number, durationSec: number): void {
-    if (total < 2 || total === 7) return;
-    for (const [id, vis] of this.hexVisuals) {
-      const hexNum = vis.mesh.userData.number as number | null | undefined;
-      if (hexNum === total) this.productionPulse.set(id, durationSec);
+  pulseProduction(hexIds: readonly string[], durationSec: number): void {
+    for (const id of hexIds) {
+      if (!this.hexVisuals.has(id)) continue;
+      this.productionPulse.set(id, durationSec);
     }
   }
 

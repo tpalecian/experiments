@@ -24,7 +24,7 @@ Recorded 2026-09-05 against the audited sources, before fixture work:
 | P01 | Complete | Fixtures, RNG injection, review route. See report below. |
 | P02 | Complete | Longest Road ties and settlement interruption. See report below. |
 | P03 | Complete | Rejected commands are no-ops; winning move keeps winner text; only the current player can win. See report below. |
-| P04 | Not started | |
+| P04 | Complete | Roll feedback uses game/roll identity and explicit productive hex IDs. See report below. |
 | P05 | Not started | |
 | P06 | Not started | |
 | P07 | Not started | |
@@ -200,4 +200,46 @@ Remaining limitations:
   EngineSnapshot still has no gameId/rollId/productionHexIds (P04).
   Public snapshots remain live/mutable; this task did not add deep clones.
 Next task (do not start automatically): P04 — Reliable gameplay feedback identity
+```
+
+```text
+Task ID: P04
+Status: complete
+Source files changed:
+  src/engine/engine.ts
+  src/engine/rules.ts
+  src/Game.ts
+  src/ui/hud.ts
+  src/ui/reviewScene.ts
+  src/world/Board.ts
+  src/world/World.ts
+  scripts/smoke.ts
+  docs/implementation-plan/STATUS.md
+Contract/API changes:
+  EngineSnapshot now includes gameId, rollId, and productionHexIds.
+  Accepted starts increment gameId and reset rollId; accepted rolls increment rollId exactly once.
+  productionDetails is a pure calculation returning per-player gains and unique productive hex IDs.
+  distributeProduction keeps its Map return type and remains the apply-once wrapper.
+  World/Board production pulses accept explicit hex IDs instead of inferring targets from dice totals.
+  Game, ReviewScene, and Hud key one-shot feedback by gameId:rollId; rollId zero is not an event.
+Targeted cases passed:
+  Two successive injected 3+3 rolls receive distinct roll IDs and are each consumed once; repeated snapshots and build-mode rerenders do not replay.
+  Rejected starts/commands preserve gameId, rollId, productionHexIds, state, and notification count.
+  Seven and no-production rolls advance roll identity but expose no productive hex IDs.
+  Accepted restart increments gameId, resets rollId, and does not replay the previous roll.
+  Robber-blocked, empty matching, and desert hexes are excluded; a productive city grants two resources but contributes one hex ID.
+  Engine resource totals match one pure production calculation, including after subsequent snapshots.
+Commands and outcomes:
+  npx tsc --noEmit — pass
+  node --import tsx scripts/smoke.ts — pass (includes `ok P04 feedback identity`)
+  npm run build — pass. JS 741.46 kB (gzip 194.83 kB), CSS 24.81 kB. Expected chunk warning.
+Browser/device/capture evidence:
+  http://127.0.0.1:5173/?view=review&seed=11&map=standard&look=day
+  First accepted 4+4 roll received `.fresh`; a Road build-mode rerender retained the dice and log without `.fresh` or `.log-enter`.
+  Second accepted 3+3 roll received one `.fresh` and one `.log-enter`; the review fixture reported only the actual Blue wood production.
+  Deterministic blocked/empty/desert and repeated-identical-roll coverage is in the headless smoke suite.
+Remaining limitations:
+  Hud still rebuilds its inner HTML and can interrupt an in-flight CSS animation; P18 owns stable DOM updates.
+  ReviewScene still duplicates Game's presentation loop until P10.
+Next task (do not start automatically): P05 — Nested-safe tweens
 ```

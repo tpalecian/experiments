@@ -4,12 +4,12 @@ import {
   addResources,
   computeVictoryPoints,
   discardCount,
-  distributeProduction,
   legalSetupRoads,
   legalSetupSettlements,
   legalTargets,
   payCost,
   playersAdjacentToHex,
+  productionDetails,
   tradeRate,
   updateLongestRoad,
 } from './rules';
@@ -55,6 +55,9 @@ export interface EngineSnapshot {
   legalEdges: string[];
   productionLog: string;
   winVp: number;
+  gameId: number;
+  rollId: number;
+  productionHexIds: string[];
 }
 
 export class GameEngine {
@@ -75,6 +78,9 @@ export class GameEngine {
   winner: PlayerId | null = null;
   message = 'Choose map size and players to start.';
   productionLog = '';
+  gameId = 0;
+  rollId = 0;
+  productionHexIds: string[] = [];
   seed: number;
 
   private listeners = new Set<Listener>();
@@ -117,6 +123,9 @@ export class GameEngine {
       legalEdges: this.computeLegalEdges(),
       productionLog: this.productionLog,
       winVp: MAP_SIZES[this.mapSize].winVp,
+      gameId: this.gameId,
+      rollId: this.rollId,
+      productionHexIds: [...this.productionHexIds],
     };
   }
 
@@ -149,6 +158,9 @@ export class GameEngine {
     this.longestRoadOwner = null;
     this.winner = null;
     this.productionLog = '';
+    this.gameId += 1;
+    this.rollId = 0;
+    this.productionHexIds = [];
     this.phase = 'setupSettlement';
     this.message = `${this.player().name}: place your first settlement.`;
     this.emit();
@@ -312,10 +324,12 @@ export class GameEngine {
     const d1 = 1 + Math.floor(this.random() * 6);
     const d2 = 1 + Math.floor(this.random() * 6);
     this.lastRoll = [d1, d2];
+    this.rollId += 1;
     const total = d1 + d2;
     this.productionLog = '';
 
     if (total === 7) {
+      this.productionHexIds = [];
       this.discardRemaining = new Map();
       let needDiscard = false;
       for (const p of this.players) {
@@ -336,10 +350,14 @@ export class GameEngine {
       return true;
     }
 
-    const gains = distributeProduction(this.board, this.players, total);
+    const details = productionDetails(this.board, this.players, total);
+    for (const p of this.players) {
+      addResources(p, details.gains.get(p.id)!);
+    }
+    this.productionHexIds = details.hexIds;
     const parts: string[] = [];
     for (const p of this.players) {
-      const g = gains.get(p.id)!;
+      const g = details.gains.get(p.id)!;
       const got = RESOURCES.filter((r) => g[r] > 0).map((r) => `${g[r]} ${r}`);
       if (got.length) parts.push(`${p.name}: ${got.join(', ')}`);
     }
@@ -448,6 +466,7 @@ export class GameEngine {
     this.buildMode = 'none';
     this.currentPlayer = ((this.currentPlayer + 1) % this.playerCount) as PlayerId;
     this.productionLog = '';
+    this.productionHexIds = [];
     if (this.checkWin()) {
       this.emit();
       return true;

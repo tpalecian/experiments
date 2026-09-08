@@ -4,7 +4,7 @@
  * Does not read or write style/layout localStorage. Not a lobby replacement.
  */
 import * as THREE from 'three';
-import { GameEngine } from '../engine/engine';
+import { GameEngine, type EngineSnapshot } from '../engine/engine';
 import {
   completeLegalSetup,
   runDeterministicActionSequence,
@@ -58,7 +58,7 @@ class ReviewScene {
   private readonly sequenceBtn: HTMLButtonElement;
 
   private boardBuilt = false;
-  private lastProductionLog = '';
+  private lastRollIdentity = '';
   private lastRobberHex = '';
   private pointerTap: { id: number; x: number; y: number } | null = null;
   private activePointers = new Set<number>();
@@ -206,7 +206,7 @@ class ReviewScene {
     const snap = this.engine.snapshot();
     if (snap.phase === 'lobby') {
       this.boardBuilt = false;
-      this.lastProductionLog = '';
+      this.lastRollIdentity = '';
       this.lastRobberHex = '';
       this.world.setHoverHex(null);
       return;
@@ -221,19 +221,20 @@ class ReviewScene {
       this.world.syncPieces(snap.board, true);
     }
     this.world.syncHighlights(snap.legalVertices, snap.legalEdges, snap.legalHexes);
-    this.pulseIfProduced(snap.productionLog, snap.lastRoll);
+    this.pulseIfProduced(snap);
     this.followRobber(snap.board.robberHexId);
     this.refreshControls();
   }
 
-  private pulseIfProduced(productionLog: string, lastRoll: [number, number] | null): void {
-    if (!productionLog) {
-      this.lastProductionLog = '';
+  private pulseIfProduced(snap: EngineSnapshot): void {
+    const identity = `${snap.gameId}:${snap.rollId}`;
+    if (snap.rollId === 0) {
+      this.lastRollIdentity = identity;
       return;
     }
-    if (productionLog === this.lastProductionLog || !lastRoll) return;
-    this.lastProductionLog = productionLog;
-    this.world.pulseProduction(lastRoll[0] + lastRoll[1]);
+    if (identity === this.lastRollIdentity) return;
+    this.lastRollIdentity = identity;
+    this.world.pulseProduction(snap.productionHexIds);
   }
 
   private followRobber(robberHexId: string): void {
