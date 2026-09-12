@@ -14,6 +14,7 @@ import {
   legalSetupSettlements,
   longestRoadLength,
   playersAdjacentToHex,
+  productionDetails,
   updateLongestRoad,
 } from '../src/engine/rules';
 import { BUILD_COSTS, RESOURCES, bankTotal, emptyBank } from '../src/engine/types';
@@ -623,6 +624,9 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
       buildMode: engine.buildMode,
       stealTargets: [...engine.stealTargets].join(','),
       discard: [...engine.discardRemaining.entries()].map(([id, n]) => `${id}:${n}`).sort().join(','),
+      gameId: engine.gameId,
+      rollId: engine.rollId,
+      productionHexIds: [...engine.productionHexIds].sort().join(','),
     };
   }
 
@@ -650,6 +654,9 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
     assert(after.currentPlayer === before.currentPlayer, `${msg}: current player changed`);
     assert(after.discard === before.discard, `${msg}: pending discard changed`);
     assert(after.stealTargets === before.stealTargets, `${msg}: steal targets changed`);
+    assert(after.gameId === before.gameId, `${msg}: gameId changed`);
+    assert(after.rollId === before.rollId, `${msg}: rollId changed`);
+    assert(after.productionHexIds === before.productionHexIds, `${msg}: production hex IDs changed`);
     if (typeof result === 'boolean') assert(result === false, `${msg}: expected boolean false`);
   }
 
@@ -944,6 +951,185 @@ for (const size of Object.keys(MAP_SIZES) as MapSizeId[]) {
   assert(startSeededGame(11, { mapSize: 'huge' }).snapshot().winVp === 15, 'huge map still wins at 15 VP');
 
   console.log('ok P03 command validation and victory');
+
+{
+  function identity(engine: GameEngine): string {
+    return `${engine.gameId}:${engine.rollId}`;
+  }
+
+  function consumeRoll(engine: GameEngine, seen: { key: string }): boolean {
+    const snap = engine.snapshot();
+    const key = `${snap.gameId}:${snap.rollId}`;
+    const fresh = snap.rollId !== 0 && key !== seen.key;
+    if (fresh) seen.key = key;
+    return fresh;
+  }
+
+  const accepted = startSeededGame(11);
+  assert(accepted.gameId === 1, 'first accepted start is game 1');
+  assert(accepted.rollId === 0 && accepted.productionHexIds.length === 0, 'new game has no roll event');
+  const startId = accepted.gameId;
+  accepted.startGame(3, 'large', 29);
+  assert(accepted.gameId === startId + 1, 'accepted start increments gameId');
+  assert(accepted.rollId === 0 && accepted.lastRoll === null, 'accepted start resets roll identity');
+  assert(accepted.productionHexIds.length === 0, 'accepted start clears production IDs');
+  assert(accepted.playerCount === 3 && accepted.mapSize === 'large', 'accepted start applies new settings');
+  assertRejected(accepted, () => accepted.startGame(1), 'rejected start after accepted start');
+  assertRejected(accepted, () => accepted.startGame(5), 'rejected high player count after accepted start');
+
+  const dice = startSeededGame(11, { random: diceSequence([3, 3, 3, 3]), completeSetup: true });
+  const seen = { key: '' };
+  assert(dice.rollId === 0, 'setup ends with rollId zero');
+  assert(!consumeRoll(dice, seen), 'rollId zero is not a dice event');
+  assert(dice.rollDice(), 'first 3+3 accepted');
+  assert(dice.lastRoll?.[0] === 3 && dice.lastRoll[1] === 3, 'first pair is 3+3');
+  const firstRollId = dice.rollId;
+  const firstKey = identity(dice);
+  const firstHexes = [...dice.productionHexIds].sort().join(',');
+  assert(firstRollId === 1, 'first accepted roll is rollId 1');
+  assert(consumeRoll(dice, seen), 'first roll is fresh for UI');
+  assert(!consumeRoll(dice, seen), 'repeat snapshot does not replay');
+  if (dice.phase === 'main') {
+    dice.setBuildMode('road');
+    dice.setBuildMode('road');
+    assert(dice.snapshot().productionLog === dice.productionLog, 'HUD-like snapshot keeps log text');
+  }
+  assert(identity(dice) === firstKey, 'trade/selection-style rerender keeps roll identity');
+  assert(!consumeRoll(dice, seen), 'intervening snapshot is not a new event');
+  assert(dice.endTurn(), 'end turn after first 3+3');
+  assert(dice.productionHexIds.length === 0, 'endTurn clears production IDs');
+  assert(dice.rollId === firstRollId, 'endTurn does not bump rollId');
+  assert(!consumeRoll(dice, seen), 'cleared production after endTurn is not a replay');
+  assert(dice.rollDice(), 'second identical 3+3 accepted');
+  assert(dice.lastRoll?.[0] === 3 && dice.lastRoll[1] === 3, 'second pair is still 3+3');
+  assert(dice.rollId === firstRollId + 1, 'identical dice still increment rollId');
+  assert(identity(dice) !== firstKey, 'successive identical rolls have distinct identity');
+  assert([...dice.productionHexIds].sort().join(',') === firstHexes, 'same board yields the same productive IDs');
+  assert(consumeRoll(dice, seen), 'second identical roll is a new animation');
+
+  const seven = startSeededGame(11, { random: diceSequence([1, 6]), completeSetup: true });
+  for (const p of seven.players) p.resources = emptyBank();
+  assert(seven.rollDice(), 'seven accepted');
+  assert(seven.lastRoll?.[0] + seven.lastRoll[1] === 7, 'injected seven');
+  assert(seven.rollId === 1, 'seven advances roll identity');
+  assert(seven.productionHexIds.length === 0, 'seven has no production IDs');
+  assert(seven.productionLog === '', 'seven does not write a production log');
+
+  const none = startSeededGame(11, { random: diceSequence([3, 3]), completeSetup: true });
+  for (const hex of none.board.hexes.values()) hex.number = 12;
+  const noneBefore = none.players.map((p) => bankTotal(p.resources));
+  assert(none.rollDice(), 'no-production 6 accepted');
+  assert(none.rollId === 1, 'no-production still advances rollId');
+  assert(none.productionHexIds.length === 0, 'no-production has empty hex IDs');
+  assert(none.productionLog === 'No production.', 'no-production keeps human-readable log');
+  assert(
+    none.players.every((p, i) => bankTotal(p.resources) === noneBefore[i]),
+    'no-production does not grant resources',
+  );
+
+  const restart = startSeededGame(11, { random: diceSequence([4, 4, 5, 5]), completeSetup: true });
+  assert(restart.rollDice(), 'roll before restart');
+  const oldGame = restart.gameId;
+  const oldRoll = restart.rollId;
+  assert(oldRoll > 0, 'restart fixture actually rolled');
+  restart.startGame(2, 'standard', 11);
+  assert(restart.gameId === oldGame + 1, 'new game increments gameId');
+  assert(restart.rollId === 0 && restart.lastRoll === null, 'new game forgets previous roll');
+  assert(restart.productionHexIds.length === 0, 'new game has no leftover pulses');
+  const restartSeen = { key: `${oldGame}:${oldRoll}` };
+  assert(!consumeRoll(restart, restartSeen), 'rollId zero after restart is not a replay');
+  const other = startSeededGame(29, { completeSetup: true });
+  assert(other.gameId === 1 && restart.gameId === oldGame + 1, 'separate engines keep independent gameIds');
+
+  const mixed = startSeededGame(11, { random: diceSequence([3, 3]), completeSetup: true });
+  mixed.board.buildings.clear();
+  const hexList = [...mixed.board.hexes.values()];
+  let pick: {
+    prodHex: (typeof hexList)[number];
+    blockedHex: (typeof hexList)[number];
+    emptyHex: (typeof hexList)[number];
+    desertHex: (typeof hexList)[number];
+    prodV: string;
+    blockedV: string;
+    desertV: string;
+  } | null = null;
+  for (const a of hexList) {
+    if (pick) break;
+    for (const b of hexList) {
+      if (pick || b.id === a.id) continue;
+      for (const c of hexList) {
+        if (pick || c.id === a.id || c.id === b.id) continue;
+        for (const d of hexList) {
+          if (new Set([a.id, b.id, c.id, d.id]).size !== 4) continue;
+          const av = a.vertexIds.find((v) => !b.vertexIds.includes(v) && !c.vertexIds.includes(v) && !d.vertexIds.includes(v));
+          const bv = b.vertexIds.find((v) => !a.vertexIds.includes(v) && !c.vertexIds.includes(v) && !d.vertexIds.includes(v));
+          const dv = d.vertexIds.find((v) => !a.vertexIds.includes(v) && !b.vertexIds.includes(v) && !c.vertexIds.includes(v));
+          if (!av || !bv || !dv) continue;
+          pick = { prodHex: a, blockedHex: b, emptyHex: c, desertHex: d, prodV: av, blockedV: bv, desertV: dv };
+          break;
+        }
+      }
+    }
+  }
+  assert(pick, 'seed 11 has four hexes with exclusive vertices');
+  const { prodHex, blockedHex, emptyHex, desertHex, prodV, blockedV, desertV } = pick;
+  for (const hex of mixed.board.hexes.values()) hex.number = 12;
+  prodHex.number = 6;
+  prodHex.terrain = 'wood';
+  blockedHex.number = 6;
+  blockedHex.terrain = 'brick';
+  emptyHex.number = 6;
+  emptyHex.terrain = 'sheep';
+  desertHex.number = 6;
+  desertHex.terrain = 'desert';
+  mixed.board.buildings.set(prodV, { vertexId: prodV, owner: 0, kind: 'settlement' });
+  mixed.board.buildings.set(blockedV, { vertexId: blockedV, owner: 0, kind: 'settlement' });
+  mixed.board.buildings.set(desertV, { vertexId: desertV, owner: 0, kind: 'settlement' });
+  mixed.board.robberHexId = blockedHex.id;
+  const woodBefore = mixed.players[0].resources.wood;
+  const brickBefore = mixed.players[0].resources.brick;
+  const sheepBefore = mixed.players[0].resources.sheep;
+  assert(mixed.rollDice(), 'mixed production roll');
+  assert(mixed.productionHexIds.length === 1 && mixed.productionHexIds[0] === prodHex.id, 'only unblocked granted hex pulses');
+  assert(mixed.players[0].resources.wood === woodBefore + 1, 'productive settlement grants 1');
+  assert(mixed.players[0].resources.brick === brickBefore, 'blocked hex grants nothing');
+  assert(mixed.players[0].resources.sheep === sheepBefore, 'empty matching hex grants nothing');
+
+  const city = startSeededGame(11, { random: diceSequence([3, 3]), completeSetup: true });
+  city.board.buildings.clear();
+  const cityHex = [...city.board.hexes.values()].find((h) => h.terrain !== 'desert')!;
+  for (const hex of city.board.hexes.values()) hex.number = 12;
+  cityHex.number = 6;
+  cityHex.terrain = 'ore';
+  const cityV = cityHex.vertexIds[0];
+  city.board.buildings.set(cityV, { vertexId: cityV, owner: 0, kind: 'city' });
+  city.board.robberHexId = [...city.board.hexes.keys()].find((id) => id !== cityHex.id)!;
+  const oreBefore = city.players[0].resources.ore;
+  assert(city.rollDice(), 'city production roll');
+  assert(city.productionHexIds.length === 1 && city.productionHexIds[0] === cityHex.id, 'city hex appears once');
+  assert(city.players[0].resources.ore === oreBefore + 2, 'city still grants 2');
+
+  const once = startSeededGame(11, { random: diceSequence([3, 3]), completeSetup: true });
+  const expected = productionDetails(once.board, once.players, 6);
+  const beforeBanks = once.players.map((p) => ({ ...p.resources }));
+  assert(once.rollDice(), 'production applies through the engine');
+  for (const p of once.players) {
+    const gain = expected.gains.get(p.id)!;
+    for (const r of RESOURCES) {
+      assert(p.resources[r] === beforeBanks[p.id][r] + gain[r], `${p.name} ${r} applied once`);
+    }
+  }
+  assert([...once.productionHexIds].sort().join(',') === [...expected.hexIds].sort().join(','), 'snapshot IDs match the pure calc');
+  once.snapshot();
+  for (const p of once.players) {
+    const gain = expected.gains.get(p.id)!;
+    for (const r of RESOURCES) {
+      assert(p.resources[r] === beforeBanks[p.id][r] + gain[r], `${p.name} ${r} unchanged after snapshot`);
+    }
+  }
+
+  console.log('ok P04 feedback identity');
+}
 }
 
 console.log('smoke ok');

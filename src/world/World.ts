@@ -59,8 +59,8 @@ export class World {
     this.board.setHoverHex(id);
   }
 
-  pulseProduction(total: number): void {
-    this.board.pulseProduction(total, this.motion.productionPulseSec);
+  pulseProduction(hexIds: readonly string[]): void {
+    this.board.pulseProduction(hexIds, this.motion.productionPulseSec);
   }
 
   update(time: number, dt = 1 / 60): void {

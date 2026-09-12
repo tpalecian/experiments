@@ -1,13 +1,14 @@
 import { MAP_SIZES, verticesDistanceOk } from './board';
 import type {
   BoardState,
+  Building,
   BuildMode,
   PlayerId,
   PlayerState,
   Resource,
   ResourceBank,
 } from './types';
-import { BUILD_COSTS, RESOURCES, emptyBank } from './types';
+import { BUILD_COSTS, RESOURCES, emptyBank, resourceFromTerrain } from './types';
 
 export function pieceLimits(board: BoardState) {
   return MAP_SIZES[board.mapSize];
@@ -137,28 +138,60 @@ export function tradeRate(board: BoardState, playerId: PlayerId, resource: Resou
   return best;
 }
 
+export interface ProductionDetails {
+  gains: Map<PlayerId, ResourceBank>;
+  hexIds: string[];
+}
+
+function productionAmount(kind: Building['kind']): number {
+  switch (kind) {
+    case 'city':
+      return 2;
+    case 'settlement':
+      return 1;
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
+}
+
+/** Pure production calculation: per-player gains and unique productive hex IDs. Does not mutate players. */
+export function productionDetails(
+  board: BoardState,
+  players: PlayerState[],
+  roll: number,
+): ProductionDetails {
+  const gains = new Map<PlayerId, ResourceBank>();
+  for (const p of players) gains.set(p.id, emptyBank());
+  const hexIds: string[] = [];
+
+  for (const hex of board.hexes.values()) {
+    if (hex.number !== roll) continue;
+    if (hex.id === board.robberHexId) continue;
+    const res = resourceFromTerrain(hex.terrain);
+    if (!res) continue;
+    let granted = false;
+    for (const vid of hex.vertexIds) {
+      const b = board.buildings.get(vid);
+      if (!b) continue;
+      const bank = gains.get(b.owner);
+      if (!bank) continue;
+      bank[res] += productionAmount(b.kind);
+      granted = true;
+    }
+    if (granted) hexIds.push(hex.id);
+  }
+
+  return { gains, hexIds };
+}
+
 export function distributeProduction(
   board: BoardState,
   players: PlayerState[],
   roll: number,
 ): Map<PlayerId, ResourceBank> {
-  const gains = new Map<PlayerId, ResourceBank>();
-  for (const p of players) gains.set(p.id, emptyBank());
-
-  for (const hex of board.hexes.values()) {
-    if (hex.number !== roll) continue;
-    if (hex.id === board.robberHexId) continue;
-    const res = hex.terrain === 'desert' ? null : hex.terrain;
-    if (!res) continue;
-    for (const vid of hex.vertexIds) {
-      const b = board.buildings.get(vid);
-      if (!b) continue;
-      const amount = b.kind === 'city' ? 2 : 1;
-      const bank = gains.get(b.owner)!;
-      bank[res] += amount;
-    }
-  }
-
+  const { gains } = productionDetails(board, players, roll);
   for (const p of players) {
     addResources(p, gains.get(p.id)!);
   }
